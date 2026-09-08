@@ -1,0 +1,14 @@
+# Line endings are normalised to LF in the repository.
+#
+# This is not cosmetic. The conformance scripts run under bash on Linux, where a
+# CRLF shebang line fails with "bad interpreter", and prune.cjs runs inside the
+# Linux build container. Checking either out with CRLF on a Windows machine and
+# committing it back would break them for everyone else.
+* text=auto eol=lf
+
+# Binary-ish files git should never touch.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
