@@ -1,0 +1,229 @@
+/**
+ * Tests for project detection. Each case builds a throwaway project layout on
+ * disk, because detection is defined entirely by what is on disk.
+ *
+ * Author: Gowtham
+ */
+
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { detectProject } from './detect.js'
+import { NextshipError } from './errors.js'
+
+type Layout = Record<string, string>
+
+const nextPackage = (version: string): string => JSON.stringify({ name: 'next', version })
+
+const app = (extra: Record<string, unknown> = {}): string =>
+  JSON.stringify({ name: 'demo', scripts: { build: 'next build' }, dependencies: { next: '16.3.0' }, ...extra })
+
+async function fixture(layout: Layout): Promise<string> {
+  const root = await mkdtemp(path.join(tmpdir(), 'nextship-detect-'))
+  for (const [relative, content] of Object.entries(layout)) {
+    const file = path.join(root, relative)
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(file, content)
+  }
+  return root
+}
+
+async function rejectsWith(promise: Promise<unknown>, fragment: string): Promise<void> {
+  await assert.rejects(promise, (error: unknown) => {
+    assert.ok(error instanceof NextshipError, 'expected a NextshipError')
+    assert.match(error.message, new RegExp(fragment))
+    assert.ok(error.action.length > 0, 'every error carries a next action')
+    return true
+  })
+}
+
+test('standalone npm project', async () => {
+  const root = await fixture({
+    'package.json': app(),
+    'package-lock.json': '{}',
+    'node_modules/next/package.json': nextPackage('16.3.4'),
+    'node_modules/sharp/package.json': JSON.stringify({ name: 'sharp', version: '0.34.5' }),
+  })
+  try {
+    const project = await detectProject(root)
+    assert.equal(project.root, root)
+    assert.equal(project.contextRoot, root)
+    assert.equal(project.appDir, '.')
+    assert.equal(project.name, 'demo')
+    assert.equal(project.nextVersion, '16.3.4')
+    assert.equal(project.packageManager, 'npm')
+    assert.equal(project.lockfile, 'package-lock.json')
+    assert.deepEqual(project.buildCommand, ['npm', 'run', 'build'])
+    assert.equal(project.sharpVersion, '0.34.5')
+    assert.deepEqual(project.envFiles, [])
+    assert.equal(project.userDockerignore, null)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('detection walks up from a subdirectory of the app', async () => {
+  const root = await fixture({
+    'package.json': app(),
+    'node_modules/next/package.json': nextPackage('16.2.0'),
+    'app/components/.keep': '',
+  })
+  try {
+    const project = await detectProject(path.join(root, 'app', 'components'))
+    assert.equal(project.root, root)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('rejects Next.js older than the Adapter API', async () => {
+  const root = await fixture({
+    'package.json': app(),
+    'node_modules/next/package.json': nextPackage('16.1.9'),
+  })
+  try {
+    await rejectsWith(detectProject(root), '16\\.2 or newer')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('rejects a project with no Next.js dependency', async () => {
+  const root = await fixture({ 'package.json': JSON.stringify({ name: 'not-next' }) })
+  try {
+    await rejectsWith(detectProject(root), 'No Next.js project found')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('rejects a project whose dependencies are not installed', async () => {
+  const root = await fixture({ 'package.json': app() })
+  try {
+    await rejectsWith(detectProject(root), 'not installed')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('pnpm workspace package with hoisted next', async () => {
+  const root = await fixture({
+    'package.json': JSON.stringify({ name: 'mono', private: true }),
+    'pnpm-workspace.yaml': "packages:\n  - 'apps/*'\n",
+    'pnpm-lock.yaml': '',
+    '.dockerignore': 'coverage\n',
+    'node_modules/next/package.json': nextPackage('16.3.1'),
+    'apps/web/package.json': app({ name: '@acme/Web App' }),
+    'apps/web/.env.production': 'A=1',
+  })
+  try {
+    const project = await detectProject(path.join(root, 'apps', 'web'))
+    assert.equal(project.contextRoot, root)
+    assert.equal(project.appDir, 'apps/web')
+    assert.equal(project.packageManager, 'pnpm')
+    assert.equal(project.lockfile, 'pnpm-lock.yaml')
+    assert.equal(project.nextVersion, '16.3.1', 'found at the workspace root')
+    assert.equal(project.name, 'acme-web-app', 'image names are lowercase with safe separators')
+    assert.deepEqual(project.buildCommand, ['pnpm', 'run', 'build'])
+    assert.deepEqual(project.envFiles, ['.env.production'])
+    assert.equal(project.userDockerignore, 'coverage\n')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('node major honours engines, then .nvmrc, then the running node', async () => {
+  const withEngines = await fixture({
+    'package.json': app({ engines: { node: '>=20.9' } }),
+    '.nvmrc': '22',
+    'node_modules/next/package.json': nextPackage('16.2.0'),
+  })
+  const withNvmrc = await fixture({
+    'package.json': app(),
+    '.nvmrc': 'v22.1.0\n',
+    'node_modules/next/package.json': nextPackage('16.2.0'),
+  })
+  const bare = await fixture({
+    'package.json': app(),
+    'node_modules/next/package.json': nextPackage('16.2.0'),
+  })
+  try {
+    assert.equal((await detectProject(withEngines)).nodeMajor, '20')
+    assert.equal((await detectProject(withNvmrc)).nodeMajor, '22')
+    assert.equal((await detectProject(bare)).nodeMajor, process.versions.node.split('.')[0])
+  } finally {
+    for (const root of [withEngines, withNvmrc, bare]) await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('falls back to invoking next directly when there is no build script', async () => {
+  const root = await fixture({
+    'package.json': JSON.stringify({ name: 'demo', dependencies: { next: '16.3.0' } }),
+    'bun.lockb': '',
+    'node_modules/next/package.json': nextPackage('16.3.0'),
+  })
+  try {
+    const project = await detectProject(root)
+    assert.equal(project.packageManager, 'bun')
+    assert.deepEqual(project.buildCommand, ['bun', 'x', 'next', 'build'])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+/**
+ * pnpm store lookup.
+ *
+ * Found by verification, not by a failing build: `detect` reported sharp as
+ * "not resolvable from the app root" for a project whose image was proven to
+ * contain sharp 0.34.5 with its Linux binary. pnpm links only direct
+ * dependencies at the top of node_modules, so a transitive package is visible
+ * only inside the store.
+ */
+test('a transitive dependency installed by pnpm is reported, not called missing', async () => {
+  const root = await fixture({
+    'package.json': app(),
+    'pnpm-lock.yaml': '',
+    'node_modules/next/package.json': nextPackage('16.3.0'),
+    'node_modules/.pnpm/sharp@0.34.5/node_modules/sharp/package.json': JSON.stringify({
+      name: 'sharp',
+      version: '0.34.5',
+    }),
+  })
+
+  const project = await detectProject(root)
+  assert.equal(project.sharpVersion, '0.34.5')
+})
+
+test('a directly linked dependency still wins over the store', async () => {
+  const root = await fixture({
+    'package.json': app(),
+    'pnpm-lock.yaml': '',
+    'node_modules/next/package.json': nextPackage('16.3.0'),
+    'node_modules/sharp/package.json': JSON.stringify({ name: 'sharp', version: '0.34.9' }),
+    'node_modules/.pnpm/sharp@0.34.5/node_modules/sharp/package.json': JSON.stringify({
+      name: 'sharp',
+      version: '0.34.5',
+    }),
+  })
+
+  const project = await detectProject(root)
+  assert.equal(project.sharpVersion, '0.34.9', 'the linked copy is the one Node would load')
+})
+
+test('a package that really is absent is still reported as absent', async () => {
+  const root = await fixture({
+    'package.json': app(),
+    'pnpm-lock.yaml': '',
+    'node_modules/next/package.json': nextPackage('16.3.0'),
+    'node_modules/.pnpm/other@1.0.0/node_modules/other/package.json': JSON.stringify({
+      name: 'other',
+      version: '1.0.0',
+    }),
+  })
+
+  const project = await detectProject(root)
+  assert.equal(project.sharpVersion, null, 'an unrelated store entry is not mistaken for a match')
+})

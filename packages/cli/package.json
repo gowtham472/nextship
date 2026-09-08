@@ -1,0 +1,21 @@
+{
+  "name": "nextship",
+  "version": "0.3.0",
+  "engines": { "node": ">=22" },
+  "type": "module",
+  "bin": { "nextship": "./dist/index.js" },
+  "exports": { ".": "./dist/index.js" },
+  "files": ["dist", "!dist/**/*.test.js", "!dist/**/*.test.d.ts", "runtime"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test \"dist/**/*.test.js\""
+  },
+  "dependencies": {
+    "@nextship/adapter": "workspace:*",
+    "cross-spawn": "^7.0.6"
+  },
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.6"
+  }
+}
