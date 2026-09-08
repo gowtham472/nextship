@@ -1,0 +1,806 @@
+# nextship
+
+> Vercel's zero-config experience, in your own DigitalOcean or AWS account.
+> Your code, your data, your bill, your region.
+
+nextship takes a Next.js app and puts it on infrastructure you own, with no
+Dockerfile, no `next.config.js` edits, no Terraform and no IAM archaeology. It runs
+on your machine or in CI, uses your cloud credentials, and never sends your code
+anywhere. Every Next.js feature keeps working, because the thing running in the
+container is the Next.js server itself.
+
+```bash
+nextship deploy --yes
+```
+
+That command builds your app inside Docker, prunes the result to the files Next.js
+says it needs, pushes the image to your registry, releases it, waits for it to go
+live, and prints the URL.
+
+---
+
+## Status
+
+**Version 0.3.0. v0.3 is complete and verified against a live deployment.**
+
+| Area | State |
+|---|---|
+| Local pipeline: `detect`, `build`, `package`, `run` | Done. Verified on a real production project and a purpose-built feature app |
+| DigitalOcean deployment: `deploy`, `rollback`, `logs` | Done. Verified against a live app, including two rollbacks in opposite directions |
+| AWS | In progress. The driver interface exists and DigitalOcean implements it; the AWS driver needs an account to verify against |
+| Official Next.js adapter compatibility suite | Wired up, never run. No completeness is claimed |
+
+Verified on real containers: every route serves, image optimization produces WebP,
+streaming does not buffer (27 ms to first byte against a 2.02 s total), ISR works
+both time-based and on-demand, Server Actions execute, and `after()` runs. The image
+is 591 MB uncompressed against 1.13 GB before pruning.
+
+[`docs/05-critical-review.md`](./docs/05-critical-review.md) is an adversarial pass
+over the design. It reproduced three defects, all now fixed and covered by tests, and
+lists what is still missing with a way to verify each one rather than an assertion.
+
+**v1.0 is deliberately a personal tool**, good enough that its author deploys his own
+apps with it. Everything that only matters once other people depend on it is recorded
+in [`docs/01-roadmap.md`](./docs/01-roadmap.md) under "Beyond v1.0", each with the
+trigger that would justify building it.
+
+The name is a placeholder. Verify npm and GitHub availability before any public release.
+
+---
+
+## Requirements
+
+| Requirement | Why | Enforced |
+|---|---|---|
+| **Node.js 22 or newer** | Runs the CLI | Declared in `engines`, so your package manager warns or refuses |
+| **Docker 23 or newer** | Every build runs inside BuildKit, so nothing is compiled on your machine | Yes. nextship queries the daemon and refuses older versions by name |
+| **Next.js 16.2 or newer** | The Deployment Adapter API became stable in 16.2 | Yes, with the reason in the error |
+| **A DigitalOcean API token** | Only for `deploy`, `rollback` and `logs` | Yes, the error names the variable |
+
+Docker must be running. The local commands need nothing else.
+
+## Install
+
+nextship is not published to npm yet, because the name is unverified. Build it from
+this repository:
+
+```bash
+pnpm install
+pnpm build
+```
+
+Then invoke it from any project directory:
+
+```bash
+node /path/to/nextship/packages/cli/dist/index.js detect
+```
+
+An alias makes this bearable while the package is unpublished:
+
+```bash
+alias nextship="node /path/to/nextship/packages/cli/dist/index.js"
+```
+
+The rest of this document writes `nextship` for that command.
+
+## Quick start
+
+```bash
+cd your-nextjs-app
+
+nextship detect            # what nextship reads from this project
+nextship doctor            # what changes when this app leaves Vercel
+nextship run               # build, package and start it locally on :3000
+
+export DIGITALOCEAN_TOKEN=dop_v1_...
+nextship deploy            # print the plan, change nothing
+nextship deploy --yes      # execute it
+```
+
+`deploy` prints a plan and stops. Nothing is created, changed or charged until you
+pass `--yes`.
+
+---
+
+## Commands
+
+```
+nextship detect     Report what nextship reads from this project
+nextship build      Build in Docker with the adapter injected, export the manifest
+nextship package    Build, then produce the runtime image
+nextship run        Package, then run the image locally
+nextship doctor     Report what changes when this app leaves Vercel
+nextship deploy     Show the deployment plan; add --yes to execute it
+nextship rollback   Return to a previous deployment; add --yes to execute it
+nextship logs       Runtime logs for the deployed app; --follow to stream
+nextship env        List the runtime environment variables set on the app
+nextship env push   Upload this project's env files as runtime variables
+nextship env rm     Remove named variables from the app
+nextship domain     List the domains attached to the app
+nextship domain add Attach a domain and print the DNS record to create
+nextship domain rm  Detach a domain
+nextship images     List the images pushed for this project
+nextship images prune  Remove old images, keeping the recent ones
+nextship destroy <name>  Destroy the app this project created
+
+  -h, --help        Show usage
+  -v, --version     Show the version
+```
+
+Every stage is its own command, so a failure can be re-run in isolation without
+repeating the stages that already succeeded. `build` and `package` are two targets of
+one Dockerfile, so `package` reuses the compile from cache rather than starting over.
+
+Unknown commands and unknown flags are errors. A mistyped option never gets silently
+ignored.
+
+### `nextship detect`
+
+Reads the project and reports what every later stage will act on. Runs no build and
+writes nothing.
+
+```
+> Inspecting project
+v portfolio is a Next.js 16.2.9 project
+  root          D:\C-Projects\company_portfolio
+  package mgr   pnpm
+  build command pnpm run build
+  node          24
+  sharp         0.34.5
+  env files     none
+```
+
+Everything reported is read from disk rather than from what `package.json` declares,
+including packages your package manager installed transitively. A project with no env
+files says so instead of leaving you to guess.
+
+In a workspace it also reports the workspace root and the app directory, because the
+image is built from the workspace root where the lockfile and sibling manifests live.
+
+### `nextship build`
+
+Runs your own `build` script inside a Docker builder stage with the adapter injected
+through `NEXT_ADAPTER_PATH`, then exports the manifest the adapter wrote to
+`.nextship/output/manifest.json`.
+
+Your `next.config.js` is never edited. Dependencies are installed inside the image,
+so `next`, `sharp` and every native module are built for Linux regardless of the
+machine you are on.
+
+If the manifest comes back without the deployment id the adapter was given, the build
+fails as a nextship defect rather than shipping something unverified.
+
+### `nextship package`
+
+Builds, then assembles the runtime image: a second stage that copies only the files
+Next.js's own trace output lists, plus a generated launcher equivalent to the one
+standalone mode writes.
+
+```
+v Image ready: portfolio:dpl-2b2c3e535f1e-4456a8b2
+  platform   linux/amd64
+  start it with: nextship run
+```
+
+The tag is the deployment id, derived from the build's content: the nextship version,
+the generated Dockerfile, the adapter and prune script, the Server Actions key, and
+the name and contents of every env file. Change any of them and the tag changes, which
+is what stops an edited env file from shipping under a tag that already exists.
+
+When the working tree is not a clean commit, the id is unique to that build instead,
+and `build` says so rather than implying reproducibility it cannot provide:
+
+```
+  deployment dpl-2b2c3e535f1e-ebee628b
+  this id is unique to this build, because the source is not a clean commit
+```
+
+The image is always built for `linux/amd64`, so an Apple Silicon machine cannot
+produce an image the cloud target refuses to run.
+
+### `nextship run`
+
+Packages the project and starts the image locally on port 3000, loading your
+highest-precedence env file so secrets stay outside the image. This exists so the
+artifact can be verified before any cloud account is involved.
+
+Runs attached with `--rm`. Ctrl+C stops and removes the container, so there is no
+background state to clean up. A stop is reported as a stop, not as a failure: exit
+130 for Ctrl+C and 143 for `docker stop` are the codes Next.js exits with after
+draining connections.
+
+### `nextship doctor`
+
+Reports what changes when an app leaves Vercel. None of these stop a build, which is
+exactly why they are worth surfacing: no error reveals them.
+
+| Checked | Why it matters |
+|---|---|
+| `@vercel/analytics` and similar packages | They stop reporting and nothing errors |
+| Cron jobs in `vercel.json` | They will simply never run |
+| Routing rules in `vercel.json` | They stop applying |
+| `VERCEL_URL` and `VERCEL_ENV` read in source | They become undefined |
+| A missing lockfile | Installs are no longer reproducible |
+| The ISR cache not surviving a restart | Recorded so it is known before deploying, not after |
+
+Findings are sorted with blockers first, and each one carries a consequence and an
+action rather than only a name.
+
+### `nextship deploy`
+
+Builds, pushes and releases to DigitalOcean App Platform.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--yes` | off | Execute the plan. Without it, `deploy` only prints the plan |
+| `--region <slug>` | `blr` | App Platform region. Recorded in `nextship.json` on the first deploy and reused after that |
+| `--size <slug>` | `apps-s-1vcpu-0.5gb` | App Platform instance size |
+| `--registry <name>` | the app name | Container registry name, which must be unique across all of DigitalOcean |
+
+The plan is printed first, every time:
+
+```
+> Plan
+  target        DigitalOcean, region blr
+  registry      use existing "gowtham-nextship", unchanged
+  repository    gowtham-nextship/portfolio
+  app           UPDATE "portfolio" (7ebdf092), which nextship created
+  instance      apps-s-1vcpu-0.5gb, 1 instance
+  untouched     4 existing app(s) in this account
+  nothing is ever deleted by this command
+```
+
+`nextship.json` is written before the wait for the deployment begins, so a timeout
+still leaves the app recorded as yours rather than orphaned and unadoptable on the
+next run.
+
+A container registry region is not the same namespace as an App Platform region: the
+app region `blr` corresponds to the registry region `blr1`. nextship matches them, and
+if no registry region corresponds to your app region it says so and lists the ones
+that exist instead of creating something in the wrong place.
+
+### `nextship rollback`
+
+Returns the app to a deployment that already ran. It builds nothing and pushes
+nothing, so it cannot introduce a new fault.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--yes` | off | Execute the plan. Without it, `rollback` only prints the plan |
+| `--to <deployment>` | the previous live deployment | Roll back to a specific deployment id |
+
+```
+> Plan
+  app        portfolio (7ebdf092-99d7-48a9-9502-5d8f3e8acfbc)
+  current    dpl-2b2c3e535f1e-de39cb34  2026-09-08T08:58:51Z  (app spec updated)
+  roll back  dpl-2b2c3e535f1e-715c3f77  2026-09-08T08:46:39Z  (initial deployment)
+  no build, no push: this reuses an image that already ran
+  nothing is deleted; the current deployment stays in the history
+```
+
+Without `--yes` it also lists the other deployments you could target with `--to`.
+
+App Platform **pins** an app for the duration of a rollback, and a pinned app refuses
+every further deployment until the rollback is committed or reverted. Leaving an app
+pinned is the one way this command could cause lasting trouble, so the pin is
+validated before it is taken, committed the moment the deployment reports active, and
+reverted on every failure path in between. If the revert itself fails, nextship says
+plainly that the app is still pinned and where to clear it, rather than hiding that
+behind the original error.
+
+Rollback targets are deployments that actually served traffic. A deployment that has
+been replaced reports `SUPERSEDED`, not `ACTIVE`, and both are valid targets;
+`ERROR`, `CANCELED` and in-progress deployments are not.
+
+### `nextship logs`
+
+Prints what the running container has written.
+
+```
+> Runtime logs for portfolio
+web 2026-09-08T09:08:32.232594675Z Next.js 16.2.9
+web 2026-09-08T09:08:32.233069121Z - Network:       http://0.0.0.0:3000
+web 2026-09-08T09:08:32.233725936Z Ready in 0ms
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--follow` | off | Stream new output as it arrives instead of printing a snapshot and exiting |
+
+Without `--follow` this is a snapshot: what the container has buffered, then it exits.
+With `--follow` it streams until you press Ctrl+C, which stops it cleanly rather than
+killing it mid-line.
+
+Neither is history. App Platform buffers only the container running right now, so a
+deployment that has been replaced takes its output with it. When there is nothing
+buffered, `logs` says so rather than implying the app printed nothing. Retaining
+history means forwarding to an external service, which is not built: it needs a
+destination and credentials that are yours to choose, so nextship would be guessing.
+
+### `nextship env`
+
+Lists the runtime environment variables set on the app. Keys only: App Platform
+stores them encrypted and will not return a secret's value to anyone, including you.
+
+```
+> Runtime environment for portfolio
+  No runtime environment variables are set on this app.
+  Values inlined at build time, such as NEXT_PUBLIC_*, still work. Anything read
+  at request time is undefined. Run `nextship env push` to set them.
+```
+
+That distinction is the one to understand. Your env files are mounted as build
+secrets and never enter an image layer, which is what keeps them out of the
+registry, but it also means nothing survives to runtime. `NEXT_PUBLIC_*` values are
+inlined during the build and keep working. A database URL read on each request does
+not, until you push it.
+
+### `nextship env push`
+
+Uploads this project's env files as `RUN_TIME` variables.
+
+The files are read by `@next/env`, the loader Next.js itself uses, so the values are
+the ones the build saw. That is not a claim about care taken: a hand-written parser
+here silently truncated a multi-line private key to its header line and mangled a
+quoted value followed by a comment, and both deployed cleanly and failed at request
+time. Using Next.js's own loader makes agreement structural.
+
+`NEXT_PUBLIC_*` variables are stored readable, because they are compiled into the
+JavaScript every visitor downloads and calling them secret would claim a protection
+that does not exist. Everything else is stored encrypted. A push never weakens what is
+already there: a variable already stored as a secret stays one, and an existing
+broader scope is kept rather than narrowed.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--yes` | off | Execute the plan. Without it, `env push` only prints the plan |
+
+```
+> Plan
+  app        portfolio (7ebdf092-99d7-48a9-9502-5d8f3e8acfbc)
+  source     .env.production
+  add        DATABASE_URL, API_TOKEN
+  update     none
+  untouched  0 variable(s) already on the app
+  all values are stored as App Platform secrets, encrypted and not readable afterwards
+  nothing is removed; a variable this push does not mention keeps its current value
+! These values leave your machine and are stored in your DigitalOcean account.
+```
+
+Keys and their classification are printed, values never are. A push adds and updates;
+it does not remove, so a variable you set in the control panel survives a push that
+does not name it. Use `nextship env rm` to remove one.
+
+Because a stored secret is never returned, nextship cannot tell whether a value you
+are pushing differs from the one already there, so a push always starts a new
+deployment. When every key in a push is already set, it says so before you confirm.
+
+**This is deliberately not part of `deploy`.** A local `.env` usually holds
+development values, and shipping those to production as a side effect of deploying
+is a failure that looks like a successful deploy. `deploy` warns in its plan when a
+project has env files but the app has no runtime environment, and leaves the
+decision to you.
+
+### `nextship env rm <KEY>...`
+
+Removes named variables from the app.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--yes` | off | Execute the plan. Without it, `env rm` only prints the plan |
+
+Every key must be named. There is no wildcard, no prefix match and no `--all`, because
+the blast radius of a mistyped pattern here is a production outage. If any named key is
+not set, the whole command refuses and changes nothing, rather than removing the
+others and reporting partial success. A removed secret cannot be recovered, since App
+Platform will not return its value.
+
+### `nextship domain`
+
+Lists the domains attached to the app, with the state App Platform reports for each.
+
+```
+> Domains for portfolio
+  platform   portfolio-vzhrn.ondigitalocean.app  (always works, managed by App Platform)
+  preview.doodlebytestudio.in  primary  being set up; serves once DNS points here and a certificate is issued
+v 1 custom domain(s).
+```
+
+### `nextship domain add <domain>`
+
+Attaches a domain and prints the DNS record you need to create.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--yes` | off | Execute the plan. Without it, `domain add` only prints the plan |
+| `--primary` | off | Make it the app's main address. The first custom domain is primary anyway |
+| `--min-tls <1.2\|1.3>` | `1.2` | Minimum TLS version clients may use |
+
+```
+> Create this DNS record
+  type    CNAME
+  name    preview.doodlebytestudio.in
+  value   portfolio-vzhrn.ondigitalocean.app
+```
+
+**nextship does not touch DNS, deliberately.** Editing DNS needs a token scope beyond
+what deploying requires, and a tool with that scope can break every other service on a
+domain, not just the app it was pointed at. So the record is printed and creating it
+stays your decision. TLS is then automatic: App Platform issues and renews the
+certificate once the record resolves, and there is nothing to configure.
+
+Two consequences worth knowing. The first custom domain becomes the app's primary
+address whatever you asked for, because App Platform promotes it; the plan says so.
+And once a domain is primary it becomes the app's reported URL, so `deploy` and
+`rollback` report the platform hostname as well, since that one always answers while a
+custom domain does not until its record exists.
+
+### `nextship domain rm <domain>`
+
+Detaches a domain. The DNS record is left alone, because nextship did not create it,
+and the command says to remove it yourself.
+
+### `nextship images`
+
+Lists the images pushed for this project and what each one is for.
+
+```
+> Images for gowtham-nextship/portfolio
+  dpl-2b2c3e535f1e-ebc1a38e  2026-09-08T10:10:01Z  deployed now
+  dpl-2b2c3e535f1e-de39cb34  2026-09-08T08:58:48Z  kept for rollback
+  orphaned   3 image(s) no tag points to, up to 181.9 MiB
+  storage    390.2 MiB used in the registry, across every repository
+v 2 image(s).
+```
+
+Storage is reported for the registry rather than per image, because a per-image figure
+would be fiction: a tag is an index of a few kilobytes, its content lives in child
+manifests the API lists separately, and layers are shared between images, so no
+per-image number adds up to the total.
+
+### `nextship images prune`
+
+Removes old images so registry storage stops growing without bound. Rollback is the
+reason images are kept at all, so this is a decision about how far back you can go.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--yes` | off | Execute the plan. Without it, `prune` only prints the plan |
+| `--keep <n>` | `5` | How many images to keep. The deployed one is always kept as well |
+| `--gc` | off | Start garbage collection, which is what actually reclaims storage |
+
+Two facts make this harder than it looks, and both were measured rather than assumed.
+
+**Deleting a tag reclaims nothing.** The manifest survives untagged and keeps
+referencing its layers, so garbage collection finds nothing unreferenced. Measured
+here: deleting a tag and running collection to completion freed 0 bytes and deleted
+0 blobs.
+
+**But deleting untagged manifests destroys running deployments.** A tag points to an
+OCI index whose platform manifests the registry API also reports as untagged. On this
+registry the live tag is a 3.9 KB index whose amd64 child is a 181.9 MiB manifest
+listed as untagged, so the cleanup most scripts perform deletes the image the app is
+running.
+
+So retention works on reachability. The tags being kept are roots, everything they
+reference is kept with them, and only manifests no retained tag can reach are deleted.
+Indexes are deleted before the images they point at, because the registry refuses to
+remove a manifest another manifest still references.
+
+The image the app is currently deployed from is never pruned, whatever `--keep` says.
+Removing it would leave an app that runs until something reschedules it and then cannot
+start.
+
+Garbage collection is what frees the layers. It puts the registry into read-only mode
+while it runs, so a deploy that overlaps it fails to push. That is why it is never
+implicit in a deploy, and why `--gc` works on its own as well as after a prune.
+
+### `nextship destroy <app-name>`
+
+Removes the app this project created, and nothing else.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--yes` | off | Execute the plan. Without it, `destroy` only prints the plan |
+| `--images` | off | Also remove this project's images, then start garbage collection |
+
+**The app name is required**, and this is the only command that asks for one. Every
+other command acts on whatever directory you are in, which is fine when nothing can be
+destroyed. Here it is not: `--yes` typed in the wrong project would remove the wrong
+app. Naming it means the mistake has to be made twice and agree with itself.
+
+```
+> Plan
+  app        DESTROY "portfolio" (7ebdf092-99d7-48a9-9502-5d8f3e8acfbc)
+  address    portfolio-vzhrn.ondigitalocean.app stops serving and is not reissued
+  domain     preview.doodlebytestudio.in stops serving this app
+  images     kept in gowtham-nextship; run `nextship images prune --gc --yes` first if you want them gone
+  registry   kept, it is shared by every project on this account
+  DNS        untouched, nextship did not create your records
+  untouched  3 other app(s) in this account
+```
+
+What it deliberately leaves alone: the container registry, which every project on the
+account shares, and your DNS records, which nextship did not create.
+
+The generated hostname is not reissued. A replacement app gets a new random suffix, so
+if a custom domain points at the old one, its DNS record has to be updated. `destroy`
+warns about this by name before it runs.
+
+Afterwards `nextship.json` keeps your settings but no longer records an app, so the
+next `deploy` creates a fresh one rather than refusing.
+
+### Planned
+
+v0.4 is complete. Next is v0.5, a second cloud target, which is where the claim that
+this ports beyond DigitalOcean is either proven or shown to cost more than it looked.
+See [`docs/01-roadmap.md`](./docs/01-roadmap.md), which also records what is
+deliberately not being built and why.
+
+---
+
+## Safety
+
+nextship runs against accounts with other things on them, so its guarantees are
+structural rather than advisory:
+
+- **Only `destroy` removes infrastructure**, it names the app it will remove, and it
+  refuses unless you type that name back. It never touches the registry or your DNS.
+- **Everything else deletes nothing, or one named thing behind `--yes`**: a
+  configuration value with `env rm`, a domain attachment with `domain rm`, an
+  unreachable image with `images prune`. No command removes an app as a side effect of
+  doing something else.
+- **`deploy` and `rollback` do nothing without `--yes`.** They print a plan and stop.
+- **Only the app recorded in `nextship.json` is ever modified.** That file's `appId`
+  is the ownership record.
+- **An app that merely shares a name is refused, not adopted.** On an account running
+  other services, a name collision is exactly where guessing does damage.
+- **A recorded app that no longer exists is an error**, not an invitation to create a
+  replacement.
+- **A deploy never drops settings it does not manage.** The existing app spec is
+  read first and used as the base, so custom domains, ingress rules, alerts,
+  environment variables and any component you added by hand survive an update.
+- **`env push` adds and updates, never removes.** A variable it does not mention
+  keeps its current value.
+- **A failed deployment leaves the previous revision serving.** Nothing is rolled back
+  or deleted automatically.
+- **Secrets never enter an image layer.** Env files and the Server Actions key are
+  BuildKit secret mounts, which BuildKit deliberately excludes from cache keys.
+- **The registry token never reaches a command line.** It is written to a temporary
+  Docker config directory with `0600` permissions instead of being passed as an
+  argument, where any other process on the machine could read it.
+- **Log proxy URLs are treated as secrets**, because they embed an access token. They
+  never appear in output or in an error message.
+
+## Configuration
+
+### `nextship.json`
+
+Written by `deploy`, committed to your repository, and holding no secrets:
+
+```json
+{
+  "version": 1,
+  "target": "digitalocean",
+  "region": "blr",
+  "name": "portfolio",
+  "registry": "gowtham-nextship",
+  "appId": "7ebdf092-99d7-48a9-9502-5d8f3e8acfbc"
+}
+```
+
+Deleting it makes nextship forget which app it owns, after which it will refuse to
+touch the existing one rather than guess.
+
+### Environment variables
+
+| Variable | Read by | Purpose |
+|---|---|---|
+| `DIGITALOCEAN_TOKEN` | `deploy`, `rollback`, `logs` | Your API token. See [`docs/06-digitalocean-setup.md`](./docs/06-digitalocean-setup.md) for the scopes it needs |
+| `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | `build` | Overrides the per-project key. Set this wherever else you build, so Server Actions keep working for clients served by builds made here |
+| `NO_COLOR` | all | Disables colored output |
+
+Your app's own env files are detected and mounted automatically, in the order Next.js
+loads them for a production build. You do not list them anywhere.
+
+### Files nextship writes
+
+Everything is under `.nextship/` inside your project, plus `nextship.json`:
+
+```
+.nextship/
+  .gitignore              contains "*", written before anything sensitive exists
+  Dockerfile              generated, three stages
+  Dockerfile.dockerignore generated, so your own .dockerignore is untouched
+  build/                  the adapter and prune script copied into the build context
+  output/manifest.json    what the adapter reported
+  secrets.local.json      the Server Actions encryption key, never committed
+nextship.json             committed, no secrets
+```
+
+Nothing else in your project is modified. `next.config.js` is never touched.
+
+`secrets.local.json` is not committed, so another machine or a CI runner will generate
+a different key and break Server Actions for clients served by builds from here.
+nextship warns about this the moment it generates one, and refuses to rotate a key
+silently.
+
+---
+
+## What it handles for you
+
+Things you would otherwise configure by hand, all inferred or applied automatically:
+
+- Finds the project from any subdirectory, and the workspace root above it
+- Reads the installed Next.js version, not the declared range, and refuses anything older than 16.2 with a reason
+- Picks your package manager from the lockfile and reuses your own `build` script
+- Handles pnpm, npm, yarn and bun, single packages and workspaces
+- Injects the adapter without touching `next.config.js`
+- Sets `deploymentId`, so clients on an old build hard-navigate instead of breaking after a deploy
+- Keeps one Server Actions encryption key per project, and refuses to rotate it silently
+- Mounts your env files and that key as build secrets, so neither enters an image layer
+- Installs dependencies inside the image, so `next`, `sharp` and every native module are built for Linux
+- Copies only traced files, and never a dependency source map or development runtime: `node_modules` went from 469 MB to 58 MB on a real project
+- Generates the same launcher standalone mode would, so `@next/swc` (125 MB) stays out and boot is instant
+- Runs as a non-root user under `tini`, with jemalloc for sharp and a `HEALTHCHECK`
+- Points the platform health check at a route your build prerenders, so probing costs a file read rather than a render
+- Disables proxy buffering, so streaming and PPR are not silently broken by the platform
+- Builds for `linux/amd64` regardless of your machine's architecture
+- Derives the image tag from the build's content, so changing an env file cannot ship the old value under an unchanged tag
+- Keeps `.nextship/` out of git on its own, so the key cannot be committed
+
+## Cost
+
+Budget **$10 per month** to start on DigitalOcean: $5 for the smallest App Platform
+instance and $5 for a Basic container registry. The free registry tier does not hold
+enough for rollback to have anything to roll back to.
+
+A costed comparison against Vercel at three traffic tiers is in
+[`docs/03-cost-model.md`](./docs/03-cost-model.md). The short version: DigitalOcean
+egress is $0.02 per GiB against Vercel's $0.15 and up, and App Platform needs no load
+balancer, which was the line item that made the AWS path cost more than Vercel at
+small scale.
+
+## Known limitations
+
+The full table with consequences and status is
+[`docs/00-design.md`](./docs/00-design.md) §12. The ones worth knowing before you
+deploy:
+
+- **The ISR cache does not survive a restart.** It lives inside the container, so
+  every restart, redeploy and rescheduling starts cold. Optimized images share that
+  directory and are re-generated too. Single-instance ISR is correct per process,
+  which is not the same as durable.
+- **Logs are not history.** `--follow` streams live output, but a replaced deployment
+  still takes its past output with it. Retaining it needs forwarding to an external
+  service, which is not built.
+- **`public/` ships inside the image**, 78 MB of it on the real project. The container
+  serves it correctly; moving it to a CDN is a performance change, deferred to v5.
+- **An app that prerenders nothing is health checked on a rendered route.** The path is
+  chosen from the build's prerendered routes, so most apps are probed on a static file.
+  With no static route at all there is nothing cheap to poll.
+- **Nothing is claimed about PPR, Cache Components, middleware or multi-instance
+  behaviour.** They are untested, not known broken.
+
+## Architecture
+
+```
+AWS            DigitalOcean     Fly / Hetzner / k8s (later)
+  |                 |                    |
+  v                 v                    v
+Lightsail      App Platform          Machines
+  +-------- same Docker image ----------+
+             next start in a container
+
+Shared: S3/Spaces (assets), CloudFront/Spaces CDN (static)
+```
+
+One image, one Node server, one lifecycle, with per-cloud drivers behind a single
+interface. DigitalOcean has no Lambda, so a serverless-first design could not port
+there at all, and `next start` in a single process already supports every Next.js
+feature correctly.
+
+**v1 ships no custom router.** The Next.js server is the router: middleware, dynamic
+segments, ISR lookup, the `rsc` and `_rsc` cache-key discipline, PPR resume, and image
+optimization. The bugs that cost competitors years do not exist in this shape. The
+adapter's job is zero-config correctness plus infrastructure inference.
+
+### Why this is buildable now
+
+Next.js 16.2 shipped a stable, public Deployment Adapter API, co-designed with
+OpenNext, Netlify, Cloudflare, AWS and Google. Vercel's own adapter uses it with no
+private hooks, and the official compatibility test suite is available to any adapter
+author. The years of reverse engineering undocumented build output are over.
+
+Full background: [`vercel-nextjs-platform-research.md`](./docs/private/vercel-nextjs-platform-research.md).
+
+### Two findings from building this
+
+Both verified and recorded in [`docs/00-design.md`](./docs/00-design.md) §12:
+
+- **Next.js standalone output cannot be used with the Adapter API.** Setting
+  `output: 'standalone'` while any adapter is configured fails the build with `ENOENT`
+  on `.next/next-server.js.nft.json`, and this reproduces with a completely no-op
+  adapter. nextship assembles the equivalent tree itself from the same trace files.
+- **Next.js's server trace for a non-standalone build omits its own entry module.**
+  Relying on it alone boots to `Cannot find module next/dist/server/next.js`, so the
+  launcher's entry points are always traced as well.
+
+## Repository layout
+
+```
+AGENTS.md             binding rules: attribution, doc sync, no dead code, consistency
+CHANGELOG.md          every change, attributed
+docs/
+  00-design.md        locked decisions, output format, manifest, image contract, drivers
+  01-roadmap.md       v0.1 to v1.0, then correctness at scale and beyond
+  02-competitive-validation.md   who else does this, and what is actually unsolved
+  03-cost-model.md    costed comparison against Vercel at three traffic tiers
+  04-how-we-differ.md every competitor in detail, and where this is worse
+  05-critical-review.md  reproduced defects, gaps, and how to verify each one
+  06-digitalocean-setup.md  the API token, its scopes, and what deploying costs
+  private/            background research, not part of the published docs
+conformance/          scripts for the official Next.js adapter compatibility suite
+packages/
+  adapter/            Next.js Adapter API implementation, injected via NEXT_ADAPTER_PATH
+  cli/                every command; runtime/prune.cjs runs inside the image build
+```
+
+## How correctness is proven
+
+```bash
+pnpm build      # compile both packages
+pnpm typecheck  # no emit
+pnpm test       # 124 unit tests
+```
+
+0. **Unit tests**, 124 cases with `node:test`: detection against on-disk fixtures,
+   Dockerfile and ignore rendering for both layouts, build identity, the `docker build`
+   argument list, registry region matching, rollback target selection and deployment
+   summarizing, and the prune script as a process including its failure modes. One
+   skips where the OS does not permit creating symlinks, which is the default on
+   Windows without developer mode.
+1. **Next.js adapter compatibility suite**, the official one, the same suite Vercel's
+   adapter runs against. Results to be published as a support matrix.
+2. **Streaming conformance test**, a slow-Suspense route deployed to every target,
+   asserting the first byte arrives well before the last. This catches buffering
+   proxies, which otherwise break PPR silently.
+3. **Per-target end-to-end runs** on real AWS and real DigitalOcean on every pull
+   request.
+
+Gate 0 runs today, and streaming, ISR, on-demand revalidation, Server Actions and
+`after()` are verified on real containers. Gate 1 is **wired up but not run**:
+`conformance/` holds the three scripts the official harness requires and
+`.github/workflows/conformance.yml` runs it, so what remains is compute rather than
+design.
+
+## Roadmap
+
+| Version | Scope | State |
+|---|---|---|
+| **v0.1** | Local artifact: detect, build, package | Done |
+| **v0.2** | Build in Docker, prune, run and verify locally | Done |
+| **v0.3** | First cloud deployment to DigitalOcean: deploy, rollback, logs | Done, verified live. Image retention and a health endpoint were moved to v0.4 with reasons |
+| **v0.4** | Day-two operations: domains and TLS, env, images, destroy, logs | Done, verified live |
+| **v0.5** | AWS | In progress. The driver interface exists and DigitalOcean implements it; the AWS driver needs an account to verify against |
+| **v1.0** | Trustworthy for personal use: compatibility suite results, streaming conformance, honest limitations | Not started |
+
+Beyond v1.0, each with the trigger that would justify it: correctness at scale (a
+shared cache and distributed tags, needed once there is more than one instance),
+git-driven previews, a hosted control plane, edge performance (which is where serving
+static assets from a CDN now lives), and other frameworks. The roadmap also records
+what is deliberately not being built, so those decisions stay visible rather than
+looking like oversights.
+
+Details in [`docs/01-roadmap.md`](./docs/01-roadmap.md).
+
+## Contributing
+
+Read [`AGENTS.md`](./AGENTS.md) first. It is binding for humans and agents alike:
+every change is attributed in `CHANGELOG.md`, documentation is updated in the same
+change, every line must have a consumer and a reason to exist, and logic ships with
+tests that pin its failure modes as well as its successes.
+
+## License
+
+Not yet chosen. Until one is added, no license is granted.
