@@ -1,0 +1,112 @@
+# Next.js adapter compatibility suite.
+#
+# The same suite Vercel's own adapter runs against, and the only thing that turns
+# "nextship supports Next.js" from an assertion into evidence. It is manual and
+# scheduled rather than per-push because it clones and builds Next.js from source
+# and then runs sixteen parallel Playwright groups.
+#
+# Results belong in the README as a support matrix. Expect failures on the first
+# run; that is the point.
+#
+# Contract: nextjs.org/docs/app/api-reference/adapters/testing-adapters
+# Author: Gowtham
+name: conformance
+
+on:
+  workflow_dispatch:
+    inputs:
+      nextjsRef:
+        description: 'Next.js repo ref (branch, tag or SHA)'
+        default: 'canary'
+        type: string
+  schedule:
+    # Weekly, so a Next.js regression is found before a release rather than after.
+    - cron: '0 3 * * 1'
+
+jobs:
+  build:
+    name: Build Next.js and nextship
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: adapter }
+
+      - uses: actions/checkout@v4
+        with:
+          repository: vercel/next.js
+          ref: ${{ inputs.nextjsRef || 'canary' }}
+          path: nextjs
+          fetch-depth: 25
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      - run: npm i -g corepack@latest && corepack enable
+
+      - name: Install and build Next.js
+        working-directory: nextjs
+        run: pnpm install && pnpm build && pnpm install
+
+      - name: Install Playwright
+        working-directory: nextjs
+        run: pnpm playwright install --with-deps chromium
+
+      - name: Build nextship
+        working-directory: adapter
+        run: pnpm install && pnpm build && pnpm test
+
+      - uses: actions/cache/save@v4
+        with:
+          path: |
+            nextjs
+            adapter
+            ~/.cache/ms-playwright
+          key: conformance-${{ github.sha }}-${{ github.run_id }}
+
+  test:
+    name: Tests ${{ matrix.group }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1/16, 2/16, 3/16, 4/16, 5/16, 6/16, 7/16, 8/16, 9/16, 10/16, 11/16, 12/16, 13/16, 14/16, 15/16, 16/16]
+    steps:
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            nextjs
+            adapter
+            ~/.cache/ms-playwright
+          key: conformance-${{ github.sha }}-${{ github.run_id }}
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      - run: npm i -g corepack@latest && corepack enable
+
+      - name: Ensure Playwright browser
+        working-directory: nextjs
+        run: pnpm playwright install chromium
+
+      - run: chmod +x adapter/conformance/*.sh
+
+      - name: Run the suite
+        working-directory: nextjs
+        env:
+          NEXT_TEST_MODE: deploy
+          NEXT_E2E_TEST_TIMEOUT: 240000
+          NEXT_EXTERNAL_TESTS_FILTERS: test/deploy-tests-manifest.json
+          ADAPTER_DIR: ${{ github.workspace }}/adapter
+          IS_TURBOPACK_TEST: 1
+          NEXT_TEST_JOB: 1
+          NEXT_TELEMETRY_DISABLED: 1
+          NEXT_TEST_DEPLOY_SCRIPT_PATH: ${{ github.workspace }}/adapter/conformance/e2e-deploy.sh
+          NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH: ${{ github.workspace }}/adapter/conformance/e2e-logs.sh
+          NEXT_TEST_CLEANUP_SCRIPT_PATH: ${{ github.workspace }}/adapter/conformance/e2e-cleanup.sh
+          # One key for the whole run, so Server Actions stay decryptable across
+          # the many apps the harness builds.
+          NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${{ secrets.CONFORMANCE_ACTIONS_KEY }}
+        run: node run-tests.js --timings -g ${{ matrix.group }} -c 2 --type e2e
