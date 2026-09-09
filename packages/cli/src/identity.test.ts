@@ -32,6 +32,7 @@ const project = (root: string, envFiles: string[] = []): ProjectInfo => ({
   envFiles,
   installerConfigs: [],
   userDockerignore: null,
+  localDependencies: [],
 })
 
 /** The build context inputs that feed the digest. */

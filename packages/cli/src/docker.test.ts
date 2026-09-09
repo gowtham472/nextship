@@ -29,6 +29,7 @@ const project: ProjectInfo = {
   envFiles: [],
   installerConfigs: [],
   userDockerignore: null,
+  localDependencies: [],
 }
 
 const context = {

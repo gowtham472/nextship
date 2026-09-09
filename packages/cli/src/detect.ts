@@ -56,6 +56,16 @@ export interface ProjectInfo {
   installerConfigs: string[]
   /** The project's own .dockerignore, merged into the generated one so its rules still apply. */
   userDockerignore: string | null
+  /**
+   * Paths of dependencies resolved from a local `file:` specifier, relative to
+   * the build context.
+   *
+   * These have to be copied before the install runs. The Dockerfile copies
+   * manifests first and sources afterwards, so that an edit to a component does
+   * not re-run the install, but a `file:` dependency lives in the sources and so
+   * is absent at the moment the install needs it.
+   */
+  localDependencies: string[]
 }
 
 /** Files that configure the install itself, as opposed to the application. */
@@ -99,7 +109,47 @@ export async function detectProject(cwd: string): Promise<ProjectInfo> {
     envFiles: await presentFiles(root, ENV_FILES),
     installerConfigs: await presentFiles(contextRoot, INSTALLER_CONFIGS),
     userDockerignore: await readTextIfPresent(path.join(contextRoot, '.dockerignore')),
+    localDependencies: localDependencyPaths(pkg, root, contextRoot),
   }
+}
+
+/**
+ * Dependency paths declared with a `file:` specifier.
+ *
+ * A path that climbs out of the build context is refused rather than copied,
+ * because Docker cannot see outside the context and the install would fail
+ * inside the image with a message about a missing tarball rather than about the
+ * dependency that caused it.
+ */
+export function localDependencyPaths(
+  pkg: Record<string, unknown>,
+  root: string,
+  contextRoot: string
+): string[] {
+  const groups = ['dependencies', 'devDependencies', 'optionalDependencies']
+  const found = new Set<string>()
+
+  for (const group of groups) {
+    const entries = pkg[group]
+    if (typeof entries !== 'object' || entries === null) continue
+
+    for (const [name, range] of Object.entries(entries as Record<string, unknown>)) {
+      if (typeof range !== 'string' || !range.startsWith('file:')) continue
+
+      const target = path.resolve(root, range.slice('file:'.length))
+      const relative = toPosix(path.relative(contextRoot, target))
+
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        throw new NextshipError(
+          `Dependency "${name}" is a file: path outside the build context: ${range}.`,
+          'Docker cannot read outside the project, so the install would fail. Move it inside the project, or publish it.'
+        )
+      }
+      found.add(relative)
+    }
+  }
+
+  return [...found].sort()
 }
 
 async function presentFiles(root: string, names: string[]): Promise<string[]> {

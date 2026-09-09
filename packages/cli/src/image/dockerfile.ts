@@ -172,6 +172,11 @@ function manifestSources(project: ProjectInfo): string[] {
     'package.json',
     ...(project.lockfile ? [project.lockfile] : []),
     ...project.installerConfigs,
+    // Dependencies resolved from a local path have to exist before the install
+    // runs, and the sources are not copied until after it. Without these, a
+    // project with a vendored tarball fails inside the image with a message
+    // about a missing file rather than about the dependency.
+    ...project.localDependencies,
   ]
 }
 

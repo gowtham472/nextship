@@ -10,7 +10,7 @@ import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { detectProject } from './detect.js'
+import { detectProject, localDependencyPaths } from './detect.js'
 import { NextshipError } from './errors.js'
 
 type Layout = Record<string, string>
@@ -226,4 +226,62 @@ test('a package that really is absent is still reported as absent', async () => 
 
   const project = await detectProject(root)
   assert.equal(project.sharpVersion, null, 'an unrelated store entry is not mistaken for a match')
+})
+
+/**
+ * Local file: dependencies.
+ *
+ * Found by the Next.js compatibility suite, which rewrites every dependency to
+ * `file:./next-test-packages/...` and hands the deploy script a project that has
+ * not been installed. The generated Dockerfile copies manifests, installs, then
+ * copies sources, so a dependency living in the sources is absent exactly when
+ * the install needs it.
+ */
+test('a file: dependency inside the project is reported so it can be copied early', () => {
+  const pkg = {
+    dependencies: { next: 'file:./next-test-packages/next/packed.tgz' },
+    devDependencies: { helper: 'file:vendor/helper' },
+  }
+
+  assert.deepEqual(localDependencyPaths(pkg, '/app', '/app'), [
+    'next-test-packages/next/packed.tgz',
+    'vendor/helper',
+  ])
+})
+
+test('registry ranges are not mistaken for local paths', () => {
+  const pkg = { dependencies: { next: '^16.2.0', react: 'workspace:*', other: 'npm:thing@1' } }
+  assert.deepEqual(localDependencyPaths(pkg, '/app', '/app'), [])
+})
+
+test('a path that climbs but stays inside the context is allowed', () => {
+  const pkg = { dependencies: { helper: 'file:../../vendor/helper' } }
+  assert.deepEqual(localDependencyPaths(pkg, '/repo/apps/web', '/repo'), ['vendor/helper'])
+})
+
+test('a package inside a workspace reports paths relative to the build context', () => {
+  // The context is the workspace root, because that is what Docker is given.
+  const pkg = { dependencies: { helper: 'file:./vendor/helper' } }
+  assert.deepEqual(localDependencyPaths(pkg, '/repo/apps/web', '/repo'), ['apps/web/vendor/helper'])
+})
+
+test('a file: path outside the build context is refused rather than silently broken', () => {
+  // Three levels, not two: from apps/web, `../../` only reaches the context root.
+  const pkg = { dependencies: { helper: 'file:../../../outside' } }
+
+  assert.throws(
+    () => localDependencyPaths(pkg, '/repo/apps/web', '/repo'),
+    (error: unknown) => {
+      assert.ok(error instanceof NextshipError)
+      assert.match(error.message, /outside the build context/)
+      assert.match(error.action, /Docker cannot read outside/)
+      return true
+    },
+    'Docker cannot see outside the context, so this must fail by name rather than as a missing tarball'
+  )
+})
+
+test('a manifest with no dependency section at all is handled', () => {
+  assert.deepEqual(localDependencyPaths({}, '/app', '/app'), [])
+  assert.deepEqual(localDependencyPaths({ dependencies: null }, '/app', '/app'), [])
 })

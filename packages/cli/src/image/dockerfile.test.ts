@@ -24,6 +24,7 @@ const base: ProjectInfo = {
   envFiles: [],
   installerConfigs: [],
   userDockerignore: null,
+  localDependencies: [],
 }
 
 test('standalone project renders a three-stage build', () => {

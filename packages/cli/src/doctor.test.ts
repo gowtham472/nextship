@@ -30,6 +30,7 @@ const projectFor = (root: string, overrides: Partial<ProjectInfo> = {}): Project
   envFiles: [],
   installerConfigs: [],
   userDockerignore: null,
+  localDependencies: [],
   ...overrides,
 })
 

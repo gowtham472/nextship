@@ -66,6 +66,22 @@ server.listen(0, '127.0.0.1', () => { process.stdout.write(String(server.address
 # must stay decryptable across them.
 export NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:-$(head -c 32 /dev/urandom | base64)}"
 
+# The harness stages the app with `skipInstall: true` and rewrites every
+# dependency to a `file:` path under next-test-packages, so the deploy target is
+# expected to install, exactly as a hosted platform does when you push source.
+#
+# nextship reads the *installed* Next.js version rather than the declared range,
+# deliberately, so it needs those dependencies present before it will plan
+# anything. Installing here is the adapter holding up its side of that contract.
+if [ ! -d node_modules/next ]; then
+  log "installing dependencies, which the harness leaves to the deploy target"
+  npm install --no-audit --no-fund --loglevel=error >> .adapter-package.log 2>&1 || {
+    log "install failed"
+    exit 1
+  }
+  log "installed next $(node -p "require('./node_modules/next/package.json').version" 2>/dev/null || echo unknown)"
+fi
+
 log "packaging $(pwd)"
 # The tag is read from what packaging reported, not from the newest image on the
 # daemon, which under concurrency could belong to another test.
