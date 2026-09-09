@@ -10,15 +10,21 @@
 # Author: Gowtham
 set -euo pipefail
 
-[ -f .adapter-build.log ] && cat .adapter-build.log
+# Derived the same way the deploy script derives it, because the harness runs
+# each script as a separate process and shares nothing but the app directory.
+# The logs sit beside the app rather than inside it so they cannot alter the
+# Docker build context between the two builds packaging runs.
+LOGDIR="${PWD}.logs"
 
-if [ -f .adapter-server.log ]; then
+[ -f "${LOGDIR}/build.log" ] && cat "${LOGDIR}/build.log"
+
+if [ -f "${LOGDIR}/server.log" ]; then
   echo "=== server log ==="
-  cat .adapter-server.log
+  cat "${LOGDIR}/server.log"
 fi
 
 # Anything since the deploy script captured its snapshot.
-CONTAINER="$(grep '^CONTAINER: ' .adapter-build.log 2>/dev/null | cut -d' ' -f2- || true)"
+CONTAINER="$(grep '^CONTAINER: ' "${LOGDIR}/build.log" 2>/dev/null | cut -d' ' -f2- || true)"
 if [ -n "${CONTAINER}" ]; then
   echo "=== live container log ==="
   docker logs "${CONTAINER}" 2>&1 || true

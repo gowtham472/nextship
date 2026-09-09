@@ -15,6 +15,18 @@ set -euo pipefail
 NEXTSHIP="${ADAPTER_DIR}/packages/cli/dist/index.js"
 CONTAINER="nextship-e2e-$$"
 
+# Logs live beside the app, never inside it.
+#
+# They used to be written into the app directory, which is the Docker build
+# context. The packaging step runs two builds, a manifest target and then the
+# runtime image, and the log file grew between them. That changed the context, so
+# `COPY . .` missed the cache on the second build and everything after it re-ran:
+# the whole Next.js build again plus an 11 second trace prune, for about 16
+# wasted seconds on every test in the suite. A sibling directory keeps the
+# context byte identical across both builds.
+LOGDIR="${PWD}.logs"
+mkdir -p "${LOGDIR}"
+
 # The harness reads only stdout, so every diagnostic goes to stderr.
 log() { echo "nextship: $*" >&2; }
 
@@ -40,7 +52,7 @@ on_failure() {
   echo "docker:     $(docker version --format '{{.Server.Version}}' 2>&1 | head -1)"
   echo "cli:        $([ -f "${NEXTSHIP}" ] && echo present || echo "MISSING at ${NEXTSHIP}")"
   echo "adapter:    $([ -f "${ADAPTER_DIR}/packages/cli/runtime/adapter.mjs" ] && echo present || echo MISSING)"
-  for f in .adapter-package.log .adapter-server.log; do
+  for f in "${LOGDIR}/install.log" "${LOGDIR}/package.log" "${LOGDIR}/server.log"; do
     if [ -f "$f" ]; then
       echo "--- ${f} (last 40 lines) ---"
       tail -40 "$f"
@@ -75,7 +87,7 @@ export NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:
 # anything. Installing here is the adapter holding up its side of that contract.
 if [ ! -d node_modules/next ]; then
   log "installing dependencies, which the harness leaves to the deploy target"
-  npm install --no-audit --no-fund --loglevel=error >> .adapter-package.log 2>&1 || {
+  npm install --no-audit --no-fund --loglevel=error >> "${LOGDIR}/install.log" 2>&1 || {
     log "install failed"
     exit 1
   }
@@ -106,10 +118,10 @@ IGNORE
 log "packaging $(pwd)"
 # The tag is read from what packaging reported, not from the newest image on the
 # daemon, which under concurrency could belong to another test.
-node "${NEXTSHIP}" package > .adapter-package.log 2>&1 || { cat .adapter-package.log >&2; exit 1; }
-cat .adapter-package.log >&2
+node "${NEXTSHIP}" package > "${LOGDIR}/package.log" 2>&1 || { cat "${LOGDIR}/package.log" >&2; exit 1; }
+cat "${LOGDIR}/package.log" >&2
 
-TAG="$(sed -n 's/.*Image ready: \([^ ]*\).*/\1/p' .adapter-package.log | tail -1)"
+TAG="$(sed -n 's/.*Image ready: \([^ ]*\).*/\1/p' "${LOGDIR}/package.log" | tail -1)"
 [ -n "${TAG}" ] || { log "packaging reported no image tag"; exit 1; }
 
 log "starting ${TAG} as ${CONTAINER}"
@@ -122,7 +134,7 @@ docker run -d --name "${CONTAINER}" --platform linux/amd64 -p "${PORT}:3000" "${
 # "unknown" for every test, and the harness builds /_next/data/<buildId>/
 # URLs from this value, so every Pages Router data request asked for a path
 # that could not exist.
-BUILD_ID="$(sed -n 's/^#[0-9]\{1,\} [0-9.]\{1,\} BUILD_ID: \(.\{1,\}\)$/\1/p' .adapter-package.log | tail -1)"
+BUILD_ID="$(sed -n 's/^#[0-9]\{1,\} [0-9.]\{1,\} BUILD_ID: \(.\{1,\}\)$/\1/p' "${LOGDIR}/package.log" | tail -1)"
 [ -n "${BUILD_ID}" ] || { log "the build printed no BUILD_ID marker"; exit 1; }
 
 # Persisted because the logs script runs as a separate process and cannot see
@@ -134,7 +146,7 @@ BUILD_ID="$(sed -n 's/^#[0-9]\{1,\} [0-9.]\{1,\} BUILD_ID: \(.\{1,\}\)$/\1/p' .a
   echo "NEXT_SUPPORTS_IMMUTABLE_ASSETS: 0"
   echo "CONTAINER: ${CONTAINER}"
   echo "TAG: ${TAG}"
-} > .adapter-build.log
+} > "${LOGDIR}/build.log"
 
 # The harness fails the test rather than waiting, so readiness is confirmed here.
 for _ in $(seq 1 60); do
@@ -147,7 +159,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
-docker logs "${CONTAINER}" > .adapter-server.log 2>&1 || true
+docker logs "${CONTAINER}" > "${LOGDIR}/server.log" 2>&1 || true
 
 # The only line on stdout.
 echo "http://127.0.0.1:${PORT}"

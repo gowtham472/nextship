@@ -249,6 +249,18 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Fixed
 
+- **The compatibility suite rebuilt every app twice.** Packaging runs two Docker builds,
+  a manifest target and then the runtime image, and the harness scripts wrote their logs
+  into the app directory, which is the build context. The log grew between the two builds,
+  so `COPY . .` missed the cache on the second and everything after it re-ran: the whole
+  Next.js build again, plus an 11 second trace prune. About 16 seconds wasted on every
+  test in a suite where the per-group budget is already the binding constraint.
+
+  The logs now live in a sibling directory, so the context is byte identical across both
+  builds. Only the suite was affected: a real deploy writes nothing into the context
+  between builds, since the manifest output and the actions key are both already ignored.
+  (Gowtham)
+
 - **The compatibility suite tried to compile its own test files as part of the app.**
   Each test's fixture directory is staged wholesale, so `app-action.test.ts` and its
   siblings arrive at the root of the app next to its `app/` directory. Next.js finds no

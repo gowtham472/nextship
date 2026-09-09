@@ -10,10 +10,19 @@
 # Author: Gowtham
 set -euo pipefail
 
-CONTAINER="$(grep '^CONTAINER: ' .adapter-build.log 2>/dev/null | cut -d' ' -f2- || true)"
-TAG="$(grep '^TAG: ' .adapter-build.log 2>/dev/null | cut -d' ' -f2- || true)"
+# Matches the deploy script. See the comment there for why logs live beside the
+# app directory rather than in it.
+LOGDIR="${PWD}.logs"
+
+CONTAINER="$(grep '^CONTAINER: ' "${LOGDIR}/build.log" 2>/dev/null | cut -d' ' -f2- || true)"
+TAG="$(grep '^TAG: ' "${LOGDIR}/build.log" 2>/dev/null | cut -d' ' -f2- || true)"
 
 [ -n "${CONTAINER}" ] && docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
 [ -n "${TAG}" ] && docker rmi -f "${TAG}" >/dev/null 2>&1 || true
+
+# The logs outlive the app directory now that they sit outside it, so they are
+# this script's to remove. Left behind, they accumulate for every test in the
+# group on a runner that is already tight on disk.
+rm -rf "${LOGDIR}"
 
 exit 0
