@@ -23,13 +23,13 @@ importers:
 
   packages/cli:
     dependencies:
-      '@nextship/adapter':
-        specifier: workspace:*
-        version: link:../adapter
       cross-spawn:
         specifier: ^7.0.6
         version: 7.0.6
     devDependencies:
+      '@nextship/adapter':
+        specifier: workspace:*
+        version: link:../adapter
       '@types/cross-spawn':
         specifier: ^6.0.6
         version: 6.0.6
