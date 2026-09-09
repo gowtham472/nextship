@@ -249,6 +249,13 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Fixed
 
+- **The compatibility results are reproducible, which is what makes them worth
+  publishing.** The suite was run a second time hours later on separate runners and
+  returned 1051 of 1115 again, failing a byte-identical set of 64 suites. Nothing in the
+  support matrix is a runner having a bad day, so every entry is a real limitation someone
+  else can reproduce. For contrast, Next.js's own deploy manifest records 33 flaky tests in
+  a single suite for the reference adapter. (Gowtham)
+
 - **The LICENSE appendix still carried Apache's `[yyyy] [name of copyright owner]`
   placeholder.** Filled in with 2026 and both copyright holders, matching `NOTICE`. The
   verbatim license text above the appendix is unchanged, and was diffed to prove it.

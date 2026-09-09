@@ -785,6 +785,15 @@ file. Run against `16.4.0-canary.22` in
 | **Suites run** | 1115 |
 | **Passing** | **1051** |
 | **Pass rate** | **94.3%** |
+| **Reproducible** | Two independent runs, identical result |
+
+The suite was run twice, hours apart, on separate runners:
+[34331951663](https://github.com/gowtham472/nextship/actions/runs/34331951663) and
+[34360207441](https://github.com/gowtham472/nextship/actions/runs/34360207441). Both
+returned 1051 of 1115, failing the same 64 suites with a byte-identical set. Nothing here
+is flake, which is what makes the table below worth publishing: every entry is a
+reproducible limitation rather than a runner having a bad day. For contrast, Next.js's own
+deploy manifest records 33 flaky tests in a single suite for the reference adapter.
 
 The 64 failures, sorted by what they actually mean rather than by count:
 
