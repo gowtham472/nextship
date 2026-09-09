@@ -249,6 +249,15 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Fixed
 
+- **The LICENSE appendix still carried Apache's `[yyyy] [name of copyright owner]`
+  placeholder.** Filled in with 2026 and both copyright holders, matching `NOTICE`. The
+  verbatim license text above the appendix is unchanged, and was diffed to prove it.
+
+- **The site named a domain nobody has registered.** `metadataBase` pointed at
+  `nextship.dev`, which would have produced Open Graph card images that 404 wherever the
+  page was shared. It now reads `NEXT_PUBLIC_SITE_URL` and falls back to localhost, which
+  is the honest default for a site that has no home yet. (Gowtham)
+
 - **A package installed but not declared failed the build with a message about the wrong
   thing.** nextship installs from your lockfile inside the image and never ships the host
   `node_modules`, because those binaries are built for the machine you develop on. A

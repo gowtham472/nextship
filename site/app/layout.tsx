@@ -11,8 +11,21 @@ const title = 'nextship'
 const description =
   'Deploy any Next.js app to infrastructure you own. No Dockerfile, no config edits, no Terraform.'
 
+/**
+ * Where this site is served from.
+ *
+ * Open Graph and Twitter card image URLs have to be absolute, so Next.js needs
+ * a base it cannot infer at build time. It is read from the environment rather
+ * than hard coded to a domain nobody has registered: an invented URL would
+ * produce card images that silently 404 wherever the page was shared.
+ *
+ * The localhost default is correct for development and for a build that has not
+ * been given a home yet. Set NEXT_PUBLIC_SITE_URL when deploying.
+ */
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+
 export const metadata: Metadata = {
-  metadataBase: new URL('https://nextship.dev'),
+  metadataBase: new URL(siteUrl),
   title: { default: `${title}: deploy Next.js to your own cloud`, template: `%s | ${title}` },
   description,
   applicationName: title,

@@ -1,6 +1,11 @@
 # nextship site
 
-The marketing page and documentation, at [nextship.dev](https://nextship.dev).
+The marketing page and documentation.
+
+Not deployed yet, which is why nothing here names a domain. Absolute URLs for Open
+Graph images come from `NEXT_PUBLIC_SITE_URL`, which defaults to `http://localhost:3000`
+so a build without a home produces working local links rather than links to a domain
+nobody has registered.
 
 ```bash
 cd site
