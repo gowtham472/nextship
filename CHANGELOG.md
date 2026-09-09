@@ -249,6 +249,18 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Fixed
 
+- **The compatibility suite reported a build id of `unknown` for every test.** The deploy
+  script read `.next/BUILD_ID` from the runner's filesystem, but nextship builds inside
+  Docker, so `.next` never exists out there and the read fell through to its `unknown`
+  fallback on every single test. The harness constructs `/_next/data/<buildId>/` URLs
+  from that value, so every Pages Router data request in the suite asked for a path that
+  could not exist, and the results were measuring the harness wiring rather than nextship.
+
+  The real id is printed by the post-build script the harness injects into the app, which
+  runs inside the image, so it is now read back out of the packaging log. The script fails
+  loudly when the marker is absent, because a silent `unknown` is precisely the failure
+  that made four runs uninterpretable. (Gowtham)
+
 - **Dependency source maps and development runtimes were shipped in the image.** The
   trace ignore list excluded them, but it only applied while tracing: a trace entry
   that resolves to a directory was copied wholesale with no filter, so the same files

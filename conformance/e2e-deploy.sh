@@ -94,10 +94,20 @@ TAG="$(sed -n 's/.*Image ready: \([^ ]*\).*/\1/p' .adapter-package.log | tail -1
 log "starting ${TAG} as ${CONTAINER}"
 docker run -d --name "${CONTAINER}" --platform linux/amd64 -p "${PORT}:3000" "${TAG}" >&2
 
+# The build runs inside Docker, so .next never exists out here. The real
+# BUILD_ID is printed by the post-build script the harness injects into the
+# app, which executes in the image and lands in the packaging log behind a
+# BuildKit step prefix. Reading .next/BUILD_ID from the host reported
+# "unknown" for every test, and the harness builds /_next/data/<buildId>/
+# URLs from this value, so every Pages Router data request asked for a path
+# that could not exist.
+BUILD_ID="$(sed -n 's/^#[0-9]\{1,\} [0-9.]\{1,\} BUILD_ID: \(.\{1,\}\)$/\1/p' .adapter-package.log | tail -1)"
+[ -n "${BUILD_ID}" ] || { log "the build printed no BUILD_ID marker"; exit 1; }
+
 # Persisted because the logs script runs as a separate process and cannot see
 # these variables.
 {
-  echo "BUILD_ID: $(cat .next/BUILD_ID 2>/dev/null || echo unknown)"
+  echo "BUILD_ID: ${BUILD_ID}"
   echo "DEPLOYMENT_ID: $(node -e "process.stdout.write(require('./.nextship/output/manifest.json').deploymentId)" 2>/dev/null || echo unknown)"
   # nextship serves assets from the container, not a content-addressed store.
   echo "NEXT_SUPPORTS_IMMUTABLE_ASSETS: 0"
