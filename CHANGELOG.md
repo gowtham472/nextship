@@ -249,6 +249,14 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Fixed
 
+- **The suite could have been testing a Next.js nobody was testing.** The harness rewrites
+  dependencies to `file:./next-test-packages/<name>/packed.tgz` so the app runs the build
+  from the checkout under test. If that rewrite does not happen, the install resolves a
+  published build from the registry instead and the whole run measures the wrong Next.js,
+  which a passing log looks identical to. The deploy script now records the staged
+  dependencies, whether the local tarballs exist, and the path Next.js actually resolved
+  from. (Gowtham)
+
 - **The compatibility suite never saw the build output.** In deploy mode the harness takes
   `next.cliOutput` from the logs script, and ours returned only the marker file, the server
   log and the live container log. Every test asserting on something Next.js printed while

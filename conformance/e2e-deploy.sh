@@ -94,6 +94,24 @@ if [ ! -d node_modules/next ]; then
   log "installed next $(node -p "require('./node_modules/next/package.json').version" 2>/dev/null || echo unknown)"
 fi
 
+# What the harness actually staged.
+#
+# The suite's premise is that the app runs the Next.js built from the checkout
+# under test, which the harness arranges by rewriting dependencies to
+# `file:./next-test-packages/<name>/packed.tgz`. If that rewrite did not happen
+# the install silently resolves a published build from the registry instead, and
+# the whole run then measures a Next.js nobody is testing. That difference is
+# invisible in a passing log and expensive to infer from a failing one, so it is
+# recorded on every deploy rather than reconstructed afterwards.
+{
+  echo "--- staged dependencies ---"
+  node -p "JSON.stringify(require('./package.json').dependencies ?? {}, null, 2)" 2>&1 || true
+  echo "--- next-test-packages present? ---"
+  ls -d next-test-packages 2>/dev/null || echo "absent: dependencies were not rewritten to local tarballs"
+  echo "--- next resolved from ---"
+  node -p "require.resolve('next/package.json', { paths: [process.cwd()] })" 2>&1 || true
+} >&2
+
 # Keep the harness's own test files out of the app being deployed.
 #
 # Each test's fixture directory is staged wholesale, so the *.test.ts files that
