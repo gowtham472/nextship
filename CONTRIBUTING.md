@@ -75,3 +75,48 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 One fixed key is required because the suite builds many apps and Server Actions must stay
 decryptable across all of them.
+
+## Releasing
+
+Releases are published from CI, never from a laptop. `.github/workflows/release.yml`
+builds, typechecks, tests, refuses to continue if the git tag disagrees with the package
+version, installs the packed tarball into a clean project to prove it works, and only then
+publishes with `--provenance`.
+
+Provenance signs a statement linking the published bytes to this repository and the exact
+commit, which anyone can verify on the npm page. For a tool that asks people for a cloud
+token, that is worth more than a promise.
+
+**One-time setup.** Create an npm **automation** token (npmjs.com, Access Tokens,
+Generate). An interactive token will fail in CI, because it prompts for 2FA. Add it as a
+repository secret named `NPM_TOKEN`.
+
+**Each release:**
+
+1. Run the compatibility suite and make sure the support matrix in the README reflects it.
+   Publishing claims about Next.js support that nothing has tested is the one mistake that
+   costs trust permanently.
+2. Move everything under `## [Unreleased]` in the changelog into a new version heading.
+3. Bump the version in `packages/cli/package.json`.
+4. Dry run: Actions, release, Run workflow, leave `dryRun` checked. It packs and verifies
+   without publishing.
+5. Tag and push. The tag triggers the real publish:
+
+```bash
+git tag v0.4.0 && git push origin v0.4.0
+```
+
+### Maintainers
+
+The package is published from a personal npm account, because copyright sits with the
+authors rather than with any organisation. Publish rights are granted separately, and
+only after the first publish exists:
+
+```bash
+npm owner add <npm-username> nextship
+npm owner ls nextship
+```
+
+A maintainer can publish new versions and can unpublish, so it is a real grant rather
+than a credit. Credit belongs in `contributors` and in the acknowledgements, which cost
+nothing and take nothing away.
