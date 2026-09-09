@@ -1,6 +1,8 @@
 {
   "name": "nextship-monorepo",
   "private": true,
+  "license": "Apache-2.0",
+  "author": "Gowtham",
   "engines": { "node": ">=22" },
   "scripts": {
     "build": "pnpm -r build",

@@ -44,7 +44,7 @@ apps with it. Everything that only matters once other people depend on it is rec
 in [`docs/01-roadmap.md`](./docs/01-roadmap.md) under "Beyond v1.0", each with the
 trigger that would justify building it.
 
-The name is a placeholder. Verify npm and GitHub availability before any public release.
+`nextship` is free on npm and is the name this publishes under. `nextpush` was considered and rejected: `nextpush-cli` is already published as the CLI for an existing NextPush service.
 
 ---
 
@@ -803,4 +803,7 @@ tests that pin its failure modes as well as its successes.
 
 ## License
 
-Not yet chosen. Until one is added, no license is granted.
+[Apache-2.0](./LICENSE). You may use, modify and redistribute this, including
+commercially, provided you keep the notice and state your changes. The licence also
+grants you a patent licence from every contributor, which is the reason to prefer it over
+MIT for anything a company might adopt.

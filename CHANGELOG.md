@@ -8,6 +8,23 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Added
 
+- **Licensed under Apache-2.0, and the name verified rather than assumed.** The project
+  had no license, which meant that as public code it was still all rights reserved and
+  legally unusable by anyone. That was the hardest release blocker and the cheapest to
+  fix.
+
+  Apache-2.0 chosen over MIT for its explicit patent grant, which is what makes a
+  company's legal review straightforward, and over AGPL because adoption matters more here
+  than protecting a hosted business that does not exist yet. `LICENSE` is the canonical
+  text fetched from apache.org rather than retyped, with a `NOTICE` carrying the copyright,
+  and every manifest now declares the license and author.
+
+  The name was checked before committing to it, since the README had warned since the
+  first commit that it was a placeholder. `nextship` is free on npm and has no competing
+  product. `nextpush` was considered and rejected on evidence: `nextpush-cli` is already
+  published as the "Management CLI for the NextPush service", so taking that name would
+  have made this the second NextPush. (Gowtham)
+
 - **v1.0 scoped to DigitalOcean, and the conformance scripts run for the first time.**
   AWS moved to v1.1: v1.0 means trustworthy for personal use, the person using it deploys
   to DigitalOcean, and holding a release for a second cloud nobody has asked for would
