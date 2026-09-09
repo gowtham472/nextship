@@ -249,6 +249,19 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Fixed
 
+- **The compatibility suite tried to compile its own test files as part of the app.**
+  Each test's fixture directory is staged wholesale, so `app-action.test.ts` and its
+  siblings arrive at the root of the app next to its `app/` directory. Next.js finds no
+  tsconfig, writes a default one that includes `**/*.ts`, and type checks the test file
+  against an app whose package.json never declared a test runner, so the build fails with
+  `Cannot find name 'expect'`.
+
+  Run in place inside the Next.js repo those files resolve jest's types by walking up to
+  the monorepo root. In an isolated container there is nothing to walk up into, which is
+  a property of deploying rather than a defect. The test files are now excluded from the
+  build context: a deploy target has no business compiling the suite that tests it.
+  (Gowtham)
+
 - **The compatibility suite reported a build id of `unknown` for every test.** The deploy
   script read `.next/BUILD_ID` from the runner's filesystem, but nextship builds inside
   Docker, so `.next` never exists out there and the read fell through to its `unknown`

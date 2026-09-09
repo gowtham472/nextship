@@ -82,6 +82,27 @@ if [ ! -d node_modules/next ]; then
   log "installed next $(node -p "require('./node_modules/next/package.json').version" 2>/dev/null || echo unknown)"
 fi
 
+# Keep the harness's own test files out of the app being deployed.
+#
+# Each test's fixture directory is staged wholesale, so the *.test.ts files that
+# describe the test land at the root of the app alongside its app/ directory.
+# Next.js finds no tsconfig, generates a default one that includes **/*.ts, and
+# then type checks the test file against an app whose package.json never declared
+# a test runner, so the build dies on "Cannot find name 'expect'".
+#
+# That is an artefact of staging, not a deployment concern: run in place inside
+# the Next.js repo these files resolve jest's types from the monorepo root, and
+# in an isolated container there is no monorepo to walk up into. A deploy target
+# has no business compiling the suite that is testing it, so the files simply are
+# not part of the build context. nextship merges this into its generated rules.
+cat >> .dockerignore <<'IGNORE'
+**/*.test.ts
+**/*.test.tsx
+**/*.test.js
+**/*.test.jsx
+**/*.results.json
+IGNORE
+
 log "packaging $(pwd)"
 # The tag is read from what packaging reported, not from the newest image on the
 # daemon, which under concurrency could belong to another test.
