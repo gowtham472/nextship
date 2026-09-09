@@ -18,6 +18,42 @@ CONTAINER="nextship-e2e-$$"
 # The harness reads only stdout, so every diagnostic goes to stderr.
 log() { echo "nextship: $*" >&2; }
 
+# On failure, stdout stops being sacred and becomes the only way to be heard.
+#
+# The harness reports a failed deploy as `Custom deploy script failed: <stdout>
+# <stderr> (<code>)`, but it does not capture stderr: the field arrives as
+# `undefined`. So a script that writes every diagnostic to stderr, as this one
+# correctly does while succeeding, fails completely silently. That is exactly
+# what happened on the first CI run, and it cost a full suite execution to learn
+# nothing at all.
+#
+# Nothing parses stdout unless the script exits 0, so dumping context here is
+# safe and is the difference between a legible failure and a blank one.
+on_failure() {
+  local code=$?
+  [ "${code}" -eq 0 ] && return 0
+  echo "=== nextship deploy script failed with exit ${code} ==="
+  echo "--- environment ---"
+  echo "cwd:        $(pwd)"
+  echo "ADAPTER_DIR: ${ADAPTER_DIR:-unset}"
+  echo "node:       $(node --version 2>&1)"
+  echo "docker:     $(docker version --format '{{.Server.Version}}' 2>&1 | head -1)"
+  echo "cli:        $([ -f "${NEXTSHIP}" ] && echo present || echo "MISSING at ${NEXTSHIP}")"
+  echo "adapter:    $([ -f "${ADAPTER_DIR}/packages/cli/runtime/adapter.mjs" ] && echo present || echo MISSING)"
+  for f in .adapter-package.log .adapter-server.log; do
+    if [ -f "$f" ]; then
+      echo "--- ${f} (last 40 lines) ---"
+      tail -40 "$f"
+    fi
+  done
+  echo "=== end ==="
+  # Re-exit with the original code. A trap that falls through would hand the
+  # harness a zero, which is worse than the silence this replaced: it would read
+  # as a successful deploy and fail later somewhere unrelated.
+  exit "${code}"
+}
+trap on_failure EXIT
+
 # The harness runs tests concurrently, so a fixed port would collide. Ask the
 # kernel for a free one rather than guessing.
 PORT="$(node -e "
