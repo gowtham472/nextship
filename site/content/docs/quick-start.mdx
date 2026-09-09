@@ -1,0 +1,82 @@
+---
+title: Quick start
+description: From an existing Next.js app to a live deployment, one command at a time.
+---
+
+Every stage is its own command, so a failure can be re-run in isolation without repeating
+the stages that already succeeded.
+
+## 1. Look before you build
+
+```bash
+cd your-nextjs-app
+nextship detect
+```
+
+```
+> Inspecting project
+v portfolio is a Next.js 16.2.9 project
+  root          D:\C-Projects\company_portfolio
+  package mgr   pnpm
+  build command pnpm run build
+  node          24
+  sharp         0.34.5
+  env files     none
+```
+
+Everything reported is read from disk rather than from what `package.json` declares,
+including packages your package manager installed transitively. A project with no env
+files says so, instead of leaving you to guess.
+
+In a workspace it also reports the workspace root and the app directory, because the image
+is built from the workspace root where the lockfile and sibling manifests live.
+
+## 2. Find out what changes
+
+```bash
+nextship doctor
+```
+
+This reports what stops working when an app leaves a managed platform. None of it blocks a
+build, which is exactly why it is worth surfacing: no error would ever reveal it.
+
+Findings are sorted with blockers first, and each carries a consequence and an action
+rather than only a name.
+
+## 3. Run it locally first
+
+```bash
+nextship run
+```
+
+Builds, packages and starts the image on port 3000, loading your highest-precedence env
+file so secrets stay outside the image. This exists so the artifact can be verified before
+any cloud account is involved.
+
+It runs attached with `--rm`. Ctrl+C stops and removes the container, so there is no
+background state to clean up. A stop is reported as a stop rather than a failure: exit 130
+for Ctrl+C and 143 for `docker stop` are the codes Next.js exits with after draining
+connections.
+
+## 4. Deploy
+
+```bash
+export DIGITALOCEAN_TOKEN=dop_v1_...
+
+nextship deploy        # prints the plan, changes nothing
+nextship deploy --yes  # executes it
+```
+
+The plan is printed every time. Nothing is created, changed or charged until `--yes`.
+
+On the first deploy nextship records the app name, region and registry in `nextship.json`.
+Commit that file. It is how every later command knows which app belongs to this project,
+and it is the only reason `destroy` can be certain it will not touch anything else in your
+account.
+
+## Where to go next
+
+- [Deploying](/docs/deploying) for what the plan contains and how a release is verified
+- [Environment variables](/docs/environment-variables) for pushing secrets safely
+- [Custom domains](/docs/custom-domains) for attaching a domain with automatic TLS
+- [Rollbacks and logs](/docs/rollbacks-and-logs) for when something goes wrong

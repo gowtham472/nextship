@@ -249,6 +249,20 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Fixed
 
+- **A marketing page and documentation site, under `site/`.** Next.js 16.3.4, App Router,
+  Tailwind v4, and eleven MDX pages covering getting started, the guides and the reference.
+  Every page is prerendered; there is nothing to render per request.
+
+  It is deliberately outside the pnpm workspace. The release workflow runs
+  `pnpm install --frozen-lockfile` and `pnpm build` before publishing the CLI, and adding a
+  Next.js app to the workspace would put React and a full site build on the critical path
+  of every npm publish, for a package that depends on none of it.
+
+  The docs outline is declared in `lib/nav.ts` rather than derived from the filesystem,
+  and the build reconciles the two in both directions: a navigation entry with no file
+  fails, and a file nothing links to fails. Those are the two quiet failure modes of a
+  docs site, so neither is allowed to be quiet. (Gowtham)
+
 - **A dependency that compiles on install could not build.** `node:*-slim` carries no
   Python and no compiler, so any package falling back to node-gyp failed the install with
   `Could not find any Python installation to use`, which reads as a broken project rather

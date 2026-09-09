@@ -1,0 +1,164 @@
+@import 'tailwindcss';
+
+/*
+ * One palette, two themes.
+ *
+ * Every colour is declared once on :root as the light theme. The dark theme
+ * redefines only the tokens, so a component never needs to know which theme it
+ * is in, and a colour can never exist in one theme but not the other.
+ *
+ * Author: Gowtham
+ */
+:root {
+  --background: #ffffff;
+  --background-subtle: #fafafa;
+  --card: #ffffff;
+  --card-hover: #fafafa;
+  --border: #eaeaea;
+  --border-strong: #d4d4d4;
+  --foreground: #171717;
+  --muted: #666666;
+  --muted-strong: #454545;
+  --accent: #171717;
+  --accent-foreground: #ffffff;
+  --code-background: #fafafa;
+  --selection: rgba(0, 0, 0, 0.08);
+}
+
+/* The default setting is "system", which stamps nothing on the root element,
+   so the media query is what separates light from dark for most visitors. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --background: #000000;
+    --background-subtle: #0a0a0a;
+    --card: #0a0a0a;
+    --card-hover: #111111;
+    --border: #1f1f1f;
+    --border-strong: #333333;
+    --foreground: #ededed;
+    --muted: #a1a1a1;
+    --muted-strong: #c9c9c9;
+    --accent: #ffffff;
+    --accent-foreground: #000000;
+    --code-background: #0a0a0a;
+    --selection: rgba(255, 255, 255, 0.14);
+  }
+}
+
+/* An explicit choice wins over the system setting, in both directions. */
+:root[data-theme='dark'] {
+  --background: #000000;
+  --background-subtle: #0a0a0a;
+  --card: #0a0a0a;
+  --card-hover: #111111;
+  --border: #1f1f1f;
+  --border-strong: #333333;
+  --foreground: #ededed;
+  --muted: #a1a1a1;
+  --muted-strong: #c9c9c9;
+  --accent: #ffffff;
+  --accent-foreground: #000000;
+  --code-background: #0a0a0a;
+  --selection: rgba(255, 255, 255, 0.14);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-background-subtle: var(--background-subtle);
+  --color-card: var(--card);
+  --color-card-hover: var(--card-hover);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-strong: var(--muted-strong);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-code-background: var(--code-background);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --text-display: clamp(2.5rem, 6vw, 4.5rem);
+  --text-title: clamp(1.875rem, 4vw, 3rem);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--selection);
+}
+
+/* The theme flips before paint, so nothing is styled twice. Any transition on a
+   colour would make that flip visible as a fade. */
+.theme-changing * {
+  transition: none !important;
+}
+
+/*
+ * Backdrop used behind the hero and section headers. Two layers: a fine grid
+ * that reads as blueprint paper, and a radial mask so it fades out rather than
+ * ending on a hard line.
+ */
+.grid-backdrop {
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 75%);
+}
+
+/* Shiki emits both themes; the unused one is dropped rather than overridden, so
+   only one set of colours is ever in the cascade. */
+html:not([data-theme='dark']) .shiki span {
+  color: var(--shiki-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .shiki span {
+    color: var(--shiki-dark);
+  }
+}
+
+:root[data-theme='dark'] .shiki span {
+  color: var(--shiki-dark);
+}
+
+[data-rehype-pretty-code-figure] pre {
+  overflow-x: auto;
+  padding: 1rem 0;
+}
+
+[data-rehype-pretty-code-figure] code {
+  display: grid;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  counter-reset: line;
+}
+
+[data-rehype-pretty-code-figure] [data-line] {
+  padding: 0 1.25rem;
+  border-left: 2px solid transparent;
+}
+
+[data-rehype-pretty-code-figure] [data-highlighted-line] {
+  background: var(--selection);
+  border-left-color: var(--border-strong);
+}
+
+[data-rehype-pretty-code-title] {
+  padding: 0.625rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+}

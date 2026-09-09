@@ -1,0 +1,56 @@
+---
+title: Installation
+description: Install the published CLI, or build from source while it is unpublished.
+---
+
+## From npm
+
+```bash
+npm install -g nextship
+```
+
+> **Not published yet.** The package is release ready, verified by installing the built
+> tarball into a clean project and running a real build from it, but nothing has been
+> pushed to the registry. Until it is, build from source.
+
+## From source
+
+```bash
+git clone https://github.com/gowtham472/nextship.git
+cd nextship
+pnpm install && pnpm build
+npm link --workspace packages/cli
+```
+
+`npm link` puts `nextship` on your PATH, so every other page reads the same either way.
+
+## Verify the install
+
+```bash
+nextship --version
+nextship detect
+```
+
+`detect` runs no build and writes nothing, so it is safe to run anywhere. If it reports
+your project's Next.js version, package manager and env files, the install is good.
+
+## What actually gets installed
+
+One package with a single runtime dependency. The Next.js adapter ships inside the package
+rather than as a peer dependency, so there is no version to keep in step and nothing
+second to install.
+
+The published package carries a provenance attestation signed during the release build and
+linked to the exact commit it came from. For a tool that asks you for a cloud token, being
+able to prove the published bytes came from the public source is worth more than asserting
+it.
+
+## Upgrading
+
+```bash
+npm install -g nextship@latest
+```
+
+Nothing in your project is version-pinned to the CLI. The one file nextship writes,
+`nextship.json`, records which app belongs to this project and is forward compatible: a
+newer CLI reads a file written by an older one.

@@ -1,0 +1,76 @@
+---
+title: Environment variables
+description: Push your env files as runtime variables, with the classification rules and the limits stated plainly.
+---
+
+```bash
+nextship env           # list what is set on the app
+nextship env push      # upload this project's env files
+nextship env rm KEY    # remove named variables
+```
+
+## Values match what the build saw
+
+The parser is not hand-written. nextship resolves your env files with `@next/env`, the
+same loader Next.js itself uses, run in a short-lived child process so nothing leaks into
+the parent or into the Docker build environment.
+
+That matters more than it sounds. A hand-rolled parser silently corrupts real input:
+a value with a `#` inside quotes, a multi-line private key, an unterminated quote, a
+variable that references another variable. Each of those deploys cleanly and fails at
+request time. Using the loader Next.js uses means the values you push are the values your
+build saw.
+
+## How values are classified
+
+| Pattern | Stored as |
+|---|---|
+| `NEXT_PUBLIC_*` | `GENERAL` |
+| Everything else | `SECRET` |
+
+`NEXT_PUBLIC_*` values are compiled into the client bundle and shipped to every browser.
+Calling them secret would claim a protection that does not exist, and would make them
+permanently unreadable for no benefit.
+
+**A variable is never weakened.** A key already stored as `SECRET` stays `SECRET` even if
+it now classifies as `GENERAL`, and a broader stored scope such as `RUN_AND_BUILD_TIME` is
+preserved rather than narrowed. A push adds and updates; it does not quietly remove
+configuration you set deliberately.
+
+The plan lists every key with the classification it will receive, so a misclassification
+is visible before `--yes` rather than discovered afterwards.
+
+## Removing a variable
+
+```bash
+nextship env rm STRIPE_SECRET_KEY
+```
+
+Deliberately narrow, in a tool whose guarantee is that nothing is deleted:
+
+- Keys must be named explicitly. No wildcards, no prefixes, no `--all`
+- A key that is not set is an error naming it, not a no-op reported as success
+- Removing every variable at once is refused: that is a spec rewrite, not a removal
+- The plan states that a `SECRET` value is unrecoverable once removed, because it cannot
+  be read back
+
+## Limits, stated plainly
+
+**`NEXT_PUBLIC_*` are inert until a rebuild.** They are inlined at build time, so pushing a
+new value changes nothing a browser sees until you deploy again. The plan says so.
+
+**A re-push restarts the app.** Stored secrets come back encrypted, so the CLI cannot
+compare a new value against the stored one and cannot detect a no-op. What it can detect
+is the case where every key is already set and nothing is being added; there it says so
+and asks you to confirm a restart you may not want.
+
+**Pushed values are readable inside the container.** Your platform encrypts them at rest,
+but anyone who can open a console on the running app can read them.
+
+## Leak paths that are closed
+
+Values are scrubbed from any error message before it is shown, because an API validation
+error can quote the field it rejected.
+
+A push that would set `NODE_ENV`, `PORT` or `HOSTNAME` warns by name, since those override
+the image's own settings and can put a production container into development mode.

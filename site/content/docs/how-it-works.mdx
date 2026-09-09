@@ -1,0 +1,102 @@
+---
+title: How it works
+description: The adapter, the trace-based prune that replaces standalone mode, and the driver interface underneath.
+---
+
+## The adapter
+
+Next.js 16.2 stabilised a Deployment Adapter API. An adapter is a module the build loads
+through `NEXT_ADAPTER_PATH`, with two hooks:
+
+- **`modifyConfig`** applies the settings a container deployment requires, so you do not
+  have to know about them
+- **`onBuildComplete`** writes a manifest recording what the build produced
+
+nextship ships its adapter inside the CLI package and injects it at build time. Your
+`next.config.js` is never edited, and nothing is added to your dependencies.
+
+What `modifyConfig` sets:
+
+- **`deploymentId`**, so assets carry `?dpl=` and navigations carry `x-deployment-id`. A
+  client running an older build hard-navigates instead of requesting chunks that the new
+  build no longer has
+- **`X-Accel-Buffering: no`**, because a buffering reverse proxy leaves streaming
+  apparently working while delivering none of it: Suspense boundaries and Partial
+  Prerendering arrive as one response at the end
+
+## Why not standalone mode
+
+`output: 'standalone'` is the obvious way to get a small image, and it is **incompatible
+with the Adapter API**.
+
+Verified against Next.js 16.3.4: setting it while an adapter is configured fails the build
+with `ENOENT` on `.next/next-server.js.nft.json`, leaving a standalone directory with no
+`server.js`. It reproduces with a completely no-op adapter, so the combination is what
+breaks, not this adapter.
+
+So nextship assembles the equivalent tree itself, from the same trace data standalone mode
+uses.
+
+## The prune
+
+After the build, a script walks what Next.js traced:
+
+1. Every per-route `.nft.json` dependency trace
+2. `next-server.js.nft.json`, when the build wrote one
+3. A trace of the generated launcher, computed with the same file tracer Next.js bundles,
+   so no extra dependency is needed
+4. The handful of files standalone mode adds that no trace can discover, because they are
+   spawned as child processes by path rather than imported
+
+Everything reachable is copied into a clean tree; everything else is left behind. On a
+real project that is 1.13 GB down to 591 MB, with no Dockerfile and no standalone flag.
+
+### The limit worth knowing
+
+Packages vendored directly into `node_modules` without being declared in `package.json`
+are not deployed. nextship installs from your lockfile inside the image and does not ship
+your host's `node_modules`, because host binaries are built for the wrong platform.
+
+## The image
+
+Two stages from one Dockerfile.
+
+The **builder** installs dependencies, then runs your own build script. Manifests are
+copied before sources, so editing a component does not re-run the install: measured on a
+real project, the install is 97 s and the compile is 6 s.
+
+The **runtime** starts from the same slim base, drops npm and corepack, adds `tini` and
+`jemalloc`, creates a non-root user, and copies only the pruned tree.
+
+Secrets never enter a layer. Env files and the Server Actions encryption key are mounted
+as BuildKit secrets, which are excluded from layers and from the cache key.
+
+### On the base image
+
+Alpine was evaluated and rejected on measurement: `sharp` runs 2.5 times slower there,
+91.8 ms against 37.1 ms. Image size is paid once at deploy; that latency is paid on every
+request that touches an image.
+
+## The driver interface
+
+Everything platform-specific sits behind one interface expressed as **intent** rather than
+as any one provider's API.
+
+That distinction is not academic. Rollback originally asked for deployments the API
+reports as `ACTIVE`, which is DigitalOcean's spelling and matched only the deployment
+already live. The interface now asks whether a deployment **served**, which a second cloud
+can also answer.
+
+DigitalOcean App Platform implements it today. The AWS driver is v1.1, deliberately after
+the compatibility suite has run, because breadth on an unproven base is worth less than
+depth on a verified one.
+
+## Verified against the real thing
+
+The Next.js adapter compatibility suite is the framework's own e2e corpus, run in deploy
+mode against a real container per test file. On the most recent full run, **1031 of 1104
+suites passed**.
+
+The failures are published rather than hidden, sorted into what is a genuine limitation,
+what is a capability nextship does not claim, and what the framework itself only runs
+under an experimental flag.

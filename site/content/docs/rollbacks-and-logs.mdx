@@ -1,0 +1,55 @@
+---
+title: Rollbacks and logs
+description: Return to a deployment that already ran, and read what the app is doing right now.
+---
+
+## Rolling back
+
+```bash
+nextship rollback              # print the plan
+nextship rollback --yes        # execute it
+nextship rollback --to <id>    # target a specific deployment
+```
+
+Rollback builds nothing and pushes nothing. It returns the app to an image that has
+already run, which is what makes it both fast and incapable of introducing a new fault.
+
+The plan names the current deployment and the one it will return to, and states plainly
+that nothing is deleted: the deployment you are leaving stays in the history, so you can
+roll forward again.
+
+With no arguments it targets the most recent deployment that served traffic before the
+current one. `--to` takes any deployment id from the plan's list, and a id that does not
+belong to this app is refused by name rather than attempted.
+
+### A note on how this was found
+
+The first implementation filtered for deployments the API reports as `ACTIVE`. That
+matched only the deployment already live, so rollback reported that there was nothing to
+roll back to while a perfectly good previous one sat in the history. A superseded
+deployment reports `SUPERSEDED`, not `ACTIVE`.
+
+The interface now asks whether a deployment **served**, rather than matching a platform's
+spelling of a phase. That is the shape a second cloud target can also answer.
+
+## Logs
+
+```bash
+nextship logs             # recent runtime logs
+nextship logs --follow    # stream them
+```
+
+Runtime logs come from the live deployment. `--follow` streams until you stop it.
+
+Log stream URLs carry an embedded access token, so they are treated as secrets: never
+printed, never logged, and never included in an error message.
+
+### Another note on how this was found
+
+The first implementation read the API's `historic_urls` field, which is always empty, and
+so returned nothing while reporting success. The live `url` answers a plain GET, and that
+is what the command reads now.
+
+Both of these were found by running the commands against a live account rather than by
+reading the code. Neither would have been caught by a test against a mock, because both
+were wrong about what the real API returns.

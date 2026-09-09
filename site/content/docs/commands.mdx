@@ -1,0 +1,122 @@
+---
+title: CLI reference
+description: Every command, what it reads, what it writes, and what it refuses to do.
+---
+
+```
+nextship detect        Report what nextship reads from this project
+nextship build         Build in Docker with the adapter injected, export the manifest
+nextship package       Build, then produce the runtime image
+nextship run           Package, then run the image locally
+nextship doctor        Report what changes when this app leaves its current platform
+nextship deploy        Show the deployment plan; add --yes to execute it
+nextship rollback      Return to a previous deployment; add --yes to execute it
+nextship logs          Runtime logs for the deployed app; --follow to stream
+nextship env           List the runtime environment variables set on the app
+nextship env push      Upload this project's env files as runtime variables
+nextship env rm        Remove named variables from the app
+nextship domain        List the domains attached to the app
+nextship domain add    Attach a domain and print the DNS record to create
+nextship domain rm     Detach a domain
+nextship images        List the images pushed for this project
+nextship images prune  Remove old images, keeping the recent ones
+nextship destroy       Destroy the app this project created
+
+  -h, --help           Show usage
+  -v, --version        Show the version
+```
+
+Unknown commands and unknown flags are errors. A mistyped option is never silently
+ignored.
+
+## Local commands
+
+These need Docker and nothing else. No cloud account is involved.
+
+### detect
+
+Reads the project and reports what every later stage will act on. Runs no build and writes
+nothing, so it is safe anywhere.
+
+Everything reported is read from disk rather than from what `package.json` declares,
+including packages installed transitively.
+
+### build
+
+Runs your own `build` script inside a Docker builder stage with the adapter injected
+through `NEXT_ADAPTER_PATH`, then exports the manifest the adapter wrote to
+`.nextship/output/manifest.json`.
+
+Your `next.config.js` is never edited. Dependencies are installed inside the image, so
+`next`, `sharp` and every native module are built for Linux regardless of your machine.
+
+If the manifest comes back without the deployment id the adapter was given, the build
+fails as a nextship defect rather than shipping something unverified.
+
+### package
+
+Builds, then assembles the runtime image: a second stage copying only the files Next.js's
+own trace output lists, plus a generated launcher equivalent to the one standalone mode
+writes.
+
+```
+v Image ready: portfolio:dpl-2b2c3e535f1e-4456a8b2
+  platform   linux/amd64
+  start it with: nextship run
+```
+
+`build` and `package` are two targets of one Dockerfile, so `package` reuses the compile
+from cache rather than starting over.
+
+### run
+
+Packages, then starts the image locally on port 3000, loading your highest-precedence env
+file so secrets stay outside the image.
+
+### doctor
+
+Reports what changes when an app leaves a managed platform. None of these stop a build,
+which is exactly why they are worth surfacing.
+
+| Checked | Why it matters |
+|---|---|
+| Analytics and similar packages | They stop reporting and nothing errors |
+| Cron jobs in platform config | They will simply never run |
+| Routing rules in platform config | They stop applying |
+| Platform URL and environment variables read in source | They become undefined |
+| A missing lockfile | Installs are no longer reproducible |
+| The ISR cache not surviving a restart | Recorded before deploying, not after |
+
+## Cloud commands
+
+These need `DIGITALOCEAN_TOKEN`, and each acts only on the app recorded in
+`nextship.json`.
+
+- [deploy](/docs/deploying)
+- [rollback and logs](/docs/rollbacks-and-logs)
+- [env, env push, env rm](/docs/environment-variables)
+- [domain, domain add, domain rm](/docs/custom-domains)
+
+### images
+
+```bash
+nextship images         # what is stored, and what it costs
+nextship images prune   # remove old images, keeping recent ones
+```
+
+Registry storage is billed, and old deployment images accumulate quietly. Pruning deletes
+by reachability from the tags being kept, parents before children, because deleting a tag
+alone leaves the manifest and its layers behind and reclaims nothing.
+
+On a real registry this took storage from 390.2 MiB to 286.1 MiB, freeing 104.2 MiB across
+7 blobs.
+
+### destroy
+
+```bash
+nextship destroy <app-name> --yes
+```
+
+The one command that removes a cloud resource. It requires the app name as an argument
+**and** `--yes`, it only accepts the app recorded in `nextship.json`, and it is not
+recoverable.

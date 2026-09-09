@@ -9,3 +9,8 @@ docs/private
 
 # Generated at build time from packages/adapter, then shipped inside the CLI.
 packages/cli/runtime/adapter.mjs
+
+# The site installs its own dependencies; it is not part of the pnpm workspace.
+site/node_modules
+site/.next
+site/next-env.d.ts

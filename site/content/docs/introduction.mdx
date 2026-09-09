@@ -1,0 +1,63 @@
+---
+title: Introduction
+description: What nextship is, what it deliberately is not, and the guarantees it is built around.
+---
+
+nextship takes a Next.js app and puts it on infrastructure you own. No Dockerfile, no
+`next.config.js` edits, no Terraform, and no IAM archaeology. It runs on your machine or
+in CI, uses your cloud credentials, and never sends your code anywhere.
+
+```bash
+nextship deploy --yes
+```
+
+That command builds your app inside Docker, prunes the result to the files Next.js says
+it needs, pushes the image to your registry, releases it, waits for it to go live, and
+prints the URL.
+
+## Why it exists
+
+The developer experience of a managed platform is excellent and its lock-in is real. The
+usual escape is a hand-written Dockerfile that drifts from what Next.js actually needs,
+plus a pile of infrastructure code to maintain. nextship removes both without removing the
+experience.
+
+The thing running in your container is the Next.js server itself, not a reimplementation
+of it. That is the whole design: every Next.js feature keeps working because nothing is
+reinterpreting them.
+
+## What you get
+
+**A plan before anything changes.** `deploy`, `rollback` and `env rm` print what they will
+do and stop. Nothing is created, changed or charged until you pass `--yes`.
+
+**Nothing is deleted.** No command removes a cloud resource except `destroy`, which
+requires the app name and `--yes`. Rollback reuses an image that already ran, so it cannot
+introduce a new fault.
+
+**No lock-in, by construction.** The output is an OCI image in your own registry. If
+nextship disappeared tomorrow, that image still runs anywhere that runs containers.
+
+## What it is not
+
+It is not a hosting platform, and there is no nextship service. There is nothing to sign
+up for, no telemetry, and no account. It is a CLI that talks to your cloud provider with
+your credentials.
+
+It is also not a full replacement in every respect. Analytics, Speed Insights and the edge
+runtime are platform products or platform infrastructure, and they do not come with you.
+[`nextship doctor`](/docs/commands) reports exactly what changes for your project.
+
+## Current state
+
+Version 0.3.0. The local pipeline and DigitalOcean deployment are complete and verified
+against a live app, including two rollbacks in opposite directions.
+
+Verified on real containers: every route serves, image optimization produces WebP,
+streaming does not buffer (27 ms to first byte against a 2.02 s total), ISR works both
+time based and on demand, Server Actions execute, and `after()` runs. The runtime image is
+591 MB uncompressed, against 1.13 GB before pruning.
+
+**v1.0 targets DigitalOcean only.** That is the target that is built, verified and
+actually used. Supporting a second cloud before the compatibility suite has run would add
+breadth on top of an unproven base. The driver interface exists, and AWS is v1.1.

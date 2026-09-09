@@ -1,0 +1,55 @@
+---
+title: Custom domains
+description: Attach a domain, create one DNS record, and get an automatically renewed certificate.
+---
+
+```bash
+nextship domain              # list attached domains
+nextship domain add <name>   # attach one and print the DNS record
+nextship domain rm <name>    # detach it
+```
+
+## Attaching
+
+```bash
+nextship domain add preview.example.com
+```
+
+The command attaches the domain to the app and prints the exact DNS record to create.
+Certificates are issued and renewed by the platform; there is nothing to install, and no
+renewal to remember.
+
+For a subdomain you create a `CNAME` pointing at the platform host. For an apex domain you
+either delegate the zone or use your provider's ALIAS equivalent, because a `CNAME` at the
+apex is not valid DNS.
+
+## While DNS propagates
+
+The domain is attached before it resolves, and that is expected. Until the record exists
+and has propagated, the platform host keeps serving normally.
+
+This is why `deploy` prints the platform host rather than the field the API calls
+`live_url`: that field becomes your primary custom domain the moment one is attached, so
+printing it would hand you a dead link for as long as propagation takes.
+
+## What was verified
+
+Attaching `preview.doodlebytestudio.in` to a real app produced, on the live domain:
+
+| Check | Result |
+|---|---|
+| Certificate | Issued by Google Trust Services |
+| TLS 1.3 | Negotiated |
+| TLS 1.1 | Refused |
+| Plain HTTP | 301 to HTTPS |
+| Every route | 200 |
+
+## Detaching
+
+```bash
+nextship domain rm preview.example.com
+```
+
+Detaching removes the domain from the app spec. It does not delete anything else, it does
+not touch your DNS, and the app keeps serving on its platform host. The DNS record is
+yours to remove when you are ready.
