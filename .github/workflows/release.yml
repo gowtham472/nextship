@@ -1,0 +1,93 @@
+# Publishes nextship to npm with provenance.
+#
+# Publishing happens here rather than from a laptop so npm can attest where the
+# tarball came from. Provenance signs a statement linking the published bytes to
+# this repository, this workflow and the exact commit, which anyone can verify on
+# the package page.
+#
+# That matters more for this package than for most. nextship asks people for a
+# cloud token and builds their source, so "the code you audited is the code you
+# installed" is a claim worth being able to prove rather than assert.
+#
+# Requires one repository secret, NPM_TOKEN, an npm automation token with publish
+# rights. Automation tokens bypass the 2FA prompt, which interactive tokens
+# cannot do from CI.
+#
+# Author: Gowtham
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: 'Pack and verify without publishing'
+        default: true
+        type: boolean
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      # Provenance is signed with a short-lived OIDC token, so this is what makes
+      # the attestation possible at all.
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm i -g corepack@latest && corepack enable
+
+      - run: pnpm install --frozen-lockfile
+
+      # The gate. A tag is not a reason to publish something that does not build.
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - name: Check the tag matches the version being published
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VERSION="$(node -p "require('./packages/cli/package.json').version")"
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version $VERSION." >&2
+            echo "Publishing a version that disagrees with its tag makes the history unreadable." >&2
+            exit 1
+          fi
+          echo "tag and version agree on $VERSION"
+
+      - name: Verify the tarball installs and runs
+        working-directory: packages/cli
+        run: |
+          npm pack --pack-destination /tmp
+          mkdir -p /tmp/install-check && cd /tmp/install-check
+          npm init -y > /dev/null
+          npm install --silent /tmp/nextship-*.tgz
+          # Proves the adapter resolves from the packed tree rather than from the
+          # workspace, which is the defect this check exists to catch.
+          node -e "
+            const path = require('node:path')
+            const fs = require('node:fs')
+            const adapter = path.join('node_modules', 'nextship', 'runtime', 'adapter.mjs')
+            if (!fs.existsSync(adapter)) { console.error('adapter missing from the published package'); process.exit(1) }
+            console.log('installed package carries its adapter')
+          "
+          node node_modules/nextship/dist/index.js --version
+
+      - name: Publish
+        if: ${{ github.event_name == 'push' || inputs.dryRun == false }}
+        working-directory: packages/cli
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Dry run only
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dryRun }}
+        run: echo "Packed and verified. Nothing was published, because this was a dry run."

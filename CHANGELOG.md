@@ -8,6 +8,22 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Added
 
+- **Attribution settled, and a release workflow that publishes with provenance.**
+  Copyright is held jointly by Gowtham and Ragul D, who mentored the work. The Sri Sairam
+  Techno Incubator Foundation provided the tooling and the time and is acknowledged in the
+  README, but holds no claim: providing a tool is not authorship, and there was no
+  agreement assigning anything.
+
+  `release.yml` publishes from CI rather than from a laptop, with `--provenance`, which
+  signs a statement linking the published bytes to this repository and the exact commit.
+  For a tool that asks people for a cloud token, being able to prove the published package
+  came from the public source is worth more than asserting it.
+
+  The workflow gates on build, typecheck and tests, refuses to publish when the tag
+  disagrees with the package version, and installs the packed tarball into a clean project
+  to prove the adapter resolves from the published tree. That last gate exists to catch
+  the `workspace:*` defect if it ever returns. (Gowtham)
+
 - **The published package no longer depends on something npm cannot install.** The CLI
   declared `"@nextship/adapter": "workspace:*"` and resolved it with `require.resolve` at
   build time. A registry cannot resolve a `workspace:` range, so installing `nextship`

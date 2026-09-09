@@ -801,9 +801,22 @@ every change is attributed in `CHANGELOG.md`, documentation is updated in the sa
 change, every line must have a consumer and a reason to exist, and logic ships with
 tests that pin its failure modes as well as its successes.
 
-## License
+## License and copyright
 
-[Apache-2.0](./LICENSE). You may use, modify and redistribute this, including
-commercially, provided you keep the notice and state your changes. The licence also
-grants you a patent licence from every contributor, which is the reason to prefer it over
-MIT for anything a company might adopt.
+Apache-2.0. See [`LICENSE`](./LICENSE) for the terms and [`NOTICE`](./NOTICE) for the
+copyright holders, which are **Gowtham** and **Ragul D**.
+
+You may use, modify and redistribute this, including commercially, provided you keep the
+notice and state your changes. Apache-2.0 also grants you a patent licence from every
+contributor, which is why it is preferable to MIT for anything a company might adopt.
+
+Copyright holders are listed in [`NOTICE`](./NOTICE).
+
+## Acknowledgements
+
+**Ragul D**, for mentorship and technical guidance throughout, and a joint copyright
+holder on the result.
+
+**Sri Sairam Techno Incubator Foundation**, which provided the tooling and the time
+during the internship this was built in. The Foundation holds no claim over the code and
+asked for none; the credit is given because it is deserved.
