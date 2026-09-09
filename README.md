@@ -211,8 +211,10 @@ draining connections.
 
 ### `nextship doctor`
 
-Reports what changes when an app leaves Vercel. None of these stop a build, which is
-exactly why they are worth surfacing: no error reveals them.
+Reports what changes when an app leaves Vercel. Most of these never stop a build, which
+is exactly why they are worth surfacing: no error reveals them. The exception is a package
+installed in `node_modules` that nothing declares, which fails the build in the image and
+is reported as a blocker.
 
 | Checked | Why it matters |
 |---|---|
@@ -220,6 +222,7 @@ exactly why they are worth surfacing: no error reveals them.
 | Cron jobs in `vercel.json` | They will simply never run |
 | Routing rules in `vercel.json` | They stop applying |
 | `VERCEL_URL` and `VERCEL_ENV` read in source | They become undefined |
+| Packages in `node_modules` that nothing declares | They exist on your machine and not in the image, so the build fails on an import that resolves locally |
 | A missing lockfile | Installs are no longer reproducible |
 | The ISR cache not surviving a restart | Recorded so it is known before deploying, not after |
 

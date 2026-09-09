@@ -249,6 +249,24 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Fixed
 
+- **A package installed but not declared failed the build with a message about the wrong
+  thing.** nextship installs from your lockfile inside the image and never ships the host
+  `node_modules`, because those binaries are built for the machine you develop on. A
+  package sitting in `node_modules` that nothing declares therefore reaches the build on
+  your machine and not in the image, and Next.js reports `Module not found: Can't resolve
+  'x'`, which names the import and nothing about the cause.
+
+  `doctor` now reports these as blockers, before any build runs. Reachability is computed
+  by walking the installed manifests rather than parsing a lockfile, because the three
+  package managers write three formats and all of them already agree about what a package
+  depends on. Measured against a real 230 package install and a pnpm workspace: no false
+  positives, 274 ms and 10 ms.
+
+  This was the largest single cause in the compatibility suite, 19 of 64 failures. Shipping
+  the host `node_modules` would have turned a loud failure into a container running
+  binaries built for the wrong platform, so the fix is to name the cause rather than to
+  hide it. (Gowtham)
+
 - **The compatibility suite has run, and the results are published.** 1051 of 1115 suites
   pass, 94.3%, against Next.js `16.4.0-canary.22`. Every one of the 64 failures is
   attributed in the README: 17 need an experimental flag the framework itself only sets in

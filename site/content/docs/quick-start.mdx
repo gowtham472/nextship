@@ -37,8 +37,10 @@ is built from the workspace root where the lockfile and sibling manifests live.
 nextship doctor
 ```
 
-This reports what stops working when an app leaves a managed platform. None of it blocks a
-build, which is exactly why it is worth surfacing: no error would ever reveal it.
+This reports what stops working when an app leaves a managed platform. Most of it never
+blocks a build, which is exactly why it is worth surfacing: no error would ever reveal it.
+The one blocker it does report is a package installed in `node_modules` that nothing
+declares, because that fails the build inside the image.
 
 Findings are sorted with blockers first, and each carries a consequence and an action
 rather than only a name.

@@ -75,8 +75,9 @@ file so secrets stay outside the image.
 
 ### doctor
 
-Reports what changes when an app leaves a managed platform. None of these stop a build,
-which is exactly why they are worth surfacing.
+Reports what changes when an app leaves a managed platform. Most of these never stop a
+build, which is exactly why they are worth surfacing. The exception is a package installed
+in `node_modules` that nothing declares: that one fails the build, and is a blocker.
 
 | Checked | Why it matters |
 |---|---|
@@ -84,6 +85,7 @@ which is exactly why they are worth surfacing.
 | Cron jobs in platform config | They will simply never run |
 | Routing rules in platform config | They stop applying |
 | Platform URL and environment variables read in source | They become undefined |
+| Packages in `node_modules` that nothing declares | They exist on your machine and not in the image, so the build fails on an import that resolves locally |
 | A missing lockfile | Installs are no longer reproducible |
 | The ISR cache not surviving a restart | Recorded before deploying, not after |
 

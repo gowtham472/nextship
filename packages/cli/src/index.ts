@@ -187,7 +187,10 @@ async function runDoctor(): Promise<void> {
     .filter(Boolean)
     .join(', ')
 
-  ok(`${summary}. None of these stop a build; all of them change behaviour.`)
+  // Undeclared packages fail the build outright, unlike every other finding
+  // here, which changes behaviour silently. Claiming nothing stops a build
+  // while reporting one that does would teach the reader to skim the rest.
+  ok(`${summary}. Blockers fail the build or stop a feature working; warnings change behaviour silently.`)
 }
 
 function report(finding: Finding): void {

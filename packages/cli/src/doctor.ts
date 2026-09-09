@@ -16,6 +16,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { ProjectInfo } from './detect.js'
+import { undeclaredPackages } from './vendored.js'
 
 export type FindingLevel = 'blocker' | 'warning' | 'note'
 
@@ -72,10 +73,43 @@ export async function diagnose(project: ProjectInfo): Promise<Finding[]> {
   findings.push(...dependencyFindings(manifest))
   findings.push(...(await vercelConfigFindings(project.root)))
   findings.push(...(await sourceFindings(project.root)))
+  findings.push(...(await undeclaredPackageFindings(project.root)))
   findings.push(...runtimeFindings(project))
 
   const order: Record<FindingLevel, number> = { blocker: 0, warning: 1, note: 2 }
   return findings.sort((a, b) => order[a.level] - order[b.level])
+}
+
+/**
+ * Packages that exist in node_modules but that nothing declares.
+ *
+ * These build on the developer's machine and are absent from the image, because
+ * the image installs from the lockfile and never receives the host's
+ * node_modules. Next.js reports that as `Module not found`, which names the
+ * import and nothing about why it resolved locally.
+ *
+ * A blocker rather than a warning: unlike everything else here, this one fails
+ * the build outright.
+ */
+async function undeclaredPackageFindings(root: string): Promise<Finding[]> {
+  const { undeclared, truncated } = await undeclaredPackages(root)
+  if (truncated || undeclared.length === 0) return []
+
+  const named = undeclared.slice(0, 5).join(', ')
+  const rest = undeclared.length > 5 ? `, and ${undeclared.length - 5} more` : ''
+
+  return [
+    {
+      level: 'blocker',
+      title: `${undeclared.length} package(s) in node_modules are not declared anywhere: ${named}${rest}`,
+      consequence:
+        'The image installs from your lockfile and never receives the host node_modules, so these are absent at build time. ' +
+        'Anything importing them fails with "Module not found", naming the import rather than the cause.',
+      action:
+        'Add each one to package.json and reinstall, so the lockfile carries it. ' +
+        'A package that cannot be published needs to be vendored inside the project and referenced with a file: path.',
+    },
+  ]
 }
 
 function dependencyFindings(manifest: Record<string, any>): Finding[] {
