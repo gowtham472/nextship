@@ -249,6 +249,17 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Fixed
 
+- **The compatibility suite never saw the build output.** In deploy mode the harness takes
+  `next.cliOutput` from the logs script, and ours returned only the marker file, the server
+  log and the live container log. Every test asserting on something Next.js printed while
+  building, `deprecation-warnings` for one, failed against an empty build log regardless of
+  how correct the deployment was.
+
+  The packaging log is now returned after the markers, with the marker-shaped lines from
+  the app's own post-build script filtered out so they cannot shadow ours: that copy reads
+  `DEPLOYMENT_ID` from a variable the build does not set and reports it as `undefined`.
+  (Gowtham)
+
 - **Two ways the harness scripts could fail on top of an existing failure.** The logs
   script read its build log through a `&&` chain, so under `set -e` a missing log made the
   whole step exit non-zero, reporting a logs failure on top of whatever had already gone

@@ -23,6 +23,21 @@ if [ -f "${LOGDIR}/build.log" ]; then
   cat "${LOGDIR}/build.log"
 fi
 
+# The build output itself, which is what `next.cliOutput` is in deploy mode.
+#
+# Without it the harness sees an empty build log, so every test that asserts on
+# something Next.js printed while building, a deprecation warning for instance,
+# fails no matter how correct the deployment is. It goes after the markers
+# because those must come first, and the marker-shaped lines the app's own
+# post-build script printed are dropped so they cannot shadow ours: that copy
+# reports DEPLOYMENT_ID as undefined, since the id reaches the build through
+# NEXTSHIP_DEPLOYMENT_ID rather than the variable the harness echoes.
+if [ -f "${LOGDIR}/package.log" ]; then
+  echo "=== build log ==="
+  grep -vE '^#[0-9]+ [0-9.]+ (BUILD_ID|DEPLOYMENT_ID|NEXT_SUPPORTS_IMMUTABLE_ASSETS): ' \
+    "${LOGDIR}/package.log" || true
+fi
+
 if [ -f "${LOGDIR}/server.log" ]; then
   echo "=== server log ==="
   cat "${LOGDIR}/server.log"
