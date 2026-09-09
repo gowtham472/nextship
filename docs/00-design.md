@@ -653,7 +653,9 @@ creating symlinks, which is the default on Windows without developer mode.
 That app is 16.3.4, where Next.js writes no server trace at all while an adapter is
 configured, so it also confirms the launcher-trace fallback (§7.1) in production.
 
-**Compatibility harness (Implemented, not run).** `conformance/` holds the three
+**Compatibility harness (Scripts verified, suite not run).** The three scripts have now been executed against a real application, which had never been done: `e2e-deploy.sh` exits 0 having printed exactly one URL on stdout, and that URL serves; `e2e-logs.sh` emits every marker the harness reads; `e2e-cleanup.sh` removes both the container and the image. What remains is the suite itself, which clones and builds Next.js and runs sixteen parallel groups, so it needs CI rather than a laptop.
+
+**Original note.** `conformance/` holds the three
 scripts the official suite requires, and `.github/workflows/conformance.yml` clones
 Next.js, builds it and runs the suite in sixteen groups. The scripts follow the
 documented contract: exactly the deployment URL on stdout, the required markers

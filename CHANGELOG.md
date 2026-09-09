@@ -8,6 +8,19 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Added
 
+- **v1.0 scoped to DigitalOcean, and the conformance scripts run for the first time.**
+  AWS moved to v1.1: v1.0 means trustworthy for personal use, the person using it deploys
+  to DigitalOcean, and holding a release for a second cloud nobody has asked for would
+  delay the evidence that actually matters.
+
+  The three harness scripts had been written, committed and never executed. Run against a
+  real application: `e2e-deploy.sh` exits 0 having printed exactly one URL on stdout, which
+  is the whole contract since the harness parses that line, and the URL serves 200.
+  `e2e-logs.sh` emits all five markers the harness reads. `e2e-cleanup.sh` removes both the
+  container and the image. Verifying this first matters because the suite is hours of CI,
+  and a broken script would have failed sixteen parallel groups before anyone learned
+  anything. (Gowtham)
+
 - **A driver interface, so a second cloud is a new driver rather than an edit to every
   command.** Every command imported the DigitalOcean client directly, and twenty-four of
   its operations were reachable from commands. Several were App Platform concepts rather

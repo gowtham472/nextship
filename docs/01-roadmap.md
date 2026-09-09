@@ -141,11 +141,33 @@ The things that turn a deploy script into something worth relying on.
 | **Done.** Exclude dependency source maps and development runtimes at copy time, not only while tracing. Saved 69 MB: image 660 MB to 591 MB. The over-inclusion was larger than the 25 MB estimated, and had a different cause |
 | **Done, concluded no.** Alpine is 2.5x slower at image optimization on identical libvips and saves 97 MB, not the 150 to 200 estimated. Distroless keeps glibc and saves 129 MB but removes the shell this project has repeatedly needed to diagnose real problems. Base layers are cached per node anyway, so this optimises a number that does not travel. See `00-design.md` §7.6 |
 
-## v0.5: AWS (Planned)
+## v1.0: trustworthy for personal use, DigitalOcean only
 
-The second target, behind a driver interface that does not exist yet. This is where the
-design's portability claim is either proven or shown to be more expensive than it
-looked.
+The bar is honest reliability, not features. **Scope is DigitalOcean alone**: it is the
+target that is built, verified live, and actually used. AWS is v1.1.
+
+| Deliverable | State |
+|---|---|
+| A license, so the code may legally be used | **Blocker.** Without one, public code is still all rights reserved |
+| Adapter compatibility suite **run**, results published as a support matrix | The gate. Blocked on a git remote: the suite clones and builds Next.js and runs sixteen parallel groups, which is CI work rather than laptop work |
+| The harness scripts proven to work before spending CI hours on them | **Done.** Run against a real app: `e2e-deploy.sh` exits 0 with exactly one URL on stdout that serves 200, `e2e-logs.sh` emits all five markers the harness reads, `e2e-cleanup.sh` removes the container and image |
+| Streaming conformance as a repeatable test rather than a one-off measurement | Measured once by hand: 27 ms to first byte against a 2.02 s total |
+| Documented limitations, with nothing claimed that has not been observed working | Largely done; the README already refuses to claim PPR, middleware or Cache Components |
+| An install path that needs no prior knowledge | Not published. Install today is clone, build, alias. Needs the name checked on npm and GitHub first |
+
+**Explicitly not in v1.0:** AWS, a second compute option, CDN assets, and anything from
+"Beyond v1.0". Shipping one target honestly beats shipping two badly.
+
+## v1.1: AWS (Planned, deferred past v1.0)
+
+The second target. This is where the design's portability claim is either proven or
+shown to be more expensive than it looked.
+
+**Deferred past v1.0 deliberately.** v1.0 is defined as trustworthy for personal use, and
+the person using it deploys to DigitalOcean. Holding a release for a second cloud nobody
+is asking for yet would delay the evidence that actually matters, which is the
+compatibility suite. AWS arrives when there is a user who needs it, informed by whatever
+the first release teaches.
 
 ### The target changed before a line was written
 
@@ -272,17 +294,6 @@ driver.
 | Container logs for `logs` and `logs --follow` |
 | Credentials: profile and region resolution, and a plan that names the IAM permissions it will use |
 | `--compute ecs` for ECS Express Mode, once Lightsail works, for people who need a VPC or real autoscaling |
-
-## v1.0: trustworthy for personal use
-
-The bar is honest reliability, not features.
-
-| Deliverable |
-|---|
-| Adapter compatibility suite **run**, results published as a support matrix. The harness scripts and workflow exist in `conformance/`; what remains is executing it |
-| Streaming conformance test passing on every supported target |
-| Documented limitations, with nothing claimed that has not been observed working |
-| Install path, README, and a first-run experience that needs no prior knowledge |
 
 ---
 
