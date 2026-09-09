@@ -132,3 +132,18 @@ test('the build helper re-include is scoped to the app directory', () => {
   assert.match(ignore, /!apps\/web\/\.nextship\/build/)
   assert.match(ignore, /# Rules from the project \.dockerignore\ncoverage/)
 })
+
+// The adapter puts the id into the resolved config, which covers a config that
+// reads its argument. It does not cover a next.config that reads the environment
+// itself, and Next.js's own fixtures do exactly that: one of them aborts the
+// build with "Neither NEXT_PUBLIC_BUILD_ID nor NEXT_DEPLOYMENT_ID is set". Both
+// names must carry the id, or that class of config sees nothing.
+test('the deployment id is exported under the name a config reads directly', () => {
+  const dockerfile = renderDockerfile(base)
+
+  assert.match(dockerfile, /NEXT_DEPLOYMENT_ID=\$NEXTSHIP_DEPLOYMENT_ID/)
+  assert.match(dockerfile, /NEXTSHIP_DEPLOYMENT_ID=\$NEXTSHIP_DEPLOYMENT_ID/)
+
+  // One ARG feeds both, so they can never disagree about which build this is.
+  assert.equal((dockerfile.match(/ARG NEXTSHIP_DEPLOYMENT_ID/g) ?? []).length, 1)
+})

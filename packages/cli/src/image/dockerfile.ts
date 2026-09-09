@@ -73,7 +73,12 @@ export function renderDockerfile(project: ProjectInfo): string {
     `WORKDIR ${appPath}`,
     // Declared after the install so a new deployment id never invalidates it.
     'ARG NEXTSHIP_DEPLOYMENT_ID',
-    `ENV NEXTSHIP_DEPLOYMENT_ID=$NEXTSHIP_DEPLOYMENT_ID NEXT_ADAPTER_PATH=${appPath}/${BUILD_DIR}/adapter.mjs`,
+    // The same id under both names. Next.js resolves `deploymentId` from the
+    // config the adapter returns, but a config that reads the environment
+    // directly, which the framework's own test fixtures and several hosting
+    // conventions do, looks for NEXT_DEPLOYMENT_ID. Setting only the prefixed
+    // name left those seeing nothing at all.
+    `ENV NEXTSHIP_DEPLOYMENT_ID=$NEXTSHIP_DEPLOYMENT_ID NEXT_DEPLOYMENT_ID=$NEXTSHIP_DEPLOYMENT_ID NEXT_ADAPTER_PATH=${appPath}/${BUILD_DIR}/adapter.mjs`,
     // The encryption key and any env files are mounted for this step only, so
     // neither can end up in an image layer. Next.js reads the env files from
     // disk exactly as it would on the developer's machine.

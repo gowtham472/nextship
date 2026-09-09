@@ -249,6 +249,13 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Fixed
 
+- **The deployment id was invisible to a config that reads the environment.** The adapter
+  puts it into the resolved config, which serves a `next.config` that reads its argument.
+  A config that reads `process.env` directly saw nothing, because the build exported the
+  id only as `NEXTSHIP_DEPLOYMENT_ID`. Found by the compatibility suite, where a fixture
+  aborts the build with `Neither NEXT_PUBLIC_BUILD_ID nor NEXT_DEPLOYMENT_ID is set`. The
+  build now exports both names from one `ARG`, so they cannot disagree. (Gowtham)
+
 - **The suite could have been testing a Next.js nobody was testing.** The harness rewrites
   dependencies to `file:./next-test-packages/<name>/packed.tgz` so the app runs the build
   from the checkout under test. If that rewrite does not happen, the install resolves a
