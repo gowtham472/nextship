@@ -57,6 +57,16 @@ export function renderDockerfile(project: ProjectInfo): string {
     `FROM node:${project.nodeMajor}-slim AS builder`,
     'WORKDIR /src',
     `ENV NEXT_TELEMETRY_DISABLED=1 ${cache.env}=${cache.dir}`,
+    // A toolchain for dependencies that compile on install.
+    //
+    // Most packages ship prebuilt binaries, but any that falls back to node-gyp
+    // needs python3 and a C++ compiler, and the slim image carries neither. The
+    // failure is "Could not find any Python installation to use" during install,
+    // which reads as a broken project rather than a missing build tool. This is
+    // its own layer above the install, so it is cached and paid for once rather
+    // than on every build, and the builder stage is discarded: nothing here
+    // reaches the runtime image.
+    'RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*',
     'RUN corepack enable',
     // Manifests before sources, so editing a component does not re-run the
     // install. Measured on a real project: the install is 97 s and the compile is

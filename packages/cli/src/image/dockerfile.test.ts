@@ -147,3 +147,20 @@ test('the deployment id is exported under the name a config reads directly', () 
   // One ARG feeds both, so they can never disagree about which build this is.
   assert.equal((dockerfile.match(/ARG NEXTSHIP_DEPLOYMENT_ID/g) ?? []).length, 1)
 })
+
+// A dependency that falls back to node-gyp needs python3 and a compiler, which
+// node:*-slim does not carry: the install dies with "Could not find any Python
+// installation to use", which reads as a broken project. The toolchain belongs
+// to the builder alone, so it must never appear after the runtime stage begins.
+test('the native build toolchain is present, and only in the builder', () => {
+  const dockerfile = renderDockerfile(base)
+
+  assert.match(dockerfile, /apt-get install -y --no-install-recommends python3 make g\+\+/)
+
+  const toolchain = dockerfile.indexOf('python3 make g++')
+  const runtime = dockerfile.indexOf('AS runtime')
+  assert.ok(toolchain < runtime, 'the toolchain is installed in the builder, not the runtime image')
+
+  // Above the install, so it is one cached layer rather than a cost per build.
+  assert.ok(toolchain < dockerfile.indexOf('COPY --parents'), 'the toolchain layer precedes the install')
+})

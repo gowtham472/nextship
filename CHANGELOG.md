@@ -249,6 +249,20 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Fixed
 
+- **A dependency that compiles on install could not build.** `node:*-slim` carries no
+  Python and no compiler, so any package falling back to node-gyp failed the install with
+  `Could not find any Python installation to use`, which reads as a broken project rather
+  than a missing build tool. The builder stage now installs `python3`, `make` and `g++` in
+  its own layer above the install, so it is cached rather than paid for on every build.
+  The builder is discarded, so the runtime image is unchanged. (Gowtham)
+
+### Changed
+
+- **The compatibility suite runs in thirty-two groups instead of sixteen.** Measured on the
+  first full run: the slowest group took 69 minutes against a 90 minute cap, with a spread
+  of 28 to 69 minutes, so the suite would have started timing out as it grew. Timeouts are
+  the worst failure mode here, because they look like results. (Gowtham)
+
 - **The deployment id was invisible to a config that reads the environment.** The adapter
   puts it into the resolved config, which serves a `next.config` that reads its argument.
   A config that reads `process.env` directly saw nothing, because the build exported the

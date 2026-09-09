@@ -66,7 +66,7 @@ project's history has several defects that only a live run exposed.
 ## Running the compatibility suite
 
 The Next.js adapter compatibility suite runs in CI, because it clones and builds Next.js
-from source and then runs sixteen parallel groups. Trigger it from the Actions tab. It
+from source and then runs thirty-two parallel groups. Trigger it from the Actions tab. It
 needs a repository secret named `CONFORMANCE_ACTIONS_KEY` holding a base64 string:
 
 ```bash
