@@ -16,7 +16,12 @@ set -euo pipefail
 # Docker build context between the two builds packaging runs.
 LOGDIR="${PWD}.logs"
 
-[ -f "${LOGDIR}/build.log" ] && cat "${LOGDIR}/build.log"
+# An if block rather than a && chain: under set -e a false test makes the whole
+# chain non-zero and kills the script, which would turn a missing log into a
+# failing logs step on top of whatever already went wrong.
+if [ -f "${LOGDIR}/build.log" ]; then
+  cat "${LOGDIR}/build.log"
+fi
 
 if [ -f "${LOGDIR}/server.log" ]; then
   echo "=== server log ==="

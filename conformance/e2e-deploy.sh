@@ -107,6 +107,9 @@ fi
 # in an isolated container there is no monorepo to walk up into. A deploy target
 # has no business compiling the suite that is testing it, so the files simply are
 # not part of the build context. nextship merges this into its generated rules.
+# A leading newline first: an existing .dockerignore with no trailing one would
+# otherwise splice its last rule into the first of these and change both.
+printf '\n' >> .dockerignore
 cat >> .dockerignore <<'IGNORE'
 **/*.test.ts
 **/*.test.tsx

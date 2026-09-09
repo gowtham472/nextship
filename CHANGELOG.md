@@ -249,6 +249,13 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Fixed
 
+- **Two ways the harness scripts could fail on top of an existing failure.** The logs
+  script read its build log through a `&&` chain, so under `set -e` a missing log made the
+  whole step exit non-zero, reporting a logs failure on top of whatever had already gone
+  wrong. And appending exclusion rules to a project `.dockerignore` that lacked a trailing
+  newline would have spliced its last rule into the first appended one, silently changing
+  both. Rehearsed against both cases rather than reasoned about. (Gowtham)
+
 - **The compatibility suite rebuilt every app twice.** Packaging runs two Docker builds,
   a manifest target and then the runtime image, and the harness scripts wrote their logs
   into the app directory, which is the build context. The log grew between the two builds,
