@@ -9,17 +9,20 @@
   "type": "module",
   "bin": { "nextship": "./dist/index.js" },
   "exports": { ".": "./dist/index.js" },
-  "files": ["dist", "!dist/**/*.test.js", "!dist/**/*.test.d.ts", "runtime"],
+  "files": ["dist", "!dist/**/*.test.*", "runtime", "!runtime/*.log"],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/bundle-adapter.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test \"dist/**/*.test.js\""
   },
+  "repository": { "type": "git", "url": "git+https://github.com/gowtham472/nextship.git" },
+  "homepage": "https://github.com/gowtham472/nextship#readme",
+  "bugs": { "url": "https://github.com/gowtham472/nextship/issues" },
   "dependencies": {
-    "@nextship/adapter": "workspace:*",
     "cross-spawn": "^7.0.6"
   },
   "devDependencies": {
+    "@nextship/adapter": "workspace:*",
     "@types/cross-spawn": "^6.0.6"
   }
 }

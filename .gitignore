@@ -6,3 +6,6 @@ dist/
 docs/private
 
 .env
+
+# Generated at build time from packages/adapter, then shipped inside the CLI.
+packages/cli/runtime/adapter.mjs

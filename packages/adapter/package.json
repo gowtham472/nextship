@@ -1,9 +1,10 @@
 {
   "name": "@nextship/adapter",
+  "private": true,
   "version": "0.3.0",
   "license": "Apache-2.0",
   "author": "Gowtham",
-  "description": "Next.js Deployment Adapter used by the nextship CLI.",
+  "description": "Next.js Deployment Adapter. Not published: the CLI ships it as a runtime asset and copies it into each build context.",
   "keywords": ["nextjs", "next", "adapter", "deployment"],
   "engines": { "node": ">=22" },
   "type": "module",

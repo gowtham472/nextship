@@ -6,14 +6,12 @@
  * directory ignores itself in git, because it also holds the Server Actions key.
  *
  * Author: Gowtham
- * Design: ../../../../docs/00-design.md §7
+ * Design: ../../../../docs/design.md §7
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { NextshipError } from '../errors.js'
 import type { ProjectInfo } from '../detect.js'
 import { BUILD_DIR, renderDockerfile, renderDockerignore } from './dockerfile.js'
 
@@ -37,7 +35,7 @@ export async function prepareContext(project: ProjectInfo): Promise<PreparedCont
   const buildDir = path.join(project.root, BUILD_DIR)
   await mkdir(buildDir, { recursive: true })
 
-  // Written first, before anything sensitive exists. See docs/00-design.md §7.3.
+  // Written first, before anything sensitive exists. See docs/design.md §7.3.
   await writeFile(path.join(nextshipDir, '.gitignore'), '*\n', 'utf8')
 
   const helpers = await Promise.all([
@@ -67,15 +65,15 @@ async function copyHelper(source: string, destination: string): Promise<string> 
  * never has to be a dependency of the user's project. It is a single ESM file
  * with no imports beyond node builtins, which is what makes the copy safe.
  */
+/**
+ * The adapter ships as a runtime asset, not as a dependency.
+ *
+ * It is a file copied into a build context rather than a module the CLI imports,
+ * so depending on it would have made the published package unresolvable: a
+ * `workspace:*` range cannot be installed from a registry.
+ */
 function resolveAdapter(): string {
-  try {
-    return createRequire(import.meta.url).resolve('@nextship/adapter')
-  } catch {
-    throw new NextshipError(
-      'The nextship adapter is missing from this installation.',
-      'Reinstall nextship, then run the command again.'
-    )
-  }
+  return resolveRuntimeAsset('adapter.mjs')
 }
 
 function resolveRuntimeAsset(name: string): string {
