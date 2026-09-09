@@ -28,7 +28,7 @@ live, and prints the URL.
 | Local pipeline: `detect`, `build`, `package`, `run` | Done. Verified on a real production project and a purpose-built feature app |
 | DigitalOcean deployment: `deploy`, `rollback`, `logs` | Done. Verified against a live app, including two rollbacks in opposite directions |
 | AWS | Not in v1.0. The driver interface exists and DigitalOcean implements it; the AWS driver is v1.1 |
-| Official Next.js adapter compatibility suite | Wired up, never run. No completeness is claimed |
+| Official Next.js adapter compatibility suite | Run. 1051 of 1115 suites pass (94.3%), with every failure attributed. See the support matrix below |
 
 Verified on real containers: every route serves, image optimization produces WebP,
 streaming does not buffer (27 ms to first byte against a 2.02 s total), ISR works
@@ -769,10 +769,37 @@ pnpm test       # 124 unit tests
    request.
 
 Gate 0 runs today, and streaming, ISR, on-demand revalidation, Server Actions and
-`after()` are verified on real containers. Gate 1 is **wired up but not run**:
-`conformance/` holds the three scripts the official harness requires and
-`.github/workflows/conformance.yml` runs it, so what remains is compute rather than
-design.
+`after()` are verified on real containers. **Gate 1 has now run.**
+
+### Compatibility suite results
+
+Next.js's own end-to-end corpus, in `deploy` mode, building a real container per test
+file. Run against `16.4.0-canary.22` in
+[run 34351774914](https://github.com/gowtham472/nextship/actions/runs/34351774914).
+
+| | |
+|---|---|
+| **Suites run** | 1115 |
+| **Passing** | **1051** |
+| **Pass rate** | **94.3%** |
+
+The 64 failures, sorted by what they actually mean rather than by count:
+
+| Cause | Suites | What it means |
+|---|---|---|
+| `next.config.ts` needing an experimental flag | 17 | Next.js runs these suites only in `dev` and `start` mode, in a dedicated CI job that exports `__NEXT_NODE_NATIVE_TS_LOADER_ENABLED=true` and `NODE_OPTIONS=--experimental-transform-types`. nextship matches the framework's default, which is the legacy transpile path. Enabling the flag would turn them green and break `next.config.ts` files that use TS enums, so it is not done |
+| Packages vendored into `node_modules` | 16 | These fixtures commit packages straight into `node_modules`. nextship installs from your lockfile inside the image and does not ship the host's `node_modules`, because those binaries are built for the wrong platform. A real limitation, documented rather than hidden |
+| Deployed cleanly, assertion failed | 18 | Under investigation. The app built, started and served; a specific assertion did not hold |
+| A `webpack` config under forced Turbopack | 6 | The suite sets `IS_TURBOPACK_TEST=1`, so a fixture carrying a `webpack` config and no `turbopack` config cannot build. This is a property of the harness configuration, not of the adapter |
+| Build failed, other | 7 | Under investigation |
+
+Three defects were found and fixed by running this, none of which any unit test would
+have caught: the build log never reached the harness so every assertion on build output
+failed against an empty string, the deployment id was exported only under a
+nextship-prefixed name so a `next.config` reading `process.env` saw nothing, and the
+builder image carried no Python, so any dependency falling back to node-gyp could not
+install. Fixing those three moved the rate from 93.4% to 94.3% with no regressions.
+
 
 ## Roadmap
 

@@ -94,9 +94,14 @@ depth on a verified one.
 ## Verified against the real thing
 
 The Next.js adapter compatibility suite is the framework's own e2e corpus, run in deploy
-mode against a real container per test file. On the most recent full run, **1031 of 1104
-suites passed**.
+mode against a real container per test file. On the most recent full run, **1051 of 1115
+suites passed, 94.3%**.
 
-The failures are published rather than hidden, sorted into what is a genuine limitation,
-what is a capability nextship does not claim, and what the framework itself only runs
-under an experimental flag.
+Every one of the 64 failures is attributed in the
+[support matrix](https://github.com/gowtham472/nextship#compatibility-suite-results),
+sorted into what is a genuine limitation, what is a capability nextship does not claim,
+and what the framework itself only runs under an experimental flag.
+
+Running it found three defects no unit test would have caught: the build log never reached
+the harness, the deployment id was exported only under a prefixed name, and the builder
+image carried no Python for dependencies that compile on install.

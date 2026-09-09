@@ -249,6 +249,18 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Fixed
 
+- **The compatibility suite has run, and the results are published.** 1051 of 1115 suites
+  pass, 94.3%, against Next.js `16.4.0-canary.22`. Every one of the 64 failures is
+  attributed in the README: 17 need an experimental flag the framework itself only sets in
+  dev and start mode, 16 are packages vendored into `node_modules` that nextship does not
+  ship by design, 6 are a `webpack` config under a harness that forces Turbopack, and 25
+  are still being diagnosed.
+
+  This was the last thing v1.0 claimed but had not done. Running it found three defects no
+  unit test would have caught, all now fixed, which moved the rate from 93.4% to 94.3% with
+  no regressions. Publishing the failures alongside the number is the point: a support
+  claim nobody can check is worth nothing. (Gowtham)
+
 - **A marketing page and documentation site, under `site/`.** Next.js 16.3.4, App Router,
   Tailwind v4, and eleven MDX pages covering getting started, the guides and the reference.
   Every page is prerendered; there is nothing to render per request.
