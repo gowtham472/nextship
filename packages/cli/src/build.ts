@@ -7,7 +7,7 @@
  * beyond `.nextship/`.
  *
  * Author: Gowtham
- * Design: ../../../docs/00-design.md §6, §7
+ * Design: ../../../docs/design.md §6, §7
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'

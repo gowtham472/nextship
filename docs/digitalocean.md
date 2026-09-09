@@ -117,7 +117,7 @@ Two line items, and one of them is not obvious.
 The service that runs the container. The smallest instance is **$5 per month**.
 Bandwidth is included up to an allowance that depends on instance size, then
 **$0.02 per GiB**, which is the number that makes DigitalOcean the cheaper target in
-[`03-cost-model.md`](./03-cost-model.md).
+[`costs.md`](./costs.md).
 
 ### Container registry, and why the free tier probably will not do
 
@@ -139,7 +139,7 @@ mutable one. One image might fit in 500 MiB; two will not.
 
 So budget **$10 per month** to start: $5 for the app and $5 for a Basic registry.
 That is still far below the point where Vercel becomes expensive, and the comparison
-in [`03-cost-model.md`](./03-cost-model.md) holds.
+in [`costs.md`](./costs.md) holds.
 
 **To verify the compressed size yourself**, once Docker is healthy:
 
@@ -166,10 +166,10 @@ and a smaller base image would remove a large part of the 332 MB that is
   egress sensible for Indian traffic.
 - Set a billing alert in the DigitalOcean control panel. nextship has no spend
   guardrails of its own, which is recorded as a gap in
-  [`05-critical-review.md`](./05-critical-review.md) §8.3.
+  [`review.md`](./review.md) §8.3.
 - Know the one behaviour that will surprise you: the ISR cache lives inside the
   container and does not survive a restart, so cached pages regenerate after every
-  deploy or restart. See [`00-design.md`](./00-design.md) §12.
+  deploy or restart. See [`design.md`](./design.md) §12.
 
 ## Sources
 

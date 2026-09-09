@@ -45,7 +45,7 @@ creation only. It never changes when someone else edits the file, so it cannot g
  * <one paragraph: what this module does and why it exists>
  *
  * Author: Gowtham
- * Design: ../../docs/00-design.md §8
+ * Design: ../../docs/design.md §8
  */
 ```
 
@@ -71,20 +71,20 @@ When you change something, update every affected surface before you finish:
 
 | If you change | You must update |
 |---|---|
-| Any CLI command, flag, or output | `README.md` (commands and UX), `docs/00-design.md` |
-| The manifest schema | `docs/00-design.md` §5.1, the adapter, and every consumer |
-| Architecture or a locked decision | `docs/00-design.md` §2, and record the reversal in `CHANGELOG.md` |
-| Phase scope or sequencing | `docs/01-roadmap.md` |
+| Any CLI command, flag, or output | `README.md` (commands and UX), `docs/design.md` |
+| The manifest schema | `docs/design.md` §5.1, the adapter, and every consumer |
+| Architecture or a locked decision | `docs/design.md` §2, and record the reversal in `CHANGELOG.md` |
+| Phase scope or sequencing | `docs/roadmap.md` |
 | Anything a user can observe | `README.md` |
 | Anything at all | `CHANGELOG.md` |
 
 Rules:
 
 - **Never let a doc describe something that does not exist.** Aspirational text
-  belongs in `docs/01-roadmap.md`, marked as a future phase, and nowhere else.
+  belongs in `docs/roadmap.md`, marked as a future phase, and nowhere else.
 - **Never leave a doc describing something that was removed.** Deleting code means
   deleting its documentation in the same change.
-- Docs reference each other by path and section, for example `docs/00-design.md §7`,
+- Docs reference each other by path and section, for example `docs/design.md §7`,
   so a renamed section is a real and findable break.
 
 ---
@@ -112,8 +112,8 @@ No dead code. No hanging code. No decoration.
 
 Deferred work is a documented decision, never an artefact in the code:
 
-- Scope not being built now becomes a phase entry in `docs/01-roadmap.md`.
-- A known limitation of what shipped becomes a named limitation in `docs/00-design.md`.
+- Scope not being built now becomes a phase entry in `docs/roadmap.md`.
+- A known limitation of what shipped becomes a named limitation in `docs/design.md`.
 - A genuine seam for a planned swap is allowed only when the interface is consumed
   today by the implementation that exists, and the docs name the future
   implementation. An interface with zero implementations is speculative structure.

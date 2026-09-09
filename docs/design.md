@@ -25,7 +25,7 @@ Every Next.js feature works correctly, including ISR, PPR, Server Actions,
 | # | Decision | Rationale |
 |---|---|---|
 | **D1** | **BYO-cloud CLI first.** Runs on the developer's machine or CI, provisions into their cloud account with their credentials. We run zero infrastructure. | No ops burden, no uptime liability, no security surface, no cloud bill. Trust is easy: their code never leaves their account. |
-| **D2** | **A hosted control plane comes after the CLI, never before.** Documented and designed for now, not built now. | See [`01-roadmap.md`](./01-roadmap.md) v4. The CLI becomes the control plane's build and deploy engine, so nothing is thrown away. |
+| **D2** | **A hosted control plane comes after the CLI, never before.** Documented and designed for now, not built now. | See [`roadmap.md`](./roadmap.md) v4. The CLI becomes the control plane's build and deploy engine, so nothing is thrown away. |
 | **D3** | **Container everywhere.** One Docker image, one Node server, deployed to a Lightsail container service or ECS on AWS, and App Platform or Droplets on DigitalOcean. (Originally App Runner, which AWS has since closed to new customers.) | DigitalOcean has no Lambda, so a serverless-first design cannot port there at all. And `next start` in a single process supports every Next.js feature correctly; serverless complexity exists only to buy scale to zero. |
 | **D4** | **Correct-first fidelity for v1.** Single instance, Next.js's own cache, CDN for static assets only. | Ships quickly, is useful for most real apps, and every feature is correct rather than partly working. Scale-out is v2 and is additive. |
 
@@ -272,7 +272,7 @@ the build as secret mounts, and BuildKit deliberately excludes secret contents f
 its cache key, so changing a value invalidated nothing: the build was served from
 cache and the resulting image, still containing the old value, was tagged identically
 to the previous one. Reproduced and recorded in
-[`05-critical-review.md`](./05-critical-review.md) §2.1.
+[`review.md`](./review.md) §2.1.
 
 The id is also the `sh.nextship.deployment` image label.
 
@@ -714,11 +714,11 @@ No adoption is required from anyone, so no market position needs defending.
 
 That is a deliberate narrowing, made after two pieces of research:
 
-- [`02-competitive-validation.md`](./02-competitive-validation.md) found that
+- Competitive validation, kept internal, found that
   "zero-config deployment to your own cloud" is already served by Flightcontrol,
   Amplify, Coolify, Dokploy and DigitalOcean App Platform. As a product, the v1
   feature set has no reason to be chosen over any of them.
-- [`03-cost-model.md`](./03-cost-model.md) found that self-hosting saves meaningful
+- [`costs.md`](./costs.md) found that self-hosting saves meaningful
   money only above roughly 1 TB of monthly egress, and that below that line Vercel
   Pro at $20 is hard to beat.
 

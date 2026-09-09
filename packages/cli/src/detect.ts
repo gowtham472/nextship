@@ -6,7 +6,7 @@
  * from the repository.
  *
  * Author: Gowtham
- * Design: ../../../docs/00-design.md §8
+ * Design: ../../../docs/design.md §8
  */
 
 import { readdir, readFile } from 'node:fs/promises'

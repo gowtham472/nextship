@@ -27,7 +27,7 @@ live, and prints the URL.
 |---|---|
 | Local pipeline: `detect`, `build`, `package`, `run` | Done. Verified on a real production project and a purpose-built feature app |
 | DigitalOcean deployment: `deploy`, `rollback`, `logs` | Done. Verified against a live app, including two rollbacks in opposite directions |
-| AWS | In progress. The driver interface exists and DigitalOcean implements it; the AWS driver needs an account to verify against |
+| AWS | Not in v1.0. The driver interface exists and DigitalOcean implements it; the AWS driver is v1.1 |
 | Official Next.js adapter compatibility suite | Wired up, never run. No completeness is claimed |
 
 Verified on real containers: every route serves, image optimization produces WebP,
@@ -35,16 +35,18 @@ streaming does not buffer (27 ms to first byte against a 2.02 s total), ISR work
 both time-based and on-demand, Server Actions execute, and `after()` runs. The image
 is 591 MB uncompressed against 1.13 GB before pruning.
 
-[`docs/05-critical-review.md`](./docs/05-critical-review.md) is an adversarial pass
+[`docs/review.md`](./docs/review.md) is an adversarial pass
 over the design. It reproduced three defects, all now fixed and covered by tests, and
 lists what is still missing with a way to verify each one rather than an assertion.
 
 **v1.0 is deliberately a personal tool**, good enough that its author deploys his own
 apps with it. Everything that only matters once other people depend on it is recorded
-in [`docs/01-roadmap.md`](./docs/01-roadmap.md) under "Beyond v1.0", each with the
+in [`docs/roadmap.md`](./docs/roadmap.md) under "Beyond v1.0", each with the
 trigger that would justify building it.
 
-`nextship` is free on npm and is the name this publishes under. `nextpush` was considered and rejected: `nextpush-cli` is already published as the CLI for an existing NextPush service.
+**v1.0 is DigitalOcean only.** That is the target that is built, verified against a live
+app, and actually used. Supporting a second cloud before the compatibility suite has run
+would add breadth on top of an unproven base.
 
 ---
 
@@ -61,27 +63,25 @@ Docker must be running. The local commands need nothing else.
 
 ## Install
 
-nextship is not published to npm yet, because the name is unverified. Build it from
-this repository:
+Once published:
 
 ```bash
-pnpm install
-pnpm build
+npm install -g nextship
 ```
 
-Then invoke it from any project directory:
+**Not published yet.** The package is release-ready, verified by installing the built
+tarball into a clean project and running a real build from it, but nothing has been
+pushed to the registry. Until it is, build from source:
 
 ```bash
-node /path/to/nextship/packages/cli/dist/index.js detect
+git clone https://github.com/gowtham472/nextship.git
+cd nextship
+pnpm install && pnpm build
+npm link --workspace packages/cli
 ```
 
-An alias makes this bearable while the package is unpublished:
-
-```bash
-alias nextship="node /path/to/nextship/packages/cli/dist/index.js"
-```
-
-The rest of this document writes `nextship` for that command.
+`npm link` puts `nextship` on your PATH, so the rest of this document reads the same
+either way.
 
 ## Quick start
 
@@ -534,7 +534,7 @@ next `deploy` creates a fresh one rather than refusing.
 
 v0.4 is complete. Next is v0.5, a second cloud target, which is where the claim that
 this ports beyond DigitalOcean is either proven or shown to cost more than it looked.
-See [`docs/01-roadmap.md`](./docs/01-roadmap.md), which also records what is
+See [`docs/roadmap.md`](./docs/roadmap.md), which also records what is
 deliberately not being built and why.
 
 ---
@@ -596,7 +596,7 @@ touch the existing one rather than guess.
 
 | Variable | Read by | Purpose |
 |---|---|---|
-| `DIGITALOCEAN_TOKEN` | `deploy`, `rollback`, `logs` | Your API token. See [`docs/06-digitalocean-setup.md`](./docs/06-digitalocean-setup.md) for the scopes it needs |
+| `DIGITALOCEAN_TOKEN` | `deploy`, `rollback`, `logs` | Your API token. See [`docs/digitalocean.md`](./docs/digitalocean.md) for the scopes it needs |
 | `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | `build` | Overrides the per-project key. Set this wherever else you build, so Server Actions keep working for clients served by builds made here |
 | `NO_COLOR` | all | Disables colored output |
 
@@ -656,7 +656,7 @@ instance and $5 for a Basic container registry. The free registry tier does not 
 enough for rollback to have anything to roll back to.
 
 A costed comparison against Vercel at three traffic tiers is in
-[`docs/03-cost-model.md`](./docs/03-cost-model.md). The short version: DigitalOcean
+[`docs/costs.md`](./docs/costs.md). The short version: DigitalOcean
 egress is $0.02 per GiB against Vercel's $0.15 and up, and App Platform needs no load
 balancer, which was the line item that made the AWS path cost more than Vercel at
 small scale.
@@ -664,7 +664,7 @@ small scale.
 ## Known limitations
 
 The full table with consequences and status is
-[`docs/00-design.md`](./docs/00-design.md) §12. The ones worth knowing before you
+[`docs/design.md`](./docs/design.md) §12. The ones worth knowing before you
 deploy:
 
 - **The ISR cache does not survive a restart.** It lives inside the container, so
@@ -716,7 +716,7 @@ Full background: [`vercel-nextjs-platform-research.md`](./docs/private/vercel-ne
 
 ### Two findings from building this
 
-Both verified and recorded in [`docs/00-design.md`](./docs/00-design.md) §12:
+Both verified and recorded in [`docs/design.md`](./docs/design.md) §12:
 
 - **Next.js standalone output cannot be used with the Adapter API.** Setting
   `output: 'standalone'` while any adapter is configured fails the build with `ENOENT`
@@ -729,21 +729,21 @@ Both verified and recorded in [`docs/00-design.md`](./docs/00-design.md) §12:
 ## Repository layout
 
 ```
-AGENTS.md             binding rules: attribution, doc sync, no dead code, consistency
-CHANGELOG.md          every change, attributed
+AGENTS.md              binding rules: attribution, doc sync, no dead code, consistency
+CHANGELOG.md           every change, attributed
+LICENSE                Apache-2.0
+SECURITY.md            how to report a vulnerability
+CONTRIBUTING.md        how to work on this
 docs/
-  00-design.md        locked decisions, output format, manifest, image contract, drivers
-  01-roadmap.md       v0.1 to v1.0, then correctness at scale and beyond
-  02-competitive-validation.md   who else does this, and what is actually unsolved
-  03-cost-model.md    costed comparison against Vercel at three traffic tiers
-  04-how-we-differ.md every competitor in detail, and where this is worse
-  05-critical-review.md  reproduced defects, gaps, and how to verify each one
-  06-digitalocean-setup.md  the API token, its scopes, and what deploying costs
-  private/            background research, not part of the published docs
-conformance/          scripts for the official Next.js adapter compatibility suite
+  design.md            locked decisions, manifest, image contract, target drivers
+  roadmap.md           v0.1 to v1.0, then what is deliberately not built
+  costs.md             costed comparison against Vercel at three traffic tiers
+  digitalocean.md      the API token, its scopes, and what deploying costs
+  review.md            reproduced defects, gaps, and how to verify each one
+conformance/           scripts for the official Next.js adapter compatibility suite
 packages/
-  adapter/            Next.js Adapter API implementation, injected via NEXT_ADAPTER_PATH
-  cli/                every command; runtime/prune.cjs runs inside the image build
+  adapter/             Next.js Adapter API implementation, injected via NEXT_ADAPTER_PATH
+  cli/                 every command; runtime/ holds the files copied into a build
 ```
 
 ## How correctness is proven
@@ -792,7 +792,7 @@ static assets from a CDN now lives), and other frameworks. The roadmap also reco
 what is deliberately not being built, so those decisions stay visible rather than
 looking like oversights.
 
-Details in [`docs/01-roadmap.md`](./docs/01-roadmap.md).
+Details in [`docs/roadmap.md`](./docs/roadmap.md).
 
 ## Contributing
 

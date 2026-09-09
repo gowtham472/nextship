@@ -6,7 +6,7 @@
  * runtime stage does new work.
  *
  * Author: Gowtham
- * Design: ../../../docs/00-design.md §7
+ * Design: ../../../docs/design.md §7
  */
 
 import type { ProjectInfo } from './detect.js'

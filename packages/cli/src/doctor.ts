@@ -10,7 +10,7 @@
  * None of that is a build error, so only a deliberate check finds it.
  *
  * Author: Gowtham
- * Review: ../../../docs/05-critical-review.md §12
+ * Review: ../../../docs/review.md §12
  */
 
 import { readFile, readdir, stat } from 'node:fs/promises'
@@ -176,7 +176,7 @@ function runtimeFindings(project: ProjectInfo): Finding[] {
     title: 'The ISR cache does not survive a restart',
     consequence:
       'Cached pages and optimized images live inside the container, so every restart or redeploy starts cold.',
-    action: 'Expected for a single instance. See docs/00-design.md §12.',
+    action: 'Expected for a single instance. See docs/design.md §12.',
   })
 
   return findings

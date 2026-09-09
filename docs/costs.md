@@ -79,7 +79,7 @@ new customers. There are two realistic replacements and they are not close:
 
 Lightsail's price includes a load balanced TLS endpoint, custom domains with a free
 certificate, and 500 GB of transfer per service, verified against the Lightsail container
-services FAQ. It is billed hourly and prorated. That is why `01-roadmap.md` makes it the
+services FAQ. It is billed hourly and prorated. That is why `roadmap.md` makes it the
 v0.5 default and puts ECS behind `--compute ecs`: the load balancer is only unavoidable
 on the ECS path.
 
@@ -219,8 +219,8 @@ This cuts both ways, and it is the honest case for and against the product at on
 The traffic level at which self-hosting saves meaningful money (above roughly 1 TB
 egress, tens of millions of requests) is also the traffic level at which a single
 container stops being enough. Those users run multiple instances, and multiple
-instances is exactly where Next.js correctness breaks down
-([`02-competitive-validation.md`](./02-competitive-validation.md) §4).
+instances is exactly where Next.js correctness breaks down, which is the gap
+`roadmap.md` records as v2.
 
 The users for whom the economics work are the users who need the correctness layer.
 Below that line, the honest advice is to stay on Vercel.

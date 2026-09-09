@@ -17,7 +17,7 @@
  * throughout: never printed, never logged, never put in an error message.
  *
  * Author: Gowtham
- * Design: ../../../docs/00-design.md §10.7
+ * Design: ../../../docs/design.md §10.7
  */
 
 import { NextshipError } from './errors.js'

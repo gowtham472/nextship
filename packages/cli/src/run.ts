@@ -10,7 +10,7 @@
  * clean up when something goes wrong.
  *
  * Author: Gowtham
- * Roadmap: ../../../docs/01-roadmap.md v0.2
+ * Roadmap: ../../../docs/roadmap.md v0.2
  */
 
 import path from 'node:path'
@@ -32,7 +32,7 @@ export async function runImage(project: ProjectInfo, image: ImageRef): Promise<v
 
   // Highest-precedence env file first, matching what Next.js would load. Secrets
   // stay outside the image, so the same image runs unchanged in every
-  // environment. See docs/00-design.md §7.
+  // environment. See docs/design.md §7.
   const envFile = project.envFiles[0]
   if (envFile) {
     args.push('--env-file', path.join(project.root, envFile))

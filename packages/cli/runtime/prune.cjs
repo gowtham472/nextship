@@ -16,7 +16,7 @@
  *   out     destination directory, created if missing
  *
  * Author: Gowtham
- * Design: docs/00-design.md §7
+ * Design: docs/design.md §7
  */
 
 const fs = require('node:fs')

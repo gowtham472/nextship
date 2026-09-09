@@ -14,7 +14,7 @@
  * copied as a single file.
  *
  * Author: Gowtham
- * Design: ../../../docs/00-design.md §5, §6
+ * Design: ../../../docs/design.md §5, §6
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -55,7 +55,7 @@ export async function modifyConfig(config: NextConfig): Promise<NextConfig> {
   // standalone directory with no server.js. This reproduces with a completely
   // no-op adapter, so it is the combination that breaks, not this adapter. The
   // CLI assembles the equivalent tree itself from the same trace files.
-  // See docs/00-design.md §12.
+  // See docs/design.md §12.
 }
 
 /**

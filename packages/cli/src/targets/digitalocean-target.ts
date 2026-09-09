@@ -13,7 +13,7 @@
  * about them could not be pointed at a second cloud.
  *
  * Author: Gowtham
- * Design: ../../../../docs/00-design.md §9, §10
+ * Design: ../../../../docs/design.md §9, §10
  */
 
 import { NextshipError } from '../errors.js'

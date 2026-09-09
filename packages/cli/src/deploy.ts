@@ -10,7 +10,7 @@
  * adopted, and nothing at all happens without `--yes` after the plan is shown.
  *
  * Author: Gowtham
- * Design: ../../../docs/00-design.md §9, §10
+ * Design: ../../../docs/design.md §9, §10
  */
 
 import { NextshipError } from './errors.js'

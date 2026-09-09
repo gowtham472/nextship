@@ -1,6 +1,6 @@
 # nextship roadmap
 
-Companion to [`00-design.md`](./00-design.md). Shipped version by version, each one
+Companion to [`design.md`](./design.md). Shipped version by version, each one
 usable on its own.
 
 **The goal of v1.0 is a tool Gowtham uses to deploy his own apps.** Not a product,
@@ -13,11 +13,11 @@ Two research findings shape the ordering and are worth restating here, because t
 explain why v2 exists at all:
 
 - Self-hosting only saves meaningful money above roughly 1 TB of monthly egress
-  ([`03-cost-model.md`](./03-cost-model.md)). Below that, Vercel Pro is genuinely
+  ([`costs.md`](./costs.md)). Below that, Vercel Pro is genuinely
   hard to beat.
 - That same traffic level is where one container stops being enough, and multiple
   instances is exactly where Next.js correctness breaks down
-  ([`02-competitive-validation.md`](./02-competitive-validation.md) §4).
+  (the internal competitive validation §4).
 
 For a single-instance personal tool, neither of those bites. That is why v1 can be
 small and still be correct.
@@ -60,7 +60,7 @@ account needed, so nothing here is blocked on a target decision.
 
 ### Defects found by review and fixed
 
-An adversarial pass over the documents ([`05-critical-review.md`](./05-critical-review.md))
+An adversarial pass over the documents ([`review.md`](./review.md))
 reproduced three defects, all now fixed and covered by tests: an environment variable
 change shipped the old value under the same image tag, no target architecture was
 pinned, and a one-character source change cost a 150 second rebuild because the
@@ -94,7 +94,7 @@ One cloud target, end to end, immutable by construction.
 wide margin: egress at $0.02 per GiB against CloudFront's $0.085 and Vercel's $0.15
 and up, and App Platform needs no load balancer, which was the line item that made
 the AWS path cost more than Vercel at small scale
-([`03-cost-model.md`](./03-cost-model.md)).
+([`costs.md`](./costs.md)).
 
 | Deliverable | Status |
 |---|---|
@@ -139,7 +139,7 @@ The things that turn a deploy script into something worth relying on.
 | **Done, verified live.** `logs --follow`, over the websocket App Platform returns. Forwarding is **not** built: it needs an external destination and credentials the user must choose, so there is nothing to verify against |
 | **Done, verified live.** `destroy`: removes the app and optionally its images, never the registry or DNS. The app name is a required argument, so `--yes` in the wrong directory cannot destroy the wrong app. Verified against a disposable app rather than a real one |
 | **Done.** Exclude dependency source maps and development runtimes at copy time, not only while tracing. Saved 69 MB: image 660 MB to 591 MB. The over-inclusion was larger than the 25 MB estimated, and had a different cause |
-| **Done, concluded no.** Alpine is 2.5x slower at image optimization on identical libvips and saves 97 MB, not the 150 to 200 estimated. Distroless keeps glibc and saves 129 MB but removes the shell this project has repeatedly needed to diagnose real problems. Base layers are cached per node anyway, so this optimises a number that does not travel. See `00-design.md` §7.6 |
+| **Done, concluded no.** Alpine is 2.5x slower at image optimization on identical libvips and saves 97 MB, not the 150 to 200 estimated. Distroless keeps glibc and saves 129 MB but removes the shell this project has repeatedly needed to diagnose real problems. Base layers are cached per node anyway, so this optimises a number that does not travel. See `design.md` §7.6 |
 
 ## v1.0: trustworthy for personal use, DigitalOcean only
 
@@ -188,7 +188,7 @@ run a container and they are not close in price or shape.
 | EC2 or a Lightsail instance | $5 to $10 | you build it | you build it | Not worth the operational surface |
 
 Lambda is rejected on correctness, not price: it would be the cheapest by a wide margin.
-The reason is in `00-design.md` §2.1 and is recorded under "Deliberately not built".
+The reason is in `design.md` §2.1 and is recorded under "Deliberately not built".
 
 **Lightsail is the default because it is the only AWS option that is both cheap and the
 right shape.** Verified against the Lightsail container services FAQ: the service
@@ -228,7 +228,7 @@ Three consequences, none fatal but all real:
 
 Even at Lightsail's $7 to $10, DigitalOcean at $5 to $12 is comparable, and at
 `--compute ecs` AWS is the most expensive of the three at small and medium scale
-(`03-cost-model.md`). So the reason to support AWS is not savings. It is that people are
+(`costs.md`). So the reason to support AWS is not savings. It is that people are
 already on AWS, with their database and compliance boundary there, and moving the web
 tier out is not an option.
 
@@ -245,7 +245,7 @@ front end do not need that, and the flag is there for when the bet is wrong.
 
 **Does a Lightsail container service endpoint buffer responses?** If it does, React
 Server Component streaming and Partial Prerendering arrive as one response at the end,
-which is the failure `00-design.md` §11 exists to catch.
+which is the failure `design.md` §11 exists to catch.
 
 An adversarial research pass could not settle this from any AWS source, and it also
 knocked down the two comfortable inferences: there is no published evidence that the
@@ -375,7 +375,7 @@ Recorded so the decision stays visible rather than looking like an oversight.
 
 | Not built | Why |
 |---|---|
-| Lambda, or any serverless AWS compute | It would be the cheapest option by far, and that is not the deciding factor. Lambda cannot run `next start`, so the app has to be split into functions and the routing pipeline re-implemented: middleware matching, dynamic segments, the `rsc` and `_rsc` cache-key discipline, PPR resume, ISR through object storage and a queue, image optimization as its own function. That is the work `00-design.md` §2.1 exists to avoid, and the work that cost other projects years. It also cannot port: DigitalOcean has no Lambda, so a serverless-first design would make the driver interface a fiction |
+| Lambda, or any serverless AWS compute | It would be the cheapest option by far, and that is not the deciding factor. Lambda cannot run `next start`, so the app has to be split into functions and the routing pipeline re-implemented: middleware matching, dynamic segments, the `rsc` and `_rsc` cache-key discipline, PPR resume, ISR through object storage and a queue, image optimization as its own function. That is the work `design.md` §2.1 exists to avoid, and the work that cost other projects years. It also cannot port: DigitalOcean has no Lambda, so a serverless-first design would make the driver interface a fiction |
 | `env pull` | App Platform never returns a stored secret, so a pull could only ever return `NEXT_PUBLIC_*` values and the names of the rest. `nextship env` already lists the names. A command that returns blanks for everything that matters is worse than no command |
 | Log forwarding to an external sink | Needs a destination and credentials that are the user's to choose. There is nothing to verify against, and shipping unverified infrastructure code is how the defects in this project's own history got made |
 | A dedicated health endpoint | Would mean replacing Next.js's `startServer` and owning keep-alive, upgrades and error handling on the most critical path in the system, to save one render every few seconds for apps that prerender nothing. The health path is chosen from the build's prerendered routes instead |

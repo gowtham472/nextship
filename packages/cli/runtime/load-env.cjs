@@ -22,7 +22,7 @@
  * Prints JSON: { "variables": { KEY: value }, "files": ["<absolute path>"] }
  *
  * Author: Gowtham
- * Design: ../../../docs/00-design.md §10.3
+ * Design: ../../../docs/design.md §10.3
  */
 
 'use strict'

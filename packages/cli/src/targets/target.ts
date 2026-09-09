@@ -21,8 +21,8 @@
  * driver rather than in the command.
  *
  * Author: Gowtham
- * Design: ../../../../docs/00-design.md §9
- * Roadmap: ../../../../docs/01-roadmap.md v0.5
+ * Design: ../../../../docs/design.md §9
+ * Roadmap: ../../../../docs/roadmap.md v0.5
  */
 
 /** An app as the target knows it, with only what commands compare against. */

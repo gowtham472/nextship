@@ -23,7 +23,7 @@
  * case where guessing is unforgivable.
  *
  * Author: Gowtham
- * Design: ../../../../docs/00-design.md §9
+ * Design: ../../../../docs/design.md §9
  */
 
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'

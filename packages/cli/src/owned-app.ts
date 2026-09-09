@@ -41,7 +41,7 @@ export function client(): Target {
   if (!token) {
     throw new NextshipError(
       'DIGITALOCEAN_TOKEN is not set.',
-      'Create a token with Registry and Apps scopes, export it, then run the command again. See docs/06-digitalocean-setup.md.'
+      'Create a token with Registry and Apps scopes, export it, then run the command again. See docs/digitalocean.md.'
     )
   }
   return new DigitalOceanTarget(new DigitalOcean(token))

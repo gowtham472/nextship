@@ -13,7 +13,7 @@
  * never deletes anything.
  *
  * Author: Gowtham
- * Design: ../../../docs/00-design.md §10
+ * Design: ../../../docs/design.md §10
  */
 
 import { NextshipError } from './errors.js'

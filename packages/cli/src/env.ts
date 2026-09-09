@@ -17,7 +17,7 @@
  * a parser of our own. See `runtime/load-env.cjs` for why.
  *
  * Author: Gowtham
- * Roadmap: ../../../docs/01-roadmap.md v0.4
+ * Roadmap: ../../../docs/roadmap.md v0.4
  */
 
 import { createRequire } from 'node:module'

@@ -8,6 +8,34 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Added
 
+- **The published package no longer depends on something npm cannot install.** The CLI
+  declared `"@nextship/adapter": "workspace:*"` and resolved it with `require.resolve` at
+  build time. A registry cannot resolve a `workspace:` range, so installing `nextship`
+  from npm would have produced a CLI that failed on the first build, unable to find its
+  own adapter.
+
+  The adapter was never a dependency in the real sense: it is a file copied into a build
+  context, not a module the CLI imports. It now ships as a runtime asset beside
+  `prune.cjs` and `load-env.cjs`, generated at build time by
+  `packages/cli/scripts/bundle-adapter.mjs`, and stays a workspace devDependency purely so
+  pnpm still builds it first. The adapter package is marked private, so there is one
+  published package and no way for the two to drift apart in version.
+
+  Also fixed while checking the payload: `npm pack` was shipping test source maps, because
+  the exclusion covered `dist/**/*.test.js` but not its `.map`. The published tarball now
+  contains zero test artifacts, three runtime assets, and one runtime dependency.
+
+  Verified the way that matters: packed the tarball, installed it into a clean project,
+  and ran a real build of a production app with the **installed** CLI rather than the
+  workspace one. It resolved its adapter and produced an image. (Gowtham)
+
+- **`SECURITY.md` and `CONTRIBUTING.md`.** This tool runs with a cloud token, reads env
+  files and builds arbitrary projects, so a public repository needed a private reporting
+  path and an honest account of what it can reach. `SECURITY.md` states the exposures
+  plainly rather than implying there are none: the built image contains the Server Actions
+  encryption key, pushed variables are readable from an app console, and `destroy` is not
+  recoverable. (Gowtham)
+
 - **Licensed under Apache-2.0, and the name verified rather than assumed.** The project
   had no license, which meant that as public code it was still all rights reserved and
   legally unusable by anyone. That was the hardest release blocker and the cheapest to
@@ -350,6 +378,20 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
 ### Docs
 
+- **Documentation restructured for a public repository.** Numeric prefixes dropped, so
+  files are named for what they are: `design.md`, `roadmap.md`, `costs.md`,
+  `digitalocean.md`, `review.md`. The two competitive-analysis documents moved to
+  `docs/private/`, which is gitignored: one asks whether this is the wrong product and the
+  other critiques named competitors, and neither belongs in a public release.
+
+  `review.md` deliberately stayed public. Four source files cite it as the origin of a
+  specific defect, so publishing the code while hiding the review would leave those
+  citations pointing at nothing.
+
+  Every relative link was then checked programmatically, in both directions, rather than
+  by eye: eight were broken after the move, including private documents whose links to
+  public ones needed to climb a directory. All resolve now. (Gowtham)
+
 - **AWS compute chosen deliberately, and Lambda recorded as a non-goal.** The roadmap
   named ECS Express Mode at about $35 a month, mostly an unavoidable load balancer,
   without having weighed the alternatives. Checked against the Lightsail container
@@ -369,7 +411,7 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
 
   **Lambda is rejected on correctness rather than cost, and it would have been the
   cheapest.** It cannot run `next start`, so the app has to be split into functions and
-  the routing pipeline re-implemented, which is the work `00-design.md` §2.1 exists to
+  the routing pipeline re-implemented, which is the work `design.md` §2.1 exists to
   avoid. It also cannot port, since DigitalOcean has no Lambda.
 
   **One finding shapes the driver before it is written:** Lightsail container services
@@ -410,7 +452,7 @@ v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does no
   recommends is ECS Express Mode, which provisions Fargate behind an Application Load
   Balancer in one call.
 
-  The load balancer is the part that matters. `03-cost-model.md` already carried a
+  The load balancer is the part that matters. `costs.md` already carried a
   Fargate + ALB column showing a $16 floor for the load balancer alone, and with App
   Runner gone that column is the realistic AWS number: **AWS becomes the most expensive
   of the three at small and medium scale, and DigitalOcean is cheapest at every tier
@@ -441,7 +483,7 @@ DigitalOcean account and were verified on a live app rather than in a fixture.
 Two v0.3 deliverables were deliberately not built and moved to v0.4: registry
 image retention, because pruning old tags means deleting, and a dedicated health
 endpoint, because serving one means the launcher handling a request before Next.js
-does. Both are recorded with their reasons in `docs/01-roadmap.md`.
+does. Both are recorded with their reasons in `docs/roadmap.md`.
 
 ### Added
 
@@ -618,7 +660,7 @@ does. Both are recorded with their reasons in `docs/01-roadmap.md`.
   once other people depend on the tool moved to a "Beyond v1.0" section, each item
   recorded with the trigger that would justify building it, so skipping it stays a
   deliberate decision rather than an oversight. (Gowtham)
-- **Positioning rewritten** in `docs/00-design.md` §14 to state plainly that v1.0 is
+- **Positioning rewritten** in `docs/design.md` §14 to state plainly that v1.0 is
   a personal tool rather than a product, citing the competitive and cost findings
   that motivated the narrowing, and preserving the product-shaped pitch for the
   version where it would actually be true. (Gowtham)
@@ -755,7 +797,7 @@ does. Both are recorded with their reasons in `docs/01-roadmap.md`.
   cache handler, which is the right choice for the single-instance target of
   Phase 1. A custom handler with one local implementation and no consumer was
   speculative structure under `AGENTS.md` §3.1. A shared cache handler is Phase 3
-  work and is tracked in `docs/01-roadmap.md`. (Gowtham)
+  work and is tracked in `docs/roadmap.md`. (Gowtham)
 - **Build-time cache seeding and the `cache/` output directory.** Writing seeded
   entries requires knowing the internal cache key format, which has not been
   verified. Claiming it would have been a fabricated capability under
@@ -778,7 +820,7 @@ does. Both are recorded with their reasons in `docs/01-roadmap.md`.
   as structural properties, `nextship.json`, every environment variable the CLI reads,
   and the exact list of files written into a project. Two numbers were overstated and
   are corrected: streaming first-byte is 27 ms, matching the measurement in
-  `00-design.md` §11, and the image is 660 MB against 1.13 GB before pruning rather
+  `design.md` §11, and the image is 660 MB against 1.13 GB before pruning rather
   than against a figure measured on a different build. The compressed size, 182 MiB,
   is now the registry's own reported storage rather than a recollection. Every
   document and path the README links was checked to exist. (Gowtham)
@@ -787,14 +829,14 @@ does. Both are recorded with their reasons in `docs/01-roadmap.md`.
   stated Node requirement is enforced by the package manager instead of merely
   asserted. (Gowtham)
 
-- `docs/06-digitalocean-setup.md`: what the API token is, exactly which operations
+- `docs/digitalocean.md`: what the API token is, exactly which operations
   nextship will use it for, how to create one with custom scopes limited to the
   registry and apps rather than full account access, how to supply and revoke it,
   and what it costs. Records that the free registry tier is 500 MiB against a
   660 MB image, and that rollback needs more than one image retained, so a Basic
   registry at $5 is the realistic starting point alongside the $5 app. (Gowtham)
 
-- `docs/05-critical-review.md`: an adversarial pass over the design and
+- `docs/review.md`: an adversarial pass over the design and
   differentiation documents. Reproduced three defects (an env change ships the old
   value under the same tag; no target platform is pinned; a one-character source
   change costs a 145 second cold build), found that the Server Actions key does not
@@ -803,7 +845,7 @@ does. Both are recorded with their reasons in `docs/01-roadmap.md`.
   is weaker than stated: the only durable differentiator in the plan is the unbuilt
   v2 correctness layer. Everything is prioritised P0 to P3, with a verification
   method for each item rather than an assertion. (Gowtham)
-- `docs/04-how-we-differ.md`: every competitor in detail (Vercel, OpenNext, SST,
+- Competitive analysis, kept internal rather than published: every competitor in detail (Vercel, OpenNext, SST,
   Netlify, Cloudflare, Amplify, Firebase, Azure, Flightcontrol, Coolify, Dokploy,
   CapRover, Dokku, Kamal, Railway, Render, Fly, DigitalOcean App Platform, and plain
   Docker), a layer diagram of who occupies which part of the stack, a feature matrix
@@ -811,23 +853,23 @@ does. Both are recorded with their reasons in `docs/01-roadmap.md`.
   different, and a section listing where nextship is worse or not different at all.
   (Gowtham)
 
-- `docs/03-cost-model.md`: costed comparison against Vercel Pro at three traffic
+- `docs/costs.md`: costed comparison against Vercel Pro at three traffic
   tiers using September 2026 list prices. Finds that below roughly 1 TB of monthly
   egress Vercel is hard to beat and a self-hosted setup can cost more, that above
   that line savings are 40 percent on AWS and 80 percent on DigitalOcean, that
   bandwidth rather than compute drives all of it, and that per-seat pricing is the
   larger factor for teams on modest traffic. (Gowtham)
-- `docs/02-competitive-validation.md`: evidence-based check on whether nextship
+- Competitive validation, kept internal rather than published: evidence-based check on whether nextship
   duplicates OpenNext, and whether the space it targets is already served. Finds
   that OpenNext sits at a different layer and is not a duplicate, but that the
   "zero-config deploy to your own cloud" position is already held by Flightcontrol,
   Amplify, Coolify, Dokploy and DigitalOcean App Platform. Identifies multi-instance
   runtime correctness as the genuinely unoccupied position, and records two claims
   needing first-hand verification. Positioning is not yet changed in
-  `docs/00-design.md` §14; that decision is open. (Gowtham)
-- `docs/00-design.md`: build output layout, manifest schema, image contract and
+  `docs/design.md` §14; that decision is open. (Gowtham)
+- `docs/design.md`: build output layout, manifest schema, image contract and
   the host build tradeoff updated to describe what now exists. (Gowtham)
-- `docs/01-roadmap.md`: Phase 1 weeks 1 to 3 marked against real status, with the
+- `docs/roadmap.md`: Phase 1 weeks 1 to 3 marked against real status, with the
   cache seeding and monorepo gaps recorded. (Gowtham)
 - `README.md`: repository layout and commands updated to the shipped pipeline.
   (Gowtham)

@@ -6,7 +6,7 @@
  * BuildKit can serve the second from the first's cache.
  *
  * Author: Gowtham
- * Design: ../../../docs/00-design.md §7
+ * Design: ../../../docs/design.md §7
  */
 
 import path from 'node:path'

@@ -10,7 +10,7 @@
  * running other services a name collision is exactly where guessing does damage.
  *
  * Author: Gowtham
- * Design: ../../../docs/00-design.md §8.3
+ * Design: ../../../docs/design.md §8.3
  */
 
 import { readFile, writeFile } from 'node:fs/promises'

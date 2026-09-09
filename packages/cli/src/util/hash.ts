@@ -6,7 +6,7 @@
  * which means a stale image served under a tag that claims to be current.
  *
  * Author: Gowtham
- * Design: ../../../docs/00-design.md §7.4
+ * Design: ../../../docs/design.md §7.4
  */
 
 import { createHash } from 'node:crypto'

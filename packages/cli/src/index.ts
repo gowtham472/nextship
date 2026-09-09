@@ -7,7 +7,7 @@
  * that already succeeded.
  *
  * Author: Gowtham
- * Design: ../../../docs/00-design.md §4
+ * Design: ../../../docs/design.md §4
  */
 
 import { detectProject } from './detect.js'

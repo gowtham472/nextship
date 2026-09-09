@@ -17,7 +17,7 @@
  * created by the domain's owner, not by nextship.
  *
  * Author: Gowtham
- * Roadmap: ../../../docs/01-roadmap.md v0.4
+ * Roadmap: ../../../docs/roadmap.md v0.4
  */
 
 import { NextshipError } from './errors.js'

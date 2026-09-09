@@ -13,7 +13,7 @@
  * would have invalidated that build either.
  *
  * Author: Gowtham
- * Design: ../../../docs/00-design.md §7.4
+ * Design: ../../../docs/design.md §7.4
  */
 
 import { randomBytes } from 'node:crypto'

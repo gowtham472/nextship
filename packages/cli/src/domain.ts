@@ -15,7 +15,7 @@
  * certificate. There is nothing to configure and nothing to renew.
  *
  * Author: Gowtham
- * Roadmap: ../../../docs/01-roadmap.md v0.4
+ * Roadmap: ../../../docs/roadmap.md v0.4
  */
 
 import { NextshipError } from './errors.js'

@@ -12,7 +12,7 @@
  * Everything here is pure, which is why it is testable without an account.
  *
  * Author: Gowtham
- * Design: ../../../../docs/00-design.md §9
+ * Design: ../../../../docs/design.md §9
  */
 
 import { NextshipError } from '../errors.js'

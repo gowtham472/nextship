@@ -7,7 +7,7 @@
  * asserts that something which changes the image also changes the id.
  *
  * Author: Gowtham
- * Review: ../../../docs/05-critical-review.md §2.1
+ * Review: ../../../docs/review.md §2.1
  */
 
 import { test } from 'node:test'
