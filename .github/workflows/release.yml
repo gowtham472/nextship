@@ -88,29 +88,35 @@ jobs:
       - name: Verify the tarball installs and runs
         working-directory: packages/cli
         run: |
+          NAME="$(node -p "require('./package.json').name")"
           npm pack --pack-destination /tmp
           mkdir -p /tmp/install-check && cd /tmp/install-check
           npm init -y > /dev/null
-          npm install --silent /tmp/nextship-cli-*.tgz
-          # Proves the adapter resolves from the packed tree rather than from the
-          # workspace, which is the defect this check exists to catch.
+          npm install --silent /tmp/"$NAME"-*.tgz
+
+          # Every path below is derived from the manifest. Writing the package name
+          # out by hand is how the previous attempt failed: a rename updated some of
+          # these checks and not others, and the ones left behind looked for a
+          # directory that no longer existed.
+
+          # The adapter must resolve from the packed tree rather than the workspace.
           node -e "
-            const path = require('node:path')
             const fs = require('node:fs')
-            const adapter = path.join('node_modules', 'nextship', 'runtime', 'adapter.mjs')
+            const path = require('node:path')
+            const adapter = path.join('node_modules', process.argv[1], 'runtime', 'adapter.mjs')
             if (!fs.existsSync(adapter)) { console.error('adapter missing from the published package'); process.exit(1) }
             console.log('installed package carries its adapter')
-          "
-          # Invoke the installed binary, not dist/index.js. npm silently drops a
-          # malformed bin entry at publish time, and a check that runs the file
+          " "$NAME"
+
+          # Run the installed binary, not dist/index.js. npm drops a malformed bin
+          # entry at publish time with only a warning, so a check that runs the file
           # directly passes while the published package has no command at all.
           ./node_modules/.bin/nextship --version
           node -e "
-            const pkg = require('./node_modules/nextship-cli/package.json')
-            const bin = pkg.bin && pkg.bin.nextship
-            if (!bin) { console.error('the published package declares no nextship binary'); process.exit(1) }
-            console.log('binary declared as', bin)
-          "
+            const pkg = require('./node_modules/' + process.argv[1] + '/package.json')
+            if (!pkg.bin || !pkg.bin.nextship) { console.error('the published package declares no nextship binary'); process.exit(1) }
+            console.log('binary declared as', pkg.bin.nextship)
+          " "$NAME"
 
       - name: Publish
         if: ${{ github.event_name == 'push' || inputs.dryRun == false }}
