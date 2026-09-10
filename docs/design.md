@@ -76,9 +76,11 @@ repeating stages that already succeeded. Stages 2 and 3 are two targets of one
 Dockerfile with identical inputs, so BuildKit serves the compile from cache and
 `package` only does the runtime stage's work.
 
-Run with no arguments, `nextship` draws the logo from `brand/nextship-logo.png` in
-character cells and points to `detect` and `--help`. It does so only when standard
-output is a terminal with 256 or more colours, at least 58 columns wide and without
+Run with no arguments, `nextship` draws the wordmark from `brand/nextship.png` in half
+block characters and points to `detect` and `--help`. It needs standard output to be a
+terminal at least 72 columns wide. "Next" is drawn in the terminal's own text colour so
+it reads on any background; "Ship" and the dot of its i take the brand blue and yellow
+in truecolor, 256 or 16 colours as the terminal supports, and no colour under
 `NO_COLOR`. Anywhere else, including a pipe, it prints the usage, so a script sees the
 same text it always has.
 

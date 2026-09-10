@@ -6,14 +6,14 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Added
 
-- **The logo, in the terminal and across the project.** `nextship` on its own draws
-  the nextship logo, the gold block N on the blue light burst with the wordmark and
-  tagline, in character cells laid out and coloured from `brand/nextship-logo.png`:
-  truecolor where the terminal supports it and the 256 colour palette where it does
-  not. A pipe, `NO_COLOR`, a 16 colour terminal or a window narrower than the logo
-  still gets the usage, so a script sees the same output as before. The artwork is in
-  `brand/`, the README and the npm page show it, and the site uses the N as its mark
-  and favicon. (Gowtham)
+- **The wordmark, in the terminal and across the project.** `nextship` on its own
+  draws the nextship wordmark from `brand/nextship.png` in half block characters:
+  "Next" in the terminal's own text colour, so it reads on a dark or a light
+  background, "Ship" in the brand blue and the dot of its i in yellow. It uses
+  truecolor, 256 or 16 colours as the terminal supports, and no colour at all under
+  `NO_COLOR`. A pipe, or a window narrower than the wordmark, still gets the usage, so
+  a script sees the same output as before. The README and the npm page show the
+  wordmark, with a white-lettered copy for dark backgrounds. (Gowtham)
 
 ### Changed
 
@@ -22,6 +22,12 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   a static host serves with no server to run or patch. A `_headers` file sets security
   headers and year-long caching for the content-hashed assets, and `site/README.md` gives
   the Pages project settings. (Gowtham)
+
+- **The site uses the brand's typeface and colours.** Text is set in Plus Jakarta
+  Sans; the palette is white, the brand blue `#005EFF` and the yellow `#FDCF18`, with a
+  deep blue dark theme; and the header and footer show the wordmark. The favicon is a
+  white N on the brand blue beside the yellow square, and `brand/logo.png` is the image
+  a shared link previews with. (Gowtham)
 
 ## [0.4.3] - 2026-09-10
 

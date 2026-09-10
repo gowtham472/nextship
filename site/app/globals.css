@@ -1,7 +1,8 @@
 @import 'tailwindcss';
 
 /*
- * One palette, two themes.
+ * One palette, two themes, in the wordmark's colours: white, the blue of "Ship"
+ * and the yellow of the dot on its i.
  *
  * Every colour is declared once on :root as the light theme. The dark theme
  * redefines only the tokens, so a component never needs to know which theme it
@@ -11,55 +12,57 @@
  */
 :root {
   --background: #ffffff;
-  --background-subtle: #fafafa;
+  --background-subtle: #f5f8ff;
   --card: #ffffff;
-  --card-hover: #fafafa;
-  --border: #eaeaea;
-  --border-strong: #d4d4d4;
-  --foreground: #171717;
-  --muted: #666666;
-  --muted-strong: #454545;
-  --accent: #171717;
+  --card-hover: #f5f8ff;
+  --border: #e3e9f6;
+  --border-strong: #c6d3ee;
+  --foreground: #0b1220;
+  --muted: #55627a;
+  --muted-strong: #2f3b52;
+  --accent: #005eff;
   --accent-foreground: #ffffff;
-  --code-background: #fafafa;
-  --selection: rgba(0, 0, 0, 0.08);
+  /* Blue set as text. The dark theme lifts it: the brand blue on that ground
+     reads at 3.7:1, under the 4.5:1 that small text needs. */
+  --accent-text: #005eff;
+  --highlight: #fdcf18;
+  --code-background: #f5f8ff;
+  --selection: rgba(253, 207, 24, 0.4);
 }
 
 /* The default setting is "system", which stamps nothing on the root element,
    so the media query is what separates light from dark for most visitors. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --background: #000000;
-    --background-subtle: #0a0a0a;
-    --card: #0a0a0a;
-    --card-hover: #111111;
-    --border: #1f1f1f;
-    --border-strong: #333333;
-    --foreground: #ededed;
-    --muted: #a1a1a1;
-    --muted-strong: #c9c9c9;
-    --accent: #ffffff;
-    --accent-foreground: #000000;
-    --code-background: #0a0a0a;
-    --selection: rgba(255, 255, 255, 0.14);
+    --background: #060b1a;
+    --background-subtle: #0a1226;
+    --card: #0a1226;
+    --card-hover: #0f1a36;
+    --border: #18264a;
+    --border-strong: #27396b;
+    --foreground: #f4f7ff;
+    --muted: #97a3bf;
+    --muted-strong: #c9d2e6;
+    --accent-text: #6aa2ff;
+    --code-background: #0a1226;
+    --selection: rgba(253, 207, 24, 0.3);
   }
 }
 
 /* An explicit choice wins over the system setting, in both directions. */
 :root[data-theme='dark'] {
-  --background: #000000;
-  --background-subtle: #0a0a0a;
-  --card: #0a0a0a;
-  --card-hover: #111111;
-  --border: #1f1f1f;
-  --border-strong: #333333;
-  --foreground: #ededed;
-  --muted: #a1a1a1;
-  --muted-strong: #c9c9c9;
-  --accent: #ffffff;
-  --accent-foreground: #000000;
-  --code-background: #0a0a0a;
-  --selection: rgba(255, 255, 255, 0.14);
+  --background: #060b1a;
+  --background-subtle: #0a1226;
+  --card: #0a1226;
+  --card-hover: #0f1a36;
+  --border: #18264a;
+  --border-strong: #27396b;
+  --foreground: #f4f7ff;
+  --muted: #97a3bf;
+  --muted-strong: #c9d2e6;
+  --accent-text: #6aa2ff;
+  --code-background: #0a1226;
+  --selection: rgba(253, 207, 24, 0.3);
 }
 
 @theme inline {
@@ -74,9 +77,11 @@
   --color-muted-strong: var(--muted-strong);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-text: var(--accent-text);
+  --color-highlight: var(--highlight);
   --color-code-background: var(--code-background);
 
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, monospace;
 
   --text-display: clamp(2.5rem, 6vw, 4.5rem);
@@ -102,6 +107,29 @@ body {
    colour would make that flip visible as a fade. */
 .theme-changing * {
   transition: none !important;
+}
+
+/* The wordmark's "Next" is black, so the dark theme shows the copy with it in
+   white. Keyed to the same theme state as the tokens, so the two always agree. */
+.wordmark-dark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .wordmark-light {
+    display: none;
+  }
+  :root:not([data-theme='light']) .wordmark-dark {
+    display: block;
+  }
+}
+
+:root[data-theme='dark'] .wordmark-light {
+  display: none;
+}
+
+:root[data-theme='dark'] .wordmark-dark {
+  display: block;
 }
 
 /*

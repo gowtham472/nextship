@@ -37,7 +37,7 @@ export function DocsSidebar({ onNavigate }: { onNavigate?: () => void }) {
                     aria-current={active ? 'page' : undefined}
                     className={`block rounded-md px-3 py-1.5 text-sm transition-colors ${
                       active
-                        ? 'bg-card-hover font-medium text-foreground'
+                        ? 'bg-card-hover font-medium text-accent-text'
                         : 'text-muted hover:text-foreground'
                     }`}
                   >

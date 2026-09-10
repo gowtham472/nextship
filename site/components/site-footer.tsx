@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { GitHubIcon, Logomark } from '@/components/brand'
+import { GitHubIcon, Wordmark } from '@/components/brand'
 import { REPOSITORY } from '@/components/site-header'
 
 const COLUMNS = [
@@ -39,10 +39,7 @@ export function SiteFooter() {
       <div className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <span className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
-              <Logomark />
-              nextship
-            </span>
+            <Wordmark />
             <p className="mt-3 max-w-52 text-sm leading-relaxed text-muted">
               Your code, your cloud account, your bill, your region.
             </p>

@@ -20,7 +20,7 @@ const TONE: Record<Exclude<Line['kind'], 'blank'>, string> = {
   command: 'text-foreground',
   output: 'text-muted-strong',
   muted: 'text-muted',
-  success: 'text-emerald-500 dark:text-emerald-400',
+  success: 'text-accent-text',
 }
 
 export function Terminal({ title, lines }: { title: string; lines: Line[] }) {

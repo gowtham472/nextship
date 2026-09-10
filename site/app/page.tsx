@@ -95,6 +95,7 @@ export default function HomePage() {
             href="/docs/how-it-works"
             className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted transition-colors hover:text-foreground"
           >
+            <span className="h-1.5 w-1.5 bg-highlight" aria-hidden="true" />
             Built on the stable Next.js Deployment Adapter API
             <ArrowIcon className="h-3 w-3" />
           </Link>
@@ -146,7 +147,7 @@ export default function HomePage() {
           <ol className="mt-12 grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-5">
             {PIPELINE.map((item) => (
               <li key={item.step} className="bg-card p-6 transition-colors hover:bg-card-hover">
-                <span className="font-mono text-xs text-muted">{item.step}</span>
+                <span className="font-mono text-xs text-accent-text">{item.step}</span>
                 <h3 className="mt-3 font-medium">{item.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-muted">{item.body}</p>
               </li>

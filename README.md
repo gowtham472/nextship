@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="brand/nextship-logo-560.jpg" alt="The nextship logo: a gold block N on a blue light burst" width="280">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/nextship-dark.png">
+    <img src="brand/nextship.png" alt="nextship" width="320">
+  </picture>
 </p>
 
 # nextship
@@ -138,10 +141,10 @@ one Dockerfile, so `package` reuses the compile from cache rather than starting 
 Unknown commands and unknown flags are errors. A mistyped option never gets silently
 ignored.
 
-`nextship` on its own draws the logo and points to `detect` and `--help`, in a terminal
-with 256 or more colours and at least 58 columns. Anywhere else, including a pipe, a
-narrower window or `NO_COLOR`, it prints the usage above, so a script sees the text it
-always has.
+`nextship` on its own draws the wordmark and points to `detect` and `--help`, in any
+terminal at least 72 columns wide: in truecolor, 256 or 16 colours as the terminal
+supports, and without colour under `NO_COLOR`. Piped, or in a narrower window, it prints
+the usage above, so a script sees the text it always has.
 
 ### `nextship detect`
 
@@ -755,7 +758,7 @@ CHANGELOG.md           every change, attributed
 LICENSE                Apache-2.0
 SECURITY.md            how to report a vulnerability
 CONTRIBUTING.md        how to work on this
-brand/                 the logo artwork, and the 560 pixel copy the READMEs load
+brand/                 the logo and wordmark, with a white-lettered copy for dark backgrounds
 docs/
   design.md            locked decisions, manifest, image contract, target drivers
   roadmap.md           v0.1 to v1.0, then what is deliberately not built

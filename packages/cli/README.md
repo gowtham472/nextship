@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/gowtham472/nextship/main/brand/nextship-logo-560.jpg" alt="The nextship logo: a gold block N on a blue light burst" width="240">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/gowtham472/nextship/main/brand/nextship-dark.png">
+    <img src="https://raw.githubusercontent.com/gowtham472/nextship/main/brand/nextship.png" alt="nextship" width="280">
+  </picture>
 </p>
 
 # nextship
@@ -55,7 +58,7 @@ images           List pushed images; images prune to remove old ones
 destroy <name>   Destroy the app this project created
 ```
 
-`nextship` on its own draws the logo in a colour terminal; `nextship --help` prints every
+`nextship` on its own draws the wordmark in the terminal; `nextship --help` prints every
 command and option.
 
 ## What it will not do

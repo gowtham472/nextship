@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { GeistMono } from 'geist/font/mono'
-import { GeistSans } from 'geist/font/sans'
+import { Plus_Jakarta_Sans } from 'next/font/google'
 
 import { SiteFooter } from '@/components/site-footer'
 import { SiteHeader } from '@/components/site-header'
@@ -24,6 +24,9 @@ const description =
  */
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
 
+/** The brand's typeface. Fetched once at build time and served with the site. */
+const jakarta = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-jakarta' })
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: { default: `${title}: deploy Next.js to your own cloud`, template: `%s | ${title}` },
@@ -32,20 +35,20 @@ export const metadata: Metadata = {
   authors: [{ name: 'Gowtham' }, { name: 'Ragul D' }],
   keywords: ['next.js', 'deployment', 'digitalocean', 'docker', 'self-hosting', 'adapter'],
   openGraph: { title, description, type: 'website', siteName: title },
-  twitter: { card: 'summary_large_image', title, description },
+  twitter: { card: 'summary', title, description },
   robots: { index: true, follow: true },
 }
 
 export const viewport: Viewport = {
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#000000' },
+    { media: '(prefers-color-scheme: dark)', color: '#060b1a' },
   ],
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${jakarta.variable} ${GeistMono.variable}`} suppressHydrationWarning>
       <head>
         {/*
           Runs before the first paint, so a visitor who chose a theme never sees

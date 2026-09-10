@@ -24,7 +24,7 @@ export const mdxComponents: MDXComponents = {
 
   a: ({ href = '', children, ...props }) => {
     const external = href.startsWith('http')
-    const className = 'font-medium text-foreground underline decoration-border-strong underline-offset-4 transition-colors hover:decoration-foreground'
+    const className = 'font-medium text-accent-text underline decoration-accent-text/30 underline-offset-4 transition-colors hover:decoration-accent-text'
 
     return external ? (
       <a href={href} target="_blank" rel="noreferrer noopener" className={className} {...props}>

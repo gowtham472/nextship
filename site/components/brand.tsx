@@ -1,30 +1,26 @@
 /**
- * Marks and icons.
+ * The wordmark and icons.
  *
  * The icons are inline SVG: they inherit the current colour to survive a theme
- * switch, and an <img> would flash the wrong colour for a frame on every
- * navigation. The logomark is the exception. It keeps the brand's gold and blue in
- * either theme, so it has no colour to inherit, and it is the favicon file itself,
- * so the two cannot drift apart.
+ * switch. The wordmark is the brand's own artwork, `brand/nextship.png`, and its
+ * "Next" is black, so it comes as two images, the second with "Next" in white.
+ * globals.css shows one of them from the same theme state as every colour, set
+ * before the first paint, so the wrong one never flashes.
  *
  * Author: Gowtham
  */
 
 import Image from 'next/image'
 
-import mark from '@/app/icon.svg'
-
-/** The block N on its blue tile, drawn from `brand/nextship-logo.png`. */
-export function Logomark({ className = 'h-5 w-5' }: { className?: string }) {
-  return <Image src={mark} alt="" className={className} />
-}
+import wordmark from '@/assets/nextship.png'
+import wordmarkDark from '@/assets/nextship-dark.png'
 
 export function Wordmark() {
   return (
-    <span className="flex items-center gap-2">
-      <Logomark />
-      <span className="text-[15px] font-semibold tracking-tight">nextship</span>
-    </span>
+    <>
+      <Image src={wordmark} alt="nextship" className="wordmark-light h-6 w-auto" />
+      <Image src={wordmarkDark} alt="nextship" className="wordmark-dark h-6 w-auto" />
+    </>
   )
 }
 

@@ -34,6 +34,9 @@ to a marketing page.
 | `lib/nav.ts` | The reading order, declared rather than derived from the filesystem |
 | `lib/docs.ts` | Loading, validation and heading extraction |
 | `components/mdx.tsx` | How each Markdown element renders |
+| `assets/` | The wordmark from `brand/nextship.png` and its white-lettered twin for the dark theme, copied so the site builds on its own |
+| `app/icon.svg` | The favicon: the wordmark's N in white on the brand blue, beside the yellow square |
+| `app/opengraph-image.png` | `brand/logo.png`, the image a shared link previews with |
 
 ## Adding a page
 
@@ -52,7 +55,9 @@ sequence.
 
 One palette declared once on `:root` as light, with dark redefining only the tokens.
 A component never needs to know which theme it is in, and a colour cannot exist in one
-theme but not the other.
+theme but not the other. The palette is the wordmark's: white, the blue of "Ship"
+(`#005EFF`) and the yellow of its dot (`#FDCF18`), on a deep blue ground in the dark
+theme. Text is set in Plus Jakarta Sans and code in Geist Mono.
 
 An explicit choice is stored in `localStorage` and applied by an inline script before the
 first paint, so a visitor who chose a theme never sees the other one flash. "System" is

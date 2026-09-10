@@ -99,9 +99,9 @@ Domain options
 `
 
 /**
- * Draws the logo when standard output can show it as drawn, and reports whether it
- * did. Anywhere else `nextship` on its own prints the usage, which is what a script
- * running it has always received.
+ * Draws the wordmark when standard output is a terminal wide enough to hold it, and
+ * reports whether it did. Anywhere else `nextship` on its own prints the usage, which
+ * is what a script running it has always received.
  */
 function showLogo(): boolean {
   const depth = logoDepth({
