@@ -4,6 +4,12 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-09-10
+
+A change is refused while the app has a deployment in progress, the README stops
+claiming what nextship does not do, and the repository has a code of conduct, issue
+forms and a pull request template.
+
 ### Added
 
 - **A change is refused while the app has a deployment in progress.** `deploy`,
