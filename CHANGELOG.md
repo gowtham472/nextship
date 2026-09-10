@@ -15,6 +15,14 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   `brand/`, the README and the npm page show it, and the site uses the N as its mark
   and favicon. (Gowtham)
 
+### Changed
+
+- **The site builds as static files for Cloudflare Pages.** Every page was already
+  prerendered, so `npm run build` in `site/` now writes the whole site to `out/`, which
+  a static host serves with no server to run or patch. A `_headers` file sets security
+  headers and year-long caching for the content-hashed assets, and `site/README.md` gives
+  the Pages project settings. (Gowtham)
+
 ## [0.4.3] - 2026-09-10
 
 A change is refused while the app has a deployment in progress, the README stops

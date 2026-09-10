@@ -16,8 +16,7 @@ import mark from '@/app/icon.svg'
 
 /** The block N on its blue tile, drawn from `brand/nextship-logo.png`. */
 export function Logomark({ className = 'h-5 w-5' }: { className?: string }) {
-  // The image optimizer rasterizes bitmaps only; an SVG is served as it is.
-  return <Image src={mark} alt="" className={className} unoptimized />
+  return <Image src={mark} alt="" className={className} />
 }
 
 export function Wordmark() {

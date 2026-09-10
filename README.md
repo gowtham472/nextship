@@ -765,7 +765,7 @@ conformance/           scripts for the official Next.js adapter compatibility su
 packages/
   adapter/             Next.js Adapter API implementation, injected via NEXT_ADAPTER_PATH
   cli/                 every command; runtime/ holds the files copied into a build
-site/                  the marketing site and documentation, a Next.js app
+site/                  the marketing site and documentation, exported as static files
 ```
 
 ## How correctness is proven

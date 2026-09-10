@@ -1,6 +1,6 @@
 # nextship site
 
-The marketing page and documentation.
+The marketing page and documentation, exported as static files for Cloudflare Pages.
 
 Not deployed yet, which is why nothing here names a domain. Absolute URLs for Open
 Graph images come from `NEXT_PUBLIC_SITE_URL`, which defaults to `http://localhost:3000`
@@ -62,6 +62,27 @@ following the operating system when it changes later.
 ## Building
 
 ```bash
-npm run build      # every page is prerendered; there is nothing to render per request
+npm run build      # writes every page to out/ as static files
 npm run typecheck
 ```
+
+## Deploying
+
+`out/` is the whole site, including `_headers` from `public/`, which sets security headers
+and year-long caching for the content-hashed assets. To deploy it, create a Cloudflare
+Pages project connected to this repository, with the Cloudflare GitHub app limited to this
+repository alone:
+
+| Setting | Value |
+|---|---|
+| Framework preset | Next.js (Static HTML Export) |
+| Production branch | `main` |
+| Root directory | `site` |
+| Build command | `npm run build` |
+| Build output directory | `out` |
+| Build watch paths | include `site/*` |
+| Environment variables | `NODE_VERSION` set to `22`, `NEXT_PUBLIC_SITE_URL` set to the site's address |
+
+Pages then builds on every push to `main` that touches `site/`, gives each pull request its
+own preview address, and needs no deploy token. Choose Git integration when creating the
+project: a project made by direct upload cannot be connected to a repository later.

@@ -1,0 +1,12 @@
+# Response headers for Cloudflare Pages, which reads this file from the build output.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+# Every file under /_next/static/ is named by a hash of its content, so a cached
+# copy can never be stale.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
