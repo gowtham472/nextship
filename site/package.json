@@ -7,7 +7,6 @@
   "author": "Gowtham <gowtham9112006@gmail.com>",
   "contributors": ["Ragul D"],
   "engines": { "node": ">=22" },
-  "packageManager": "npm@10.9.2",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

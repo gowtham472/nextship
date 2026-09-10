@@ -23,12 +23,6 @@ package that does not depend on any of it.
 So the site installs its own dependencies with npm and is deployed on its own. The cost is
 one extra `npm install`; the benefit is that the publish path cannot be broken by a change
 to a marketing page.
-
-`package.json` names npm as its package manager for the same reason. A tool that looks
-for one walks up from `site/`, and without the field it reaches the workspace's pnpm:
-Cloudflare's build did exactly that, installed the CLI packages instead of the site, and
-failed with `next: not found`.
-
 ## Layout
 
 | Path | What lives there |
@@ -88,10 +82,16 @@ repository alone:
 | Framework preset | Next.js (Static HTML Export) |
 | Production branch | `main` |
 | Root directory | `site` |
-| Build command | `npm run build` |
+| Build command | `npm ci && npm run build` |
 | Build output directory | `out` |
 | Build watch paths | include `site/*` |
-| Environment variables | `NODE_VERSION` set to `22`, `NEXT_PUBLIC_SITE_URL` set to the site's address |
+| Environment variables | `NODE_VERSION` set to `22`, `SKIP_DEPENDENCY_INSTALL` set to `1`, `NEXT_PUBLIC_SITE_URL` set to the site's address |
+
+Cloudflare installs dependencies itself before the build command runs, and it chooses
+pnpm for this repository whatever `site/` declares: it installed the workspace's CLI
+packages instead of the site, and the build failed with `next: not found`.
+`SKIP_DEPENDENCY_INSTALL` turns that step off, and the build command installs the site
+from its own lockfile with `npm ci`.
 
 Pages then builds on every push to `main` that touches `site/`, gives each pull request its
 own preview address, and needs no deploy token. Choose Git integration when creating the
