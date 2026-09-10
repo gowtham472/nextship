@@ -758,7 +758,7 @@ CHANGELOG.md           every change, attributed
 LICENSE                Apache-2.0
 SECURITY.md            how to report a vulnerability
 CONTRIBUTING.md        how to work on this
-brand/                 the logo and wordmark, with a white-lettered copy for dark backgrounds
+brand/                 the logo, wordmark and favicon, with a white-lettered wordmark for dark backgrounds
 docs/
   design.md            locked decisions, manifest, image contract, target drivers
   roadmap.md           v0.1 to v1.0, then what is deliberately not built

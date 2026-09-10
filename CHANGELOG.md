@@ -21,13 +21,15 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   prerendered, so `npm run build` in `site/` now writes the whole site to `out/`, which
   a static host serves with no server to run or patch. A `_headers` file sets security
   headers and year-long caching for the content-hashed assets, and `site/README.md` gives
-  the Pages project settings. (Gowtham)
+  the Pages project settings. `site/package.json` names npm as its package manager:
+  without it, Cloudflare's build walked up to the repository's pnpm workspace, installed
+  the CLI packages instead of the site, and failed with `next: not found`. (Gowtham)
 
 - **The site uses the brand's typeface and colours.** Text is set in Plus Jakarta
   Sans; the palette is white, the brand blue `#005EFF` and the yellow `#FDCF18`, with a
-  deep blue dark theme; and the header and footer show the wordmark. The favicon is a
-  white N on the brand blue beside the yellow square, and `brand/logo.png` is the image
-  a shared link previews with. (Gowtham)
+  deep blue dark theme; and the header and footer show the wordmark. The favicon and home
+  screen icon come from `brand/nextship-favicon.png`, and `brand/logo.png` is the image a
+  shared link previews with. (Gowtham)
 
 ## [0.4.3] - 2026-09-10
 

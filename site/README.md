@@ -24,6 +24,11 @@ So the site installs its own dependencies with npm and is deployed on its own. T
 one extra `npm install`; the benefit is that the publish path cannot be broken by a change
 to a marketing page.
 
+`package.json` names npm as its package manager for the same reason. A tool that looks
+for one walks up from `site/`, and without the field it reaches the workspace's pnpm:
+Cloudflare's build did exactly that, installed the CLI packages instead of the site, and
+failed with `next: not found`.
+
 ## Layout
 
 | Path | What lives there |
@@ -35,7 +40,7 @@ to a marketing page.
 | `lib/docs.ts` | Loading, validation and heading extraction |
 | `components/mdx.tsx` | How each Markdown element renders |
 | `assets/` | The wordmark from `brand/nextship.png` and its white-lettered twin for the dark theme, copied so the site builds on its own |
-| `app/icon.svg` | The favicon: the wordmark's N in white on the brand blue, beside the yellow square |
+| `app/icon.png`, `app/apple-icon.png` | The favicon and home screen icon: `brand/nextship-favicon.png` scaled to 96 and 180 pixels |
 | `app/opengraph-image.png` | `brand/logo.png`, the image a shared link previews with |
 
 ## Adding a page
