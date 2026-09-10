@@ -4,6 +4,10 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-10
+
+Packaging and project detection fixes.
+
 ### Fixed
 
 - **A project inside another project's workspace was treated as a member of it.** `detect`
