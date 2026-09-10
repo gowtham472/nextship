@@ -99,6 +99,10 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
 
   // ---------------------------------------------------------------- execute
 
+  // Checked before building rather than only at the write, so a deploy that would
+  // be refused says so now instead of after a full build and push.
+  if (owned) await client.assertIdle(owned.id)
+
   if (willCreateRegistry) {
     step(`Creating an image store named "${registryName}" (Basic, $5/month)`)
     await client.prepareImageStore(registryName, region, { dryRun: false })

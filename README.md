@@ -3,7 +3,7 @@
 [![ci](https://github.com/gowtham472/nextship/actions/workflows/ci.yml/badge.svg)](https://github.com/gowtham472/nextship/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/nextship-cli)](https://www.npmjs.com/package/nextship-cli)
 
-> Vercel's zero-config experience, in your own DigitalOcean or AWS account.
+> Vercel's zero-config experience, in your own DigitalOcean account.
 > Your code, your data, your bill, your region.
 
 nextship takes a Next.js app and puts it on infrastructure you own, with no
@@ -56,7 +56,7 @@ would add breadth on top of an unproven base.
 | **Node.js 22 or newer** | Runs the CLI | Declared in `engines`, so your package manager warns or refuses |
 | **Docker 23 or newer** | Every build runs inside BuildKit, so nothing is compiled on your machine | Yes. nextship queries the daemon and refuses older versions by name |
 | **Next.js 16.2 or newer** | The Deployment Adapter API became stable in 16.2 | Yes, with the reason in the error |
-| **A DigitalOcean API token** | Only for `deploy`, `rollback` and `logs` | Yes, the error names the variable |
+| **A DigitalOcean API token** | Only for the commands that read or change your account | Yes, the error names the variable |
 
 Docker must be running. The local commands need nothing else.
 
@@ -567,6 +567,14 @@ structural rather than advisory:
   keeps its current value.
 - **A failed deployment leaves the previous revision serving.** Nothing is rolled back
   or deleted automatically.
+- **A change never lands on top of one still in progress.** `deploy`, `env push`,
+  `env rm`, `domain add` and `domain rm` refuse while the app has an unfinished
+  deployment, and `deploy` checks before it spends time building. `rollback` is
+  exempt: it is how you get away from a bad deployment, so App Platform's own rollback
+  validation decides.
+- **Waiting has a deadline.** `deploy` stops waiting after 15 minutes and `rollback`
+  after 10, saying the deployment may still succeed. Nothing is cancelled, rolled back
+  or deleted when it stops waiting.
 - **Secrets never enter an image layer.** Env files and the Server Actions key are
   BuildKit secret mounts, which BuildKit deliberately excludes from cache keys.
 - **The registry token never reaches a command line.** It is written to a temporary
@@ -677,11 +685,10 @@ deploy:
 - **Logs are not history.** `--follow` streams live output, but a replaced deployment
   still takes its past output with it. Retaining it needs forwarding to an external
   service, which is not built.
-- **A release is waited on without a deadline.** A deployment that never reaches a
-  terminal phase leaves `deploy` polling until you interrupt it. Nothing is corrupted,
-  and the deployment id is already printed, so the console shows the truth.
-- **Nothing locks a project against concurrent runs.** Two `deploy` commands started at
-  once on the same project will both build, both push and both release.
+- **Two changes written in the same instant can both be accepted.** Every command that
+  changes the app refuses while a deployment is in progress, but two that write at
+  exactly the same moment can both pass that check, and App Platform then keeps the
+  later one.
 - **`public/` ships inside the image**, 78 MB of it on the real project. The container
   serves it correctly; moving it to a CDN is a performance change, deferred to v5.
 - **An app that prerenders nothing is health checked on a rendered route.** The path is
@@ -693,20 +700,17 @@ deploy:
 ## Architecture
 
 ```
-AWS            DigitalOcean     Fly / Hetzner / k8s (later)
-  |                 |                    |
-  v                 v                    v
-Lightsail      App Platform          Machines
-  +-------- same Docker image ----------+
-             next start in a container
-
-Shared: S3/Spaces (assets), CloudFront/Spaces CDN (static)
+your machine or CI                         your DigitalOcean account
+detect -> build in Docker -> prune  ---->  container registry
+          adapter injected                 App Platform runs next start
 ```
 
-One image, one Node server, one lifecycle, with per-cloud drivers behind a single
-interface. DigitalOcean has no Lambda, so a serverless-first design could not port
-there at all, and `next start` in a single process already supports every Next.js
-feature correctly.
+One image, one Node server, one lifecycle. DigitalOcean App Platform is the only target
+today. Every platform-specific call sits behind a single driver interface, so a second
+cloud is a new driver rather than a rewrite. Static files are served by the same
+container; there is no CDN tier. DigitalOcean has no Lambda, so a serverless-first
+design could not port there at all, and `next start` in a single process already
+supports every Next.js feature correctly.
 
 **v1 ships no custom router.** The Next.js server is the router: middleware, dynamic
 segments, ISR lookup, the `rsc` and `_rsc` cache-key discipline, PPR resume, and image
@@ -756,27 +760,31 @@ packages/
 ## How correctness is proven
 
 ```bash
-pnpm build      # compile both packages
-pnpm typecheck  # no emit
-pnpm test       # 124 unit tests
+pnpm build                                  # compile both packages
+pnpm typecheck                              # no emit
+pnpm test                                   # unit tests
+node packages/cli/scripts/verify-pack.mjs   # pack, install, run the command
 ```
 
-0. **Unit tests**, 124 cases with `node:test`: detection against on-disk fixtures,
-   Dockerfile and ignore rendering for both layouts, build identity, the `docker build`
-   argument list, registry region matching, rollback target selection and deployment
-   summarizing, and the prune script as a process including its failure modes. One
-   skips where the OS does not permit creating symlinks, which is the default on
-   Windows without developer mode.
-1. **Next.js adapter compatibility suite**, the official one, the same suite Vercel's
-   adapter runs against. Results to be published as a support matrix.
-2. **Streaming conformance test**, a slow-Suspense route deployed to every target,
-   asserting the first byte arrives well before the last. This catches buffering
-   proxies, which otherwise break PPR silently.
-3. **Per-target end-to-end runs** on real AWS and real DigitalOcean on every pull
-   request.
+0. **Unit tests** with `node:test`: detection against on-disk fixtures
+   including workspace membership, Dockerfile and ignore rendering for both layouts,
+   build identity, the `docker build` argument list, registry region matching,
+   rollback target selection, deployment summaries and in-progress detection,
+   undeclared package detection, and the prune script as a process including its
+   failure modes. CI runs them on every push and pull request, on Linux and Windows
+   with Node 22 and 24.
+1. **The packed package**, installed from its own tarball into an empty project on
+   every push and pull request, checking that the README, LICENSE, NOTICE and adapter
+   are present and that the `nextship` command runs.
+2. **The Next.js adapter compatibility suite**, the official one, the same suite
+   Vercel's adapter runs against. Results below.
+3. **Live verification on real containers and a real DigitalOcean app**, by hand:
+   every route serves, image optimization produces WebP, streaming does not buffer,
+   ISR works both time-based and on-demand, Server Actions execute, and `after()`
+   runs.
 
-Gate 0 runs today, and streaming, ISR, on-demand revalidation, Server Actions and
-`after()` are verified on real containers. **Gate 1 has now run.**
+Not automated yet: an end-to-end run against a real cloud account on every change,
+which needs a dedicated account to run against.
 
 ### Compatibility suite results
 

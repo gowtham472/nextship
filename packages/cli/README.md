@@ -61,6 +61,8 @@ destroy <name>   Destroy the app this project created
   `--yes`.
 - **Send your code anywhere** but your own cloud account. There is no nextship server and
   no telemetry.
+- **Change the app while a deployment is still in progress.** It refuses and names the
+  deployment rather than replacing it part way through.
 
 ## Compatibility
 

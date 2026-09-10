@@ -1,5 +1,7 @@
 # Contributing
 
+Everyone taking part in this project follows its [code of conduct](./CODE_OF_CONDUCT.md).
+
 Read [`AGENTS.md`](./AGENTS.md) first. It is the binding rule set for this repository and
 applies to humans and AI assistants alike. This file is the practical companion: how to
 get set up and what a change is expected to look like.

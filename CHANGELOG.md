@@ -6,12 +6,40 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Added
 
+- **A change is refused while the app has a deployment in progress.** `deploy`,
+  `env push`, `env rm`, `domain add` and `domain rm` each wrote the app spec without
+  checking, so a second command could replace a release part way through. They now
+  refuse, naming the deployment and its phase, and `deploy` checks before it builds
+  rather than after. App Platform reports the unfinished deployment on the app itself,
+  so the check holds across machines rather than only within one. `rollback` is exempt,
+  because it is how you get away from a bad deployment. (Gowtham)
+
+- **A code of conduct, issue forms and a pull request template.** GitHub's community
+  profile scored the repository 71%, missing all three. The code of conduct adopts the
+  Contributor Covenant 2.1 with a private reporting address, the bug form asks for the
+  version, environment and `nextship detect` output a report needs, and security reports
+  are routed to private advisories rather than public issues. (Gowtham)
+
 - **Continuous integration on every push and pull request.** Tests ran only in the release
   workflow, so a broken commit on `main` went unnoticed until the next tag. `ci.yml`
   builds, typechecks and tests on Linux and Windows with Node 22 and 24, packs the CLI and
   installs the tarball into an empty project, and builds the site. The packed-install
   check moved into `packages/cli/scripts/verify-pack.mjs`, which the release workflow
   runs too, so a pull request is held to the same bar as a release. (Gowtham)
+
+### Docs
+
+- **A limitation that did not exist was listed as one.** The README and the 0.4.0
+  changelog said a release was waited on without a deadline. `deploy` has always stopped
+  waiting after 15 minutes and `rollback` after 10; the claim came from an audit that
+  searched one file and missed the one holding the timeout. Removed. (Gowtham)
+
+- **The README claimed support and tests that do not exist.** It described nextship as
+  running in "your own DigitalOcean or AWS account", drew AWS Lightsail and a shared S3
+  and CDN tier into the architecture as though they were built, counted 124 tests where
+  there are 157, and listed end-to-end runs "on real AWS and real DigitalOcean on every
+  pull request". It now describes DigitalOcean App Platform as the only target, static
+  files as served by the container, and proof as what actually runs. (Gowtham)
 
 ## [0.4.2] - 2026-09-10
 

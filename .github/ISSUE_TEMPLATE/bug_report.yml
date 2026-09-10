@@ -1,0 +1,44 @@
+name: Bug report
+description: Something nextship does is wrong, or fails when it should not.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report a security problem here. Use a private security advisory instead:
+        https://github.com/gowtham472/nextship/security/advisories/new
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The command you ran and everything it printed. Remove tokens and secrets before pasting.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: nextship version
+      description: The output of `nextship --version`.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Node.js, Docker and Next.js versions.
+      placeholder: Windows 11, Node 24.18, Docker 29.7, Next.js 16.3.4
+    validations:
+      required: true
+  - type: textarea
+    id: detect
+    attributes:
+      label: Output of `nextship detect`
+      description: Run it in the project. It reads the project and changes nothing.
+      render: text

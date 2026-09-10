@@ -152,6 +152,7 @@ export class DigitalOceanTarget implements Target {
     // scratch would drop anything added in the control panel, because the API
     // replaces the whole spec rather than patching it.
     const current = await this.api.getAppSpec(appId)
+    await this.assertIdle(appId)
     const updated = await this.api.updateApp(appId, mergeAppSpec(current, spec))
     return { appId, deploymentId: updated.deploymentId }
   }
@@ -161,6 +162,17 @@ export class DigitalOceanTarget implements Target {
       failed: 'The previous revision keeps serving. Check the build and runtime logs in the DigitalOcean control panel.',
       timedOut: 'It may still succeed. Nothing was rolled back or deleted. Check the control panel.',
     })
+  }
+
+  async assertIdle(appId: string): Promise<void> {
+    const running = (await this.api.getAppStatus(appId))?.deploymentInProgress
+    if (!running) return
+
+    throw new NextshipError(
+      `This app already has a deployment in progress: ${running.id}, ${running.phase.toLowerCase().replace(/_/g, ' ')}.`,
+      'Wait for it to finish, then run the command again; a change written now would replace it part way through. ' +
+        'Its progress shows in the DigitalOcean control panel.'
+    )
   }
 
   async address(appId: string): Promise<AppAddress | null> {
@@ -304,11 +316,13 @@ export class DigitalOceanTarget implements Target {
 
   async setEnv(appId: string, values: Map<string, string>): Promise<void> {
     const spec = await this.requireSpec(appId)
+    await this.assertIdle(appId)
     await this.api.updateApp(appId, withServiceEnvs(spec, mergeEnvs(serviceEnvs(spec), values)))
   }
 
   async unsetEnv(appId: string, keys: string[]): Promise<void> {
     const spec = await this.requireSpec(appId)
+    await this.assertIdle(appId)
     await this.api.updateApp(appId, withServiceEnvs(spec, withoutEnvs(serviceEnvs(spec), keys)))
   }
 
@@ -334,6 +348,7 @@ export class DigitalOceanTarget implements Target {
       type: effectiveRole(specDomains(spec).length, options.primary),
       minimum_tls_version: options.minimumTls,
     }
+    await this.assertIdle(appId)
     await this.api.updateApp(appId, addDomainToSpec(spec, entry))
 
     return {
@@ -350,6 +365,7 @@ export class DigitalOceanTarget implements Target {
 
   async detachDomain(appId: string, domain: string): Promise<void> {
     const spec = await this.requireSpec(appId)
+    await this.assertIdle(appId)
     await this.api.updateApp(appId, removeDomainFromSpec(spec, domain))
   }
 

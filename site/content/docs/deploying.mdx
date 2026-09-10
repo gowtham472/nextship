@@ -52,7 +52,9 @@ by checking a real spec before writing to it: an `ingress` block would have been
 ## It waits for the app to actually serve
 
 A release is not finished when the API accepts it. nextship polls until the deployment
-reports that it is live, then prints the URL.
+reports that it is live, then prints the URL. It stops waiting after 15 minutes and says
+so; the deployment is not cancelled and may still finish, so the control panel has the
+final word.
 
 The URL it prints is the platform host, not the field the API calls `live_url`. That field
 becomes your primary custom domain the moment you attach one, which means it points at a
@@ -63,3 +65,14 @@ name that does not resolve until you have created the DNS record.
 It only ever touches the app recorded in `nextship.json`. It creates nothing else, and it
 deletes nothing at all. If the recorded app is missing, it says so and stops rather than
 creating a replacement that would leave the original orphaned and billing.
+
+## One change at a time
+
+`deploy`, `env push`, `env rm`, `domain add` and `domain rm` refuse while the app has a
+deployment still in progress, because a second change would replace the first part way
+through. `deploy` checks before it builds, so it says so immediately rather than after a
+full build and push.
+
+`rollback` is the exception. It is how you get away from a bad deployment, including one
+still rolling out, so whether it is possible is left to App Platform's own rollback
+validation.

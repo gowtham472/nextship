@@ -135,10 +135,40 @@ export interface AppStatus {
   /** Hostname only, which is what a CNAME record needs. */
   defaultIngress: string | null
   domains: Array<{ domain: string; phase: string }>
+  /** A deployment App Platform has not finished, or null. See `deploymentInProgress`. */
+  deploymentInProgress: { id: string; phase: string } | null
 }
 
 /** A CNAME target is a hostname, and App Platform reports a URL. */
 const stripScheme = (value: string | null): string | null => (value ? value.replace(/^https?:\/\//, '') : null)
+
+/** How App Platform names a deployment on the app object. */
+interface DeploymentRef {
+  id?: string
+  phase?: string
+}
+
+/** Phases a deployment never leaves, so one reported in them is not in progress. */
+const FINISHED_PHASES = new Set(['ACTIVE', 'SUPERSEDED', 'ERROR', 'CANCELED'])
+
+/**
+ * The deployment App Platform has not finished, if any.
+ *
+ * `in_progress_deployment` is one being built or rolled out, and
+ * `pending_deployment` one accepted but not yet started. Either means a spec
+ * written now would replace it part way through. It is read from the app rather
+ * than from a local lock, so every machine that asks gets the same answer.
+ */
+export function deploymentInProgress(
+  app: { in_progress_deployment?: DeploymentRef; pending_deployment?: DeploymentRef } | undefined
+): { id: string; phase: string } | null {
+  for (const entry of [app?.in_progress_deployment, app?.pending_deployment]) {
+    if (!entry?.id) continue
+    const phase = entry.phase ?? 'PENDING'
+    if (!FINISHED_PHASES.has(phase)) return { id: entry.id, phase }
+  }
+  return null
+}
 
 export class DigitalOcean {
   constructor(private readonly token: string) {}
@@ -387,6 +417,8 @@ export class DigitalOcean {
         default_ingress?: string
         live_url?: string
         domains?: Array<{ spec?: { domain?: string }; phase?: string; progress?: { steps?: unknown[] } }>
+        in_progress_deployment?: DeploymentRef
+        pending_deployment?: DeploymentRef
       }
     }>('GET', `apps/${id}`)
     if (result.status === 404) return null
@@ -398,6 +430,7 @@ export class DigitalOcean {
       domains: (app?.domains ?? [])
         .map((entry) => ({ domain: entry.spec?.domain ?? '', phase: entry.phase ?? 'UNKNOWN' }))
         .filter((entry) => entry.domain.length > 0),
+      deploymentInProgress: deploymentInProgress(app),
     }
   }
 

@@ -179,6 +179,16 @@ export interface Target {
   /** Waits for a deployment to finish, reporting each phase change as it goes. */
   awaitRelease(appId: string, deploymentId: string, onPhase: PhaseReporter): Promise<void>
 
+  /**
+   * Refuses when the app has a deployment the platform has not finished, since a
+   * change written now would replace it part way through. Every command that
+   * changes the app calls it except rollback: rollback is how you get away from a
+   * bad deployment, so whether it is possible is left to the platform's own
+   * rollback validation. Two changes written in the same instant can still both be
+   * accepted, and the platform then keeps the later one.
+   */
+  assertIdle(appId: string): Promise<void>
+
   /** Where the app can be reached, or null if it no longer exists. */
   address(appId: string): Promise<AppAddress | null>
 

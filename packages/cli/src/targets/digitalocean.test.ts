@@ -10,7 +10,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildAppSpec, matchRegistryRegion, mergeAppSpec, summarizeDeployment } from './digitalocean.js'
+import { buildAppSpec, deploymentInProgress, matchRegistryRegion, mergeAppSpec, summarizeDeployment } from './digitalocean.js'
 
 /** Exactly what the API returned, order included. */
 const AVAILABLE = ['ric1', 'fra1', 'ams3', 'nyc3', 'sfo3', 'sgp1', 'syd1', 'blr1', 'sfo2', 'atl1', 'tor1', 'lon1', 'mkc1']
@@ -241,4 +241,33 @@ test('a build with nothing prerendered falls back to the home page', () => {
 
     assert.equal(spec.services[0].health_check.http_path, '/', 'a probe still has somewhere to go')
   }
+})
+
+// Every command that changes the app asks this first. A wrong "idle" lets a second
+// write replace a release part way through; a wrong "busy" blocks every command
+// until the platform clears it, so both directions are pinned.
+test('an app with no unfinished deployment is idle', () => {
+  assert.equal(deploymentInProgress({}), null)
+  assert.equal(deploymentInProgress(undefined), null)
+})
+
+test('a deployment being built or rolled out is in progress', () => {
+  assert.deepEqual(deploymentInProgress({ in_progress_deployment: { id: 'd1', phase: 'DEPLOYING' } }), {
+    id: 'd1',
+    phase: 'DEPLOYING',
+  })
+})
+
+test('a deployment accepted but not yet started is in progress', () => {
+  assert.deepEqual(deploymentInProgress({ pending_deployment: { id: 'd2' } }), { id: 'd2', phase: 'PENDING' })
+})
+
+test('a deployment reported in a finished phase does not block', () => {
+  for (const phase of ['ACTIVE', 'SUPERSEDED', 'ERROR', 'CANCELED']) {
+    assert.equal(deploymentInProgress({ in_progress_deployment: { id: 'd3', phase } }), null, phase)
+  }
+})
+
+test('an entry without an id is ignored rather than blocking on nothing', () => {
+  assert.equal(deploymentInProgress({ in_progress_deployment: { phase: 'BUILDING' } }), null)
 })
