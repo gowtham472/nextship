@@ -1,7 +1,7 @@
 /**
  * @nextship/cli: terminal logo
  *
- * The NextShip logo drawn in character cells: the gold block N on the blue light
+ * The nextship logo drawn in character cells: the gold block N on the blue light
  * burst, with the wordmark and tagline beneath it, laid out as in
  * `brand/nextship-logo.png`. Each cell holds two pixels: an upper half block whose
  * foreground is the top pixel and whose background is the bottom one, which makes

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/gowtham472/nextship/main/brand/nextship-logo-560.jpg" alt="The NextShip logo: a gold block N on a blue light burst" width="240">
+  <img src="https://raw.githubusercontent.com/gowtham472/nextship/main/brand/nextship-logo-560.jpg" alt="The nextship logo: a gold block N on a blue light burst" width="240">
 </p>
 
 # nextship

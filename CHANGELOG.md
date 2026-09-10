@@ -7,7 +7,7 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 ### Added
 
 - **The logo, in the terminal and across the project.** `nextship` on its own draws
-  the NextShip logo, the gold block N on the blue light burst with the wordmark and
+  the nextship logo, the gold block N on the blue light burst with the wordmark and
   tagline, in character cells laid out and coloured from `brand/nextship-logo.png`:
   truecolor where the terminal supports it and the 256 colour palette where it does
   not. A pipe, `NO_COLOR`, a 16 colour terminal or a window narrower than the logo
