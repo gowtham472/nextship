@@ -16,3 +16,7 @@ site/.next
 site/next-env.d.ts
 
 .claude/
+
+# Copied from the repository root at pack time; the root copies are the source.
+packages/cli/LICENSE
+packages/cli/NOTICE

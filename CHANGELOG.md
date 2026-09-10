@@ -4,6 +4,27 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A project inside another project's workspace was treated as a member of it.** `detect`
+  took the nearest ancestor with a `pnpm-workspace.yaml` or a `workspaces` field as the
+  build root without checking whether its patterns include the project, so an npm project
+  kept outside a pnpm monorepo would have been built from the monorepo root, with pnpm and
+  a lockfile that does not know it exists. Membership is now checked, including `**` and
+  `!` exclusions, and the nearest declaration is authoritative: when it does not include
+  the project, the project is standalone. (Gowtham)
+
+- **Messages pointed installed users at files they do not have.** The missing token error,
+  a `doctor` finding and the header of the generated Dockerfile named relative `docs/`
+  paths, which exist in the repository and not in an npm install. They are absolute URLs
+  now, and a test scans the source so a new one fails the build. (Gowtham)
+
+- **The published package carried no README, LICENSE or NOTICE.** npm publishes the package
+  directory rather than the repository, so the npm page showed no README and the two files
+  Apache-2.0 requires to travel with the work were left behind. The package has its own
+  README, LICENSE and NOTICE are copied from the root at pack time, and the release check
+  fails if any of the three is missing. (Gowtham)
+
 ## [0.4.1] - 2026-09-10
 
 Published as `nextship-cli`. The command it installs is still `nextship`.

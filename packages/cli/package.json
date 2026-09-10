@@ -30,12 +30,14 @@
     "dist",
     "!dist/**/*.test.*",
     "runtime",
-    "!runtime/*.log"
+    "!runtime/*.log",
+    "NOTICE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/bundle-adapter.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test \"dist/**/*.test.js\""
+    "test": "node --test \"dist/**/*.test.js\"",
+    "prepack": "node scripts/copy-legal.mjs"
   },
   "repository": {
     "type": "git",

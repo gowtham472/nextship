@@ -190,20 +190,112 @@ const dependsOnNext = (pkg: Record<string, any>): boolean =>
  * Finds the workspace root above the project, or the project itself when it is
  * standalone. A package inside a monorepo cannot be built on its own: the
  * lockfile and every sibling manifest the installer needs live at the root.
+ *
+ * A workspace declaration is only a root for the projects its patterns include,
+ * and the nearest one is authoritative: when it does not include this project,
+ * the project is standalone even though it sits inside the directory. Taking the
+ * first ancestor with any declaration built an npm project kept outside a pnpm
+ * monorepo from the monorepo root, with pnpm and a lockfile that does not know
+ * the project exists.
  */
 async function findWorkspaceRoot(projectRoot: string): Promise<string> {
   let dir = path.dirname(projectRoot)
 
   for (;;) {
-    if ((await readTextIfPresent(path.join(dir, 'pnpm-workspace.yaml'))) !== null) return dir
-
-    const pkg = await readJsonIfPresent(path.join(dir, 'package.json'))
-    if (pkg?.workspaces) return dir
+    const patterns = await workspacePatterns(dir)
+    if (patterns !== null) {
+      return includesProject(patterns, toPosix(path.relative(dir, projectRoot))) ? dir : projectRoot
+    }
 
     const parent = path.dirname(dir)
     if (parent === dir) return projectRoot
     dir = parent
   }
+}
+
+/**
+ * The member patterns a directory declares, or null when it declares no
+ * workspace. pnpm reads pnpm-workspace.yaml and ignores the workspaces field, so
+ * the file takes precedence. A pnpm-workspace.yaml with no packages list is valid,
+ * holding only settings, and makes the root its sole member.
+ */
+async function workspacePatterns(dir: string): Promise<string[] | null> {
+  const pnpmWorkspace = await readTextIfPresent(path.join(dir, 'pnpm-workspace.yaml'))
+  if (pnpmWorkspace !== null) return parsePnpmWorkspacePackages(pnpmWorkspace)
+
+  const workspaces = (await readJsonIfPresent(path.join(dir, 'package.json')))?.workspaces
+  const isString = (entry: unknown): entry is string => typeof entry === 'string'
+
+  if (Array.isArray(workspaces)) return workspaces.filter(isString)
+  // Yarn classic also accepts { packages: [...], nohoist: [...] }.
+  if (Array.isArray(workspaces?.packages)) return workspaces.packages.filter(isString)
+  return null
+}
+
+/**
+ * The `packages` list from pnpm-workspace.yaml, in block or flow style.
+ *
+ * Deliberately narrow rather than a YAML parser: the CLI carries one runtime
+ * dependency, and this key has two shapes in practice. Anything it cannot read
+ * yields no patterns, which makes a nested project standalone, so the failure
+ * mode is a build from the project directory rather than from a guessed root.
+ */
+function parsePnpmWorkspacePackages(yaml: string): string[] {
+  const unquote = (value: string): string => value.trim().replace(/^(['"])(.*)\1$/, '$2')
+  const lines = yaml.split(/\r?\n/).map((line) => line.replace(/(^|\s)#.*$/, ''))
+
+  const patterns: string[] = []
+  let inPackages = false
+
+  for (const line of lines) {
+    const flow = /^packages\s*:\s*\[(.*)\]\s*$/.exec(line)
+    if (flow) return (flow[1] ?? '').split(',').map(unquote).filter(Boolean)
+
+    if (/^packages\s*:\s*$/.test(line)) {
+      inPackages = true
+      continue
+    }
+    if (!inPackages || line.trim() === '') continue
+
+    const item = /^\s+-\s+(.+)$/.exec(line)
+    if (item?.[1]) patterns.push(unquote(item[1]))
+    else if (/^\S/.test(line)) break
+  }
+
+  return patterns
+}
+
+/** Whether a member pattern list includes the project at `relative`. A leading `!` excludes. */
+function includesProject(patterns: string[], relative: string): boolean {
+  const matches = (pattern: string): boolean =>
+    globToRegExp(pattern.replace(/^\.\//, '').replace(/\/+$/, '')).test(relative)
+
+  const included = patterns.filter((pattern) => !pattern.startsWith('!'))
+  const excluded = patterns.filter((pattern) => pattern.startsWith('!')).map((pattern) => pattern.slice(1))
+
+  return included.some(matches) && !excluded.some(matches)
+}
+
+/** `*` matches within one path segment and `**` across any number of them. */
+function globToRegExp(glob: string): RegExp {
+  let source = ''
+
+  for (let index = 0; index < glob.length; index += 1) {
+    const char = glob[index] ?? ''
+    if (char === '*' && glob[index + 1] === '*') {
+      const slash = glob[index + 2] === '/'
+      source += slash ? '(?:.*/)?' : '.*'
+      index += slash ? 2 : 1
+    } else if (char === '*') {
+      source += '[^/]*'
+    } else if (char === '?') {
+      source += '[^/]'
+    } else {
+      source += char.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    }
+  }
+
+  return new RegExp(`^${source}$`)
 }
 
 const toPosix = (value: string): string => value.split(path.sep).join('/')

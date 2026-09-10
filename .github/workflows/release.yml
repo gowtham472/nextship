@@ -99,13 +99,17 @@ jobs:
           # these checks and not others, and the ones left behind looked for a
           # directory that no longer existed.
 
-          # The adapter must resolve from the packed tree rather than the workspace.
+          # The adapter must resolve from the packed tree rather than the workspace,
+          # and README, LICENSE and NOTICE must travel with it: npm publishes the
+          # package directory, and Apache-2.0 requires the last two to go with the work.
           node -e "
             const fs = require('node:fs')
             const path = require('node:path')
-            const adapter = path.join('node_modules', process.argv[1], 'runtime', 'adapter.mjs')
-            if (!fs.existsSync(adapter)) { console.error('adapter missing from the published package'); process.exit(1) }
-            console.log('installed package carries its adapter')
+            const dir = path.join('node_modules', process.argv[1])
+            const required = ['runtime/adapter.mjs', 'README.md', 'LICENSE', 'NOTICE']
+            const missing = required.filter((file) => !fs.existsSync(path.join(dir, file)))
+            if (missing.length > 0) { console.error('missing from the published package: ' + missing.join(', ')); process.exit(1) }
+            console.log('installed package carries ' + required.join(', '))
           " "$NAME"
 
           # Run the installed binary, not dist/index.js. npm drops a malformed bin

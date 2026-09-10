@@ -285,3 +285,95 @@ test('a manifest with no dependency section at all is handled', () => {
   assert.deepEqual(localDependencyPaths({}, '/app', '/app'), [])
   assert.deepEqual(localDependencyPaths({ dependencies: null }, '/app', '/app'), [])
 })
+
+
+// A workspace declaration is only a root for the projects its patterns include.
+// An npm project kept outside a pnpm workspace was detected as a member and would
+// have been built from the monorepo root with the monorepo's lockfile.
+test('a project the ancestor workspace does not include is standalone', async () => {
+  const root = await fixture({
+    'package.json': JSON.stringify({ name: 'mono', private: true }),
+    'pnpm-workspace.yaml': "packages:\n  - 'packages/*'\n",
+    'pnpm-lock.yaml': '',
+    'site/package.json': app({ name: 'site' }),
+    'site/package-lock.json': '{}',
+    'site/node_modules/next/package.json': nextPackage('16.3.4'),
+  })
+  try {
+    const project = await detectProject(path.join(root, 'site'))
+    assert.equal(project.contextRoot, path.join(root, 'site'))
+    assert.equal(project.appDir, '.')
+    assert.equal(project.packageManager, 'npm')
+    assert.equal(project.lockfile, 'package-lock.json')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('a negated workspace pattern excludes the project, and comments are ignored', async () => {
+  const root = await fixture({
+    'package.json': JSON.stringify({ name: 'mono', private: true }),
+    'pnpm-workspace.yaml': "packages:\n  - 'apps/*' # every app\n  - '!apps/legacy'\n",
+    'pnpm-lock.yaml': '',
+    'apps/legacy/package.json': app({ name: 'legacy' }),
+    'apps/legacy/package-lock.json': '{}',
+    'apps/legacy/node_modules/next/package.json': nextPackage('16.3.4'),
+  })
+  try {
+    const project = await detectProject(path.join(root, 'apps', 'legacy'))
+    assert.equal(project.contextRoot, path.join(root, 'apps', 'legacy'))
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('a globstar pattern in flow style includes a nested project', async () => {
+  const root = await fixture({
+    'package.json': JSON.stringify({ name: 'mono', private: true }),
+    'pnpm-workspace.yaml': "packages: ['apps/**']\n",
+    'pnpm-lock.yaml': '',
+    'node_modules/next/package.json': nextPackage('16.3.4'),
+    'apps/group/web/package.json': app({ name: 'web' }),
+  })
+  try {
+    const project = await detectProject(path.join(root, 'apps', 'group', 'web'))
+    assert.equal(project.contextRoot, root)
+    assert.equal(project.appDir, 'apps/group/web')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('a pnpm-workspace.yaml holding only settings includes no nested project', async () => {
+  // A list under another key must not be mistaken for the packages list.
+  const root = await fixture({
+    'package.json': JSON.stringify({ name: 'mono', private: true }),
+    'pnpm-workspace.yaml': 'onlyBuiltDependencies:\n  - sharp\n',
+    'pnpm-lock.yaml': '',
+    'web/package.json': app({ name: 'web' }),
+    'web/package-lock.json': '{}',
+    'web/node_modules/next/package.json': nextPackage('16.3.4'),
+  })
+  try {
+    const project = await detectProject(path.join(root, 'web'))
+    assert.equal(project.contextRoot, path.join(root, 'web'))
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('the yarn classic workspaces object form is read', async () => {
+  const root = await fixture({
+    'package.json': JSON.stringify({ name: 'mono', private: true, workspaces: { packages: ['apps/*'], nohoist: [] } }),
+    'yarn.lock': '',
+    'node_modules/next/package.json': nextPackage('16.3.4'),
+    'apps/web/package.json': app({ name: 'web' }),
+  })
+  try {
+    const project = await detectProject(path.join(root, 'apps', 'web'))
+    assert.equal(project.contextRoot, root)
+    assert.equal(project.appDir, 'apps/web')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})

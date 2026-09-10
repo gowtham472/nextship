@@ -15,6 +15,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { ProjectInfo } from './detect.js'
+import { docsUrl } from './links.js'
 import { undeclaredPackages } from './vendored.js'
 
 export type FindingLevel = 'blocker' | 'warning' | 'note'
@@ -209,7 +210,7 @@ function runtimeFindings(project: ProjectInfo): Finding[] {
     title: 'The ISR cache does not survive a restart',
     consequence:
       'Cached pages and optimized images live inside the container, so every restart or redeploy starts cold.',
-    action: 'Expected for a single instance. See docs/design.md §12.',
+    action: `Expected for a single instance. See ${docsUrl('design.md', '12-known-limitations')}.`,
   })
 
   return findings

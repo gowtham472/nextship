@@ -21,6 +21,7 @@ import { readConfig } from './config.js'
 import { DigitalOcean } from './targets/digitalocean.js'
 import { DigitalOceanTarget } from './targets/digitalocean-target.js'
 import type { Target } from './targets/target.js'
+import { docsUrl } from './links.js'
 
 export interface OwnedApp {
   target: Target
@@ -41,7 +42,7 @@ export function client(): Target {
   if (!token) {
     throw new NextshipError(
       'DIGITALOCEAN_TOKEN is not set.',
-      'Create a token with Registry and Apps scopes, export it, then run the command again. See docs/digitalocean.md.'
+      `Create a token with Registry and Apps scopes, export it, then run the command again. See ${docsUrl('digitalocean.md')}.`
     )
   }
   return new DigitalOceanTarget(new DigitalOcean(token))
