@@ -1,5 +1,8 @@
 # nextship
 
+[![ci](https://github.com/gowtham472/nextship/actions/workflows/ci.yml/badge.svg)](https://github.com/gowtham472/nextship/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/nextship-cli)](https://www.npmjs.com/package/nextship-cli)
+
 > Vercel's zero-config experience, in your own DigitalOcean or AWS account.
 > Your code, your data, your bill, your region.
 

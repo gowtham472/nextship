@@ -4,6 +4,15 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Added
+
+- **Continuous integration on every push and pull request.** Tests ran only in the release
+  workflow, so a broken commit on `main` went unnoticed until the next tag. `ci.yml`
+  builds, typechecks and tests on Linux and Windows with Node 22 and 24, packs the CLI and
+  installs the tarball into an empty project, and builds the site. The packed-install
+  check moved into `packages/cli/scripts/verify-pack.mjs`, which the release workflow
+  runs too, so a pull request is held to the same bar as a release. (Gowtham)
+
 ## [0.4.2] - 2026-09-10
 
 Packaging and project detection fixes, and releases that go live only on a maintainer's 2FA

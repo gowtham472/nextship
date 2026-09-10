@@ -16,6 +16,16 @@ You need Node 22 or newer and a running Docker 23 or newer. Every build happens 
 Docker, so nothing is compiled on your machine and there is no toolchain to install
 beyond those two.
 
+CI runs the same build, typecheck and tests on every push to `main` and every pull
+request, on Linux and Windows with Node 22 and 24. It then packs the CLI and installs the
+tarball into an empty project, checking that the package a user receives is complete and
+that its `nextship` command runs, and it builds the site. Run the packed-install check
+locally after `pnpm build`:
+
+```bash
+node packages/cli/scripts/verify-pack.mjs
+```
+
 To run your working copy against a real project:
 
 ```bash

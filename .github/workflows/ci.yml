@@ -1,0 +1,77 @@
+# Continuous integration for every push to main and every pull request.
+#
+# The release workflow gates on the same checks, but only when a tag is pushed,
+# which made release day the first time a broken commit was noticed. This runs
+# them on every change, on Linux and Windows and on both supported Node lines,
+# because the CLI runs on developers' machines rather than on one controlled
+# platform, and path handling and binary links are exactly what differ between
+# them.
+#
+# Author: Gowtham
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # A newer push to a pull request makes the older run irrelevant. On main every
+  # commit keeps its own result, so a failure is never hidden by the next push.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  cli:
+    name: CLI (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing says nothing about the others, so all of them report.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        # 22 is the engines floor; 24 is the current LTS line.
+        node: ['22', '24']
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - run: npm i -g corepack@latest && corepack enable
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - name: Verify the packed tarball installs and runs
+        working-directory: packages/cli
+        run: node scripts/verify-pack.mjs
+
+  site:
+    name: Site
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - run: npm ci
+      # next build type checks, prerenders every page, and fails on a docs page
+      # missing from the navigation or a navigation entry with no page.
+      - run: npm run build

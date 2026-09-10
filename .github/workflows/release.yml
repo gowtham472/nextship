@@ -82,42 +82,12 @@ jobs:
           fi
           echo "tag and version agree on $VERSION"
 
+      # The same check ci.yml runs on every pull request: pack, install the tarball
+      # into an empty project, and confirm the package is complete and its command
+      # runs. A release is never the first time a package is checked.
       - name: Verify the tarball installs and runs
         working-directory: packages/cli
-        run: |
-          NAME="$(node -p "require('./package.json').name")"
-          npm pack --pack-destination /tmp
-          mkdir -p /tmp/install-check && cd /tmp/install-check
-          npm init -y > /dev/null
-          npm install --silent /tmp/"$NAME"-*.tgz
-
-          # Every path below is derived from the manifest. Writing the package name
-          # out by hand is how the previous attempt failed: a rename updated some of
-          # these checks and not others, and the ones left behind looked for a
-          # directory that no longer existed.
-
-          # The adapter must resolve from the packed tree rather than the workspace,
-          # and README, LICENSE and NOTICE must travel with it: npm publishes the
-          # package directory, and Apache-2.0 requires the last two to go with the work.
-          node -e "
-            const fs = require('node:fs')
-            const path = require('node:path')
-            const dir = path.join('node_modules', process.argv[1])
-            const required = ['runtime/adapter.mjs', 'README.md', 'LICENSE', 'NOTICE']
-            const missing = required.filter((file) => !fs.existsSync(path.join(dir, file)))
-            if (missing.length > 0) { console.error('missing from the published package: ' + missing.join(', ')); process.exit(1) }
-            console.log('installed package carries ' + required.join(', '))
-          " "$NAME"
-
-          # Run the installed binary, not dist/index.js. npm drops a malformed bin
-          # entry at publish time with only a warning, so a check that runs the file
-          # directly passes while the published package has no command at all.
-          ./node_modules/.bin/nextship --version
-          node -e "
-            const pkg = require('./node_modules/' + process.argv[1] + '/package.json')
-            if (!pkg.bin || !pkg.bin.nextship) { console.error('the published package declares no nextship binary'); process.exit(1) }
-            console.log('binary declared as', pkg.bin.nextship)
-          " "$NAME"
+        run: node scripts/verify-pack.mjs
 
       - name: Stage the release
         if: ${{ github.event_name == 'push' || inputs.dryRun == false }}
