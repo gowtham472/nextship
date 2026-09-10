@@ -41,11 +41,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Installs the pnpm version pinned by packageManager in the root package.json.
+      # Not corepack: the Windows image already has yarn installed globally, and
+      # npm i -g corepack refuses to overwrite it with corepack's own yarn shim,
+      # failing with EEXIST before anything of ours runs. It comes before setup-node
+      # so the pnpm store can be cached.
+      - uses: pnpm/action-setup@v6
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-
-      - run: npm i -g corepack@latest && corepack enable
+          cache: pnpm
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
