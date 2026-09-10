@@ -11,6 +11,10 @@
     "noImplicitOverride": true,
     "declaration": true,
     "sourceMap": true,
+    // Sources are inlined because src/ is not published. Without this the
+    // shipped maps point at ../src/*.ts, which does not exist in an installed
+    // package, and every mapped frame resolves to nothing.
+    "inlineSources": true,
     "skipLibCheck": true
   }
 }

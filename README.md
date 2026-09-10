@@ -21,7 +21,7 @@ live, and prints the URL.
 
 ## Status
 
-**Version 0.3.0. v0.3 is complete and verified against a live deployment.**
+**Version 0.4.0, the first published release.** v0.4 is complete and verified against a live deployment. v0.5 is started, not finished: the driver interface exists, the AWS driver does not.
 
 | Area | State |
 |---|---|
@@ -63,15 +63,11 @@ Docker must be running. The local commands need nothing else.
 
 ## Install
 
-Once published:
-
 ```bash
 npm install -g nextship
 ```
 
-**Not published yet.** The package is release-ready, verified by installing the built
-tarball into a clean project and running a real build from it, but nothing has been
-pushed to the registry. Until it is, build from source:
+Or build from source, which puts the same binary on your PATH:
 
 ```bash
 git clone https://github.com/gowtham472/nextship.git
@@ -80,8 +76,10 @@ pnpm install && pnpm build
 npm link --workspace packages/cli
 ```
 
-`npm link` puts `nextship` on your PATH, so the rest of this document reads the same
-either way.
+Before trusting it with a cloud account, read
+[what it has access to](./SECURITY.md#what-this-tool-has-access-to) and
+[the security audit](./docs/security-audit.md). It is a short read, and it is the honest
+answer to "what does this thing do with my token".
 
 ## Quick start
 
@@ -742,6 +740,8 @@ docs/
   roadmap.md           v0.1 to v1.0, then what is deliberately not built
   costs.md             costed comparison against Vercel at three traffic tiers
   digitalocean.md      the API token, its scopes, and what deploying costs
+  security-audit.md    subprocesses, secrets, image contents and network egress, with line refs
+  failure-matrix.md    what happens when things go wrong, and which rows are unverified
   review.md            reproduced defects, gaps, and how to verify each one
 conformance/           scripts for the official Next.js adapter compatibility suite
 packages/

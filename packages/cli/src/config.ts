@@ -50,10 +50,28 @@ export async function readConfig(root: string): Promise<ProjectConfig | null> {
     )
   }
 
-  if (parsed.version !== CONFIG_VERSION) {
+  // A missing version is a different problem from a newer one, and the actions
+  // are opposites. Telling someone whose file was hand-written or truncated to
+  // update nextship sends them to fix the one thing that is not wrong.
+  if (typeof parsed.version !== 'number') {
+    throw new NextshipError(
+      `${CONFIG_FILE} has no version field, so nextship cannot tell what wrote it.`,
+      'A file nextship wrote always has one. Delete it and run `nextship deploy` to recreate it. ' +
+        'Deleting it makes nextship forget which app it owns, so it will refuse to touch the existing one until you deploy again.'
+    )
+  }
+
+  if (parsed.version > CONFIG_VERSION) {
     throw new NextshipError(
       `${CONFIG_FILE} is version ${parsed.version}, but this CLI reads version ${CONFIG_VERSION}.`,
-      'Update nextship.'
+      'A newer nextship wrote this file. Update nextship.'
+    )
+  }
+
+  if (parsed.version < CONFIG_VERSION) {
+    throw new NextshipError(
+      `${CONFIG_FILE} is version ${parsed.version}, which this CLI no longer reads.`,
+      'It was written by an older nextship. Delete it and run `nextship deploy` to recreate it.'
     )
   }
   return parsed

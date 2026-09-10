@@ -1,24 +1,50 @@
 {
   "name": "nextship",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "license": "Apache-2.0",
   "author": "Gowtham <gowtham9112006@gmail.com>",
-  "contributors": ["Ragul D"],
+  "contributors": [
+    "Ragul D"
+  ],
   "description": "Deploy any Next.js app to your own cloud account with no configuration.",
-  "keywords": ["nextjs", "next", "deploy", "deployment", "digitalocean", "docker", "adapter"],
-  "engines": { "node": ">=22" },
+  "keywords": [
+    "nextjs",
+    "next",
+    "deploy",
+    "deployment",
+    "digitalocean",
+    "docker",
+    "adapter"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "type": "module",
-  "bin": { "nextship": "./dist/index.js" },
-  "exports": { ".": "./dist/index.js" },
-  "files": ["dist", "!dist/**/*.test.*", "runtime", "!runtime/*.log"],
+  "bin": {
+    "nextship": "./dist/index.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "runtime",
+    "!runtime/*.log"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/bundle-adapter.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test \"dist/**/*.test.js\""
   },
-  "repository": { "type": "git", "url": "git+https://github.com/gowtham472/nextship.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gowtham472/nextship.git"
+  },
   "homepage": "https://github.com/gowtham472/nextship#readme",
-  "bugs": { "url": "https://github.com/gowtham472/nextship/issues" },
+  "bugs": {
+    "url": "https://github.com/gowtham472/nextship/issues"
+  },
   "dependencies": {
     "cross-spawn": "^7.0.6"
   },

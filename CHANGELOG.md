@@ -4,7 +4,51 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
-v0.4 complete. v0.5 started: the driver interface exists, the AWS driver does not.
+## [0.4.0] - 2026-09-10
+
+**The first published version.** Everything before this lived only in the repository.
+
+v0.4 is complete: domains and TLS, environment variables, image retention, `destroy`, and
+log streaming, each verified against a live app. v0.5 is started rather than finished: the
+driver interface exists and DigitalOcean implements it, the AWS driver does not.
+
+The Next.js adapter compatibility suite has run. 1051 of 1115 suites pass, twice, with an
+identical failure set, and every failure is attributed in the README.
+
+
+### Release hardening
+
+- **Version numbers disagreed with each other.** `package.json` said 0.3.0 while the
+  roadmap said v0.4 was complete and v0.5 had started. Cut as **0.4.0**, the last finished
+  milestone, with README, changelog, roadmap and the git tag all saying the same thing.
+  Calling it 0.5.0 would have claimed AWS progress that does not exist.
+
+- **The release workflow could not have used trusted publishing.** It runs on Node 22,
+  which ships npm 10, and OIDC needs 11.5.1 or newer. The workflow now upgrades npm and
+  records the toolchain it published with. npm cannot publish a package for the first time
+  over OIDC at all, since a trusted publisher is configured in settings that do not exist
+  until the package does, so the token is documented as a one-time bootstrap with the
+  switch and the token deletion written down as the immediate next step.
+
+- **The shipped source maps were dead weight, three times over.** They pointed at
+  `../src/*.ts`, which is not published; sources were not inlined; and the CLI never asked
+  Node to enable maps. Sources are inlined now and the CLI enables them, verified by
+  throwing from inside an installed package and getting `src/config.ts:47:11` back rather
+  than a position in emitted JavaScript. A stack trace in a bug report is now actionable.
+
+- **`nextship.json` with no version blamed the wrong thing.** It reported
+  `version undefined ... Update nextship`, sending someone with a hand-written or truncated
+  file to upgrade the one thing that was not wrong. The three cases are now separate: no
+  version, newer than this CLI, and older than this CLI, each with the action that fits.
+  Found by testing the failure paths rather than by reading them.
+
+- **Two audits published**, both written with re-runnable commands rather than assurances:
+  [`docs/security-audit.md`](./docs/security-audit.md) traces every subprocess, secret,
+  image layer and network destination to a file and line, and
+  [`docs/failure-matrix.md`](./docs/failure-matrix.md) records what happens when things go
+  wrong and marks four rows **unverified**, two of which are real defects: the release poll
+  has no deadline, and nothing locks against two concurrent deploys. (Gowtham)
+
 
 ### Added
 

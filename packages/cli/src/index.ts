@@ -28,6 +28,17 @@ import { TARGET_PLATFORM } from './image/dockerfile.js'
 import { VERSION } from './version.js'
 import { detail, fail, ok, step, warn } from './util/log.js'
 
+// Node ignores source maps unless asked, so a stack trace would report a position
+// in emitted JavaScript that nobody can act on. With this, a trace in a bug report
+// names the TypeScript line that actually failed, and the maps carry their own
+// sources so it resolves from an installed package rather than needing src/.
+//
+// Placement below the imports is deliberate: ES module imports are hoisted and
+// evaluated first regardless of where this sits, so putting it above them would
+// imply an ordering that does not exist. Everything this needs to cover happens
+// after module evaluation.
+process.setSourceMapsEnabled(true)
+
 const USAGE = `nextship
 
 Usage

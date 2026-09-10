@@ -87,15 +87,41 @@ Provenance signs a statement linking the published bytes to this repository and 
 commit, which anyone can verify on the npm page. For a tool that asks people for a cloud
 token, that is worth more than a promise.
 
-**One-time setup.** Create an npm **automation** token (npmjs.com, Access Tokens,
-Generate). An interactive token will fail in CI, because it prompts for 2FA. Add it as a
-repository secret named `NPM_TOKEN`.
+**Authentication is two phases, and the second one is the goal.**
+
+npm cannot publish a package for the first time over OIDC: a trusted publisher is
+configured in a package's settings, and those settings do not exist until the package
+does ([npm/cli#8544](https://github.com/npm/cli/issues/8544)).
+
+*Phase 1, once.* Create an npm **automation** token (npmjs.com, Access Tokens, Generate).
+An interactive token fails in CI because it prompts for 2FA. Add it as a repository secret
+named `NPM_TOKEN`.
+
+*Phase 2, immediately after the first publish.* On the package page, Settings, Trusted
+Publisher, add:
+
+| Field | Value |
+|---|---|
+| Organization or user | `gowtham472` |
+| Repository | `nextship` |
+| Workflow filename | `release.yml` |
+
+Then **delete the `NPM_TOKEN` secret**. The npm CLI detects the OIDC token automatically
+and prefers it, so the workflow does not change; the deleted secret simply leaves
+`NODE_AUTH_TOKEN` empty and unused.
+
+Deleting it is the point. A long-lived credential with publish rights on a package that
+asks people for cloud tokens is exactly the thing worth not having.
 
 **Each release:**
 
 1. Run the compatibility suite and make sure the support matrix in the README reflects it.
    Publishing claims about Next.js support that nothing has tested is the one mistake that
    costs trust permanently.
+2. Re-run the audits in [`docs/security-audit.md`](./docs/security-audit.md) and
+   [`docs/failure-matrix.md`](./docs/failure-matrix.md) if the release touched subprocess
+   handling, secret handling, the image contents, or any preflight check. Both documents
+   are written with re-runnable commands so this is a check rather than a rewrite.
 2. Move everything under `## [Unreleased]` in the changelog into a new version heading.
 3. Bump the version in `packages/cli/package.json`.
 4. Dry run: Actions, release, Run workflow, leave `dryRun` checked. It packs and verifies

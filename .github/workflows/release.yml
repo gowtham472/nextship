@@ -9,9 +9,23 @@
 # cloud token and builds their source, so "the code you audited is the code you
 # installed" is a claim worth being able to prove rather than assert.
 #
-# Requires one repository secret, NPM_TOKEN, an npm automation token with publish
-# rights. Automation tokens bypass the 2FA prompt, which interactive tokens
-# cannot do from CI.
+# Authentication happens in two phases, because npm cannot publish a package for
+# the first time over OIDC: a trusted publisher is configured in a package's
+# settings, and those settings do not exist until the package does.
+# See https://github.com/npm/cli/issues/8544.
+#
+#   Phase 1, once: NPM_TOKEN, an npm automation token. Automation tokens bypass
+#   the 2FA prompt, which interactive tokens cannot do from CI.
+#
+#   Phase 2, every release after: configure this repository and this workflow
+#   filename as a trusted publisher on npmjs.com, then delete NPM_TOKEN. The npm
+#   CLI detects the OIDC token automatically and prefers it, so nothing here
+#   changes. A deleted secret makes NODE_AUTH_TOKEN empty and unused rather than
+#   breaking the job.
+#
+# Deleting the token is the point of the exercise. A long-lived credential with
+# publish rights on an infrastructure package is exactly the thing worth not
+# having.
 #
 # Author: Gowtham
 name: release
@@ -42,7 +56,15 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
-      - run: npm i -g corepack@latest && corepack enable
+      # Node 22 ships npm 10, which has no OIDC support at all. Trusted
+      # publishing needs 11.5.1 or newer, so the upgrade is what makes phase 2
+      # possible rather than an optimisation.
+      - run: npm i -g npm@latest corepack@latest && corepack enable
+
+      - name: Record the toolchain that produced this release
+        run: |
+          echo "node $(node --version)"
+          echo "npm  $(npm --version)"
 
       - run: pnpm install --frozen-lockfile
 
@@ -84,8 +106,15 @@ jobs:
       - name: Publish
         if: ${{ github.event_name == 'push' || inputs.dryRun == false }}
         working-directory: packages/cli
+        # --provenance signs a statement linking these bytes to this commit.
+        # Under a trusted publisher it is implied, but passing it explicitly means
+        # the token phase produces an attested package too, rather than the first
+        # published version being the one nobody can verify.
         run: npm publish --provenance --access public
         env:
+          # Empty once NPM_TOKEN is deleted, at which point npm uses the OIDC
+          # token instead. Both paths are authenticated; only one leaves a
+          # long-lived credential lying around.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Dry run only
