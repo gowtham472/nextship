@@ -36,10 +36,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 - **The README claimed support and tests that do not exist.** It described nextship as
   running in "your own DigitalOcean or AWS account", drew AWS Lightsail and a shared S3
-  and CDN tier into the architecture as though they were built, counted 124 tests where
-  there are 157, and listed end-to-end runs "on real AWS and real DigitalOcean on every
-  pull request". It now describes DigitalOcean App Platform as the only target, static
-  files as served by the container, and proof as what actually runs. (Gowtham)
+  and CDN tier into the architecture as though they were built, gave a test count of 124
+  that had long gone stale, and listed end-to-end runs "on real AWS and real DigitalOcean
+  on every pull request". It now describes DigitalOcean App Platform as the only target,
+  static files as served by the container, and proof as what actually runs, with no test
+  count to go stale again. (Gowtham)
 
 ## [0.4.2] - 2026-09-10
 
