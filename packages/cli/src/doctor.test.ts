@@ -5,7 +5,6 @@
  * build, which is why a deliberate check is the only way to find it.
  *
  * Author: Gowtham
- * Review: ../../../docs/review.md §12
  */
 
 import { test } from 'node:test'

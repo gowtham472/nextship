@@ -165,8 +165,7 @@ and a smaller base image would remove a large part of the 332 MB that is
 - Decide the region. Bangalore (`blr1`) is the closest to you and keeps latency and
   egress sensible for Indian traffic.
 - Set a billing alert in the DigitalOcean control panel. nextship has no spend
-  guardrails of its own, which is recorded as a gap in
-  [`review.md`](./review.md) §8.3.
+  guardrails of its own.
 - Know the one behaviour that will surprise you: the ISR cache lives inside the
   container and does not survive a restart, so cached pages regenerate after every
   deploy or restart. See [`design.md`](./design.md) §12.

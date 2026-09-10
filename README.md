@@ -35,10 +35,6 @@ streaming does not buffer (27 ms to first byte against a 2.02 s total), ISR work
 both time-based and on-demand, Server Actions execute, and `after()` runs. The image
 is 591 MB uncompressed against 1.13 GB before pruning.
 
-[`docs/review.md`](./docs/review.md) is an adversarial pass
-over the design. It reproduced three defects, all now fixed and covered by tests, and
-lists what is still missing with a way to verify each one rather than an assertion.
-
 **v1.0 is deliberately a personal tool**, good enough that its author deploys his own
 apps with it. Everything that only matters once other people depend on it is recorded
 in [`docs/roadmap.md`](./docs/roadmap.md) under "Beyond v1.0", each with the
@@ -77,9 +73,8 @@ npm link --workspace packages/cli
 ```
 
 Before trusting it with a cloud account, read
-[what it has access to](./SECURITY.md#what-this-tool-has-access-to) and
-[the security audit](./docs/security-audit.md). It is a short read, and it is the honest
-answer to "what does this thing do with my token".
+[what it has access to](./SECURITY.md#what-this-tool-has-access-to). It is short, and it
+is the honest answer to "what does this thing do with my token".
 
 ## Quick start
 
@@ -675,6 +670,11 @@ deploy:
 - **Logs are not history.** `--follow` streams live output, but a replaced deployment
   still takes its past output with it. Retaining it needs forwarding to an external
   service, which is not built.
+- **A release is waited on without a deadline.** A deployment that never reaches a
+  terminal phase leaves `deploy` polling until you interrupt it. Nothing is corrupted,
+  and the deployment id is already printed, so the console shows the truth.
+- **Nothing locks a project against concurrent runs.** Two `deploy` commands started at
+  once on the same project will both build, both push and both release.
 - **`public/` ships inside the image**, 78 MB of it on the real project. The container
   serves it correctly; moving it to a CDN is a performance change, deferred to v5.
 - **An app that prerenders nothing is health checked on a rendered route.** The path is
@@ -740,9 +740,6 @@ docs/
   roadmap.md           v0.1 to v1.0, then what is deliberately not built
   costs.md             costed comparison against Vercel at three traffic tiers
   digitalocean.md      the API token, its scopes, and what deploying costs
-  security-audit.md    subprocesses, secrets, image contents and network egress, with line refs
-  failure-matrix.md    what happens when things go wrong, and which rows are unverified
-  review.md            reproduced defects, gaps, and how to verify each one
 conformance/           scripts for the official Next.js adapter compatibility suite
 packages/
   adapter/             Next.js Adapter API implementation, injected via NEXT_ADAPTER_PATH

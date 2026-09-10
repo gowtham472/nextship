@@ -271,8 +271,7 @@ install so a new id invalidates the application build without re-running the ins
 the build as secret mounts, and BuildKit deliberately excludes secret contents from
 its cache key, so changing a value invalidated nothing: the build was served from
 cache and the resulting image, still containing the old value, was tagged identically
-to the previous one. Reproduced and recorded in
-[`review.md`](./review.md) §2.1.
+to the previous one. Reproduced, fixed, and covered by a test.
 
 The id is also the `sh.nextship.deployment` image label.
 

@@ -5,7 +5,6 @@
  * fails on the deployment target, which is the most expensive place to find out.
  *
  * Author: Gowtham
- * Review: ../../../docs/review.md §2.2
  */
 
 import { test } from 'node:test'

@@ -118,10 +118,6 @@ asks people for cloud tokens is exactly the thing worth not having.
 1. Run the compatibility suite and make sure the support matrix in the README reflects it.
    Publishing claims about Next.js support that nothing has tested is the one mistake that
    costs trust permanently.
-2. Re-run the audits in [`docs/security-audit.md`](./docs/security-audit.md) and
-   [`docs/failure-matrix.md`](./docs/failure-matrix.md) if the release touched subprocess
-   handling, secret handling, the image contents, or any preflight check. Both documents
-   are written with re-runnable commands so this is a check rather than a rewrite.
 2. Move everything under `## [Unreleased]` in the changelog into a new version heading.
 3. Bump the version in `packages/cli/package.json`.
 4. Dry run: Actions, release, Run workflow, leave `dryRun` checked. It packs and verifies

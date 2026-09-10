@@ -42,12 +42,12 @@ identical failure set, and every failure is attributed in the README.
   version, newer than this CLI, and older than this CLI, each with the action that fits.
   Found by testing the failure paths rather than by reading them.
 
-- **Two audits published**, both written with re-runnable commands rather than assurances:
-  [`docs/security-audit.md`](./docs/security-audit.md) traces every subprocess, secret,
-  image layer and network destination to a file and line, and
-  [`docs/failure-matrix.md`](./docs/failure-matrix.md) records what happens when things go
-  wrong and marks four rows **unverified**, two of which are real defects: the release poll
-  has no deadline, and nothing locks against two concurrent deploys. (Gowtham)
+- **Two limitations found by auditing the failure paths, and recorded rather than papered
+  over.** A release is polled without a deadline, so a deployment that never reaches a
+  terminal phase leaves `deploy` waiting until it is interrupted. And nothing locks a
+  project against two concurrent runs. Neither corrupts anything, and both are now listed
+  under Known limitations in the README instead of being discovered by whoever hits them
+  first. (Gowtham)
 
 
 ### Added

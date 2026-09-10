@@ -10,7 +10,6 @@
  * None of that is a build error, so only a deliberate check finds it.
  *
  * Author: Gowtham
- * Review: ../../../docs/review.md §12
  */
 
 import { readFile, readdir, stat } from 'node:fs/promises'

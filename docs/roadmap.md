@@ -60,8 +60,7 @@ account needed, so nothing here is blocked on a target decision.
 
 ### Defects found by review and fixed
 
-An adversarial pass over the documents ([`review.md`](./review.md))
-reproduced three defects, all now fixed and covered by tests: an environment variable
+An adversarial pass over the documents reproduced three defects, all now fixed and covered by tests: an environment variable
 change shipped the old value under the same image tag, no target architecture was
 pinned, and a one-character source change cost a 150 second rebuild because the
 dependency install ran after the source copy. The deployment id is now a content
