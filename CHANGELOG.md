@@ -6,7 +6,17 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [0.4.2] - 2026-09-10
 
-Packaging and project detection fixes.
+Packaging and project detection fixes, and releases that go live only on a maintainer's 2FA
+approval.
+
+### Changed
+
+- **Releases are staged rather than published.** The release workflow runs
+  `npm stage publish`, and the trusted publisher allows only that. A staged version goes
+  live when a maintainer approves it with 2FA, from the CLI or the package page, and
+  approval requires interactive authentication, so no token or workflow can perform it. A
+  compromised workflow or GitHub account can stage a release but cannot ship one.
+  Provenance is generated for staged versions exactly as for direct publishes. (Gowtham)
 
 ### Fixed
 

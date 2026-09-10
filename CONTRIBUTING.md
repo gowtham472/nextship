@@ -87,11 +87,12 @@ Provenance signs a statement linking the published bytes to this repository and 
 commit, which anyone can verify on the npm page. For a tool that asks people for a cloud
 token, that is worth more than a promise.
 
-**Authentication is npm trusted publishing.** npm accepts a publish only from
-`release.yml` in this repository, exchanging the job's short-lived OIDC token for a publish
-token at the moment of publishing. No npm token exists, in the repository or on a laptop,
-and none should be created: a long-lived credential with publish rights on a package that
-asks people for cloud tokens is exactly the thing worth not having.
+**Authentication is npm trusted publishing, and releases are staged.** npm accepts a
+staged publish only from `release.yml` in this repository, exchanging the job's short-lived
+OIDC token for a stage-only token. The version goes live when a maintainer approves it
+with 2FA, which no workflow can do: approval requires interactive authentication, so a
+compromised workflow or GitHub account can stage a release but cannot ship one. No npm
+token exists, in the repository or on a laptop, and none should be created.
 
 The trusted publisher is configured on npmjs.com, in the package's Settings, Trusted
 Publisher:
@@ -102,6 +103,7 @@ Publisher:
 | Repository | `nextship` |
 | Workflow filename | `release.yml` |
 | Environment name | empty |
+| Allowed actions | `npm stage publish` only; `npm publish` stays unchecked |
 
 These fields cannot be edited once saved, and they are case-sensitive. Renaming
 `release.yml` breaks publishing until the connection is deleted and recreated with the new
@@ -121,11 +123,24 @@ the OIDC exchange and fail with `ENEEDAUTH`.
 3. Bump the version in `packages/cli/package.json`.
 4. Dry run: Actions, release, Run workflow, leave `dryRun` checked. It packs and verifies
    without publishing.
-5. Tag and push. The tag triggers the real publish:
+5. Tag and push. The tag runs the release workflow, which stages the version rather than
+   publishing it:
 
 ```bash
-git tag v0.4.0 && git push origin v0.4.0
+git tag v0.4.2 && git push origin v0.4.2
 ```
+
+6. Approve the staged version, which is the moment it goes live. Approval needs your own
+   npm login and 2FA, and the workflow cannot do it. Download the staged tarball first to
+   inspect exactly what will ship:
+
+```bash
+npm stage list nextship-cli
+npm stage download <stage-id>
+npm stage approve <stage-id>
+```
+
+   The Staged Packages tab on the package page on npmjs.com does the same.
 
 ### Maintainers
 

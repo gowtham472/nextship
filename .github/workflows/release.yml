@@ -1,6 +1,6 @@
-# Publishes nextship-cli to npm with provenance.
+# Stages nextship-cli on npm with provenance, for a maintainer to approve.
 #
-# Publishing happens here rather than from a laptop so npm can attest where the
+# Releases are built here rather than on a laptop so npm can attest where the
 # tarball came from. Provenance signs a statement linking the published bytes to
 # this repository, this workflow and the exact commit, which anyone can verify on
 # the package page.
@@ -9,15 +9,18 @@
 # cloud token and builds their source, so "the code you audited is the code you
 # installed" is a claim worth being able to prove rather than assert.
 #
-# Authentication is npm trusted publishing. npm accepts publishes from this
-# workflow file in this repository, exchanging the job's short-lived OIDC token for
-# a publish token at the moment of publishing. No long-lived npm credential exists
-# anywhere, which is the point: a token with publish rights on a package that asks
-# people for cloud tokens is exactly the thing worth not having.
+# Authentication is npm trusted publishing, and releases are staged. npm accepts a
+# staged publish from this workflow file in this repository, exchanging the job's
+# short-lived OIDC token for a token that can only stage. A staged version goes
+# live when a maintainer approves it with 2FA, from the CLI or the package page,
+# and approval requires interactive authentication that no workflow can supply.
+# This job can stage a release but cannot ship one, and neither can anyone who
+# compromises it. No long-lived npm credential exists anywhere.
 #
-# The trusted publisher is configured on npmjs.com in the package's settings and
-# names this repository and the filename release.yml. Renaming this file breaks
-# publishing until that configuration is recreated with the new name.
+# The trusted publisher is configured on npmjs.com in the package's settings: this
+# repository, the filename release.yml, and npm stage publish as its only allowed
+# action. Renaming this file breaks releases until that configuration is recreated
+# with the new name.
 #
 # Author: Gowtham
 name: release
@@ -28,7 +31,7 @@ on:
   workflow_dispatch:
     inputs:
       dryRun:
-        description: 'Pack and verify without publishing'
+        description: 'Pack and verify without staging'
         default: true
         type: boolean
 
@@ -36,7 +39,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      # The OIDC token this grants is both the publish credential, through the
+      # The OIDC token this grants is both the staging credential, through the
       # trusted publisher, and the signature behind the provenance attestation.
       id-token: write
       contents: read
@@ -46,13 +49,13 @@ jobs:
       # No registry-url. With it, setup-node writes
       # //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN} into .npmrc, and with no
       # token that empty line tells npm authentication is already configured, so it
-      # never attempts the OIDC exchange and the publish fails with ENEEDAUTH.
+      # never attempts the OIDC exchange and staging fails with ENEEDAUTH.
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      # Node 22 ships npm 10, which has no OIDC support at all. Trusted
-      # publishing needs 11.5.1 or newer.
+      # Node 22 ships npm 10, which supports neither OIDC nor staging. Trusted
+      # publishing needs npm 11.5.1 or newer, and staged publishing 11.15.0.
       - run: npm i -g npm@latest corepack@latest && corepack enable
 
       - name: Record the toolchain that produced this release
@@ -62,19 +65,19 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The gate. A tag is not a reason to publish something that does not build.
+      # The gate. A tag is not a reason to stage something that does not build.
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
 
-      - name: Check the tag matches the version being published
+      - name: Check the tag matches the version being released
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           TAG="${GITHUB_REF_NAME#v}"
           VERSION="$(node -p "require('./packages/cli/package.json').version")"
           if [ "$TAG" != "$VERSION" ]; then
             echo "Tag $GITHUB_REF_NAME does not match package version $VERSION." >&2
-            echo "Publishing a version that disagrees with its tag makes the history unreadable." >&2
+            echo "Releasing a version that disagrees with its tag makes the history unreadable." >&2
             exit 1
           fi
           echo "tag and version agree on $VERSION"
@@ -116,14 +119,14 @@ jobs:
             console.log('binary declared as', pkg.bin.nextship)
           " "$NAME"
 
-      - name: Publish
+      - name: Stage the release
         if: ${{ github.event_name == 'push' || inputs.dryRun == false }}
         working-directory: packages/cli
-        # Authenticates through the trusted publisher described in the header.
-        # Provenance is implied under trusted publishing; the flag is passed so the
-        # attestation does not depend on that default.
-        run: npm publish --provenance --access public
+        # Stages rather than publishes; see the header. The version goes live only
+        # when a maintainer approves it with 2FA. Provenance is generated for staged
+        # versions exactly as for direct publishes.
+        run: npm stage publish --provenance --access public
 
       - name: Dry run only
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.dryRun }}
-        run: echo "Packed and verified. Nothing was published, because this was a dry run."
+        run: echo "Packed and verified. Nothing was staged, because this was a dry run."
