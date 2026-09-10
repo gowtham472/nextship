@@ -1,6 +1,6 @@
 # nextship site
 
-The marketing page and documentation, exported as static files for Cloudflare Pages.
+The marketing page and documentation, exported as static files and served by Cloudflare.
 
 Not deployed yet, which is why nothing here names a domain. Absolute URLs for Open
 Graph images come from `NEXT_PUBLIC_SITE_URL`, which defaults to `http://localhost:3000`
@@ -73,26 +73,22 @@ npm run typecheck
 ## Deploying
 
 `out/` is the whole site, including `_headers` from `public/`, which sets security headers
-and year-long caching for the content-hashed assets. To deploy it, create a Cloudflare
-Pages project connected to this repository, with the Cloudflare GitHub app limited to this
-repository alone:
+and year-long caching for the content-hashed assets. Cloudflare serves it as a Worker with
+static assets and no script: `wrangler.jsonc` points Wrangler at `out/` and answers
+anything not found with `404.html`. The Worker is connected to this repository through
+Workers Builds, with the Cloudflare GitHub app limited to this repository alone:
 
 | Setting | Value |
 |---|---|
-| Framework preset | Next.js (Static HTML Export) |
-| Production branch | `main` |
 | Root directory | `site` |
 | Build command | `npm ci && npm run build` |
-| Build output directory | `out` |
-| Build watch paths | include `site/*` |
-| Environment variables | `NODE_VERSION` set to `22`, `SKIP_DEPENDENCY_INSTALL` set to `1`, `NEXT_PUBLIC_SITE_URL` set to the site's address |
+| Deploy command | `npx wrangler deploy` |
+| Build variables | `NODE_VERSION` set to `22`, `SKIP_DEPENDENCY_INSTALL` set to `1`, `NEXT_PUBLIC_SITE_URL` set to the site's address |
+
+The Worker's name in the dashboard is the `name` in `wrangler.jsonc`, `nextship`.
 
 Cloudflare installs dependencies itself before the build command runs, and it chooses
 pnpm for this repository whatever `site/` declares: it installed the workspace's CLI
 packages instead of the site, and the build failed with `next: not found`.
 `SKIP_DEPENDENCY_INSTALL` turns that step off, and the build command installs the site
 from its own lockfile with `npm ci`.
-
-Pages then builds on every push to `main` that touches `site/`, gives each pull request its
-own preview address, and needs no deploy token. Choose Git integration when creating the
-project: a project made by direct upload cannot be connected to a repository later.

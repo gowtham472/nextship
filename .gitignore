@@ -21,3 +21,4 @@ site/next-env.d.ts
 packages/cli/LICENSE
 packages/cli/NOTICE
 site/out
+site/.wrangler

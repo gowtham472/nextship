@@ -3,7 +3,7 @@ import type { NextConfig } from 'next'
 /**
  * The site is fully static: every page is a marketing page or a docs page
  * compiled from MDX at build time, so there is nothing to render per request.
- * It is exported as plain files for Cloudflare Pages to serve.
+ * It is exported as plain files, which Cloudflare serves as a Worker's static assets.
  *
  * Author: Gowtham
  */

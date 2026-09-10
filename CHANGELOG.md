@@ -17,14 +17,14 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Changed
 
-- **The site builds as static files for Cloudflare Pages.** Every page was already
+- **The site builds as static files and deploys to Cloudflare.** Every page was already
   prerendered, so `npm run build` in `site/` now writes the whole site to `out/`, which
-  a static host serves with no server to run or patch. A `_headers` file sets security
-  headers and year-long caching for the content-hashed assets, and `site/README.md` gives
-  the Pages project settings. Cloudflare installs dependencies with pnpm for this
-  repository whatever `site/` declares, which installs the CLI packages instead of the
-  site, so the Pages project turns that install off and its build command runs `npm ci`
-  first. (Gowtham)
+  a static host serves with no server to run or patch. `wrangler.jsonc` serves it as a
+  Worker with static assets and no script, a `_headers` file sets security headers and
+  year-long caching for the content-hashed assets, and `site/README.md` gives the
+  Cloudflare settings. Cloudflare installs dependencies with pnpm for this repository
+  whatever `site/` declares, which installs the CLI packages instead of the site, so the
+  build turns that install off and its build command runs `npm ci` first. (Gowtham)
 
 - **The site uses the brand's typeface and colours.** Text is set in Plus Jakarta
   Sans; the palette is white, the brand blue `#005EFF` and the yellow `#FDCF18`, with a

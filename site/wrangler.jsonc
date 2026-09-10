@@ -1,0 +1,11 @@
+// Serves out/, the static export, as a Worker with static assets and no script.
+// Workers Builds runs `npx wrangler deploy` from site/ after the build command; without
+// this file that command configures the project itself and opens a pull request instead.
+{
+  "name": "nextship",
+  "compatibility_date": "2026-09-10",
+  "assets": {
+    "directory": "./out",
+    "not_found_handling": "404-page"
+  }
+}

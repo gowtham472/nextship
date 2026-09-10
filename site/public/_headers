@@ -1,4 +1,4 @@
-# Response headers for Cloudflare Pages, which reads this file from the build output.
+# Response headers for Cloudflare, which reads this file from the static assets it serves.
 
 /*
   X-Content-Type-Options: nosniff
