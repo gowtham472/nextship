@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="brand/nextship-logo-560.jpg" alt="The NextShip logo: a gold block N on a blue light burst" width="280">
+</p>
+
 # nextship
 
 [![ci](https://github.com/gowtham472/nextship/actions/workflows/ci.yml/badge.svg)](https://github.com/gowtham472/nextship/actions/workflows/ci.yml)
@@ -133,6 +137,11 @@ one Dockerfile, so `package` reuses the compile from cache rather than starting 
 
 Unknown commands and unknown flags are errors. A mistyped option never gets silently
 ignored.
+
+`nextship` on its own draws the logo and points to `detect` and `--help`, in a terminal
+with 256 or more colours and at least 58 columns. Anywhere else, including a pipe, a
+narrower window or `NO_COLOR`, it prints the usage above, so a script sees the text it
+always has.
 
 ### `nextship detect`
 
@@ -746,6 +755,7 @@ CHANGELOG.md           every change, attributed
 LICENSE                Apache-2.0
 SECURITY.md            how to report a vulnerability
 CONTRIBUTING.md        how to work on this
+brand/                 the logo artwork, and the 560 pixel copy the READMEs load
 docs/
   design.md            locked decisions, manifest, image contract, target drivers
   roadmap.md           v0.1 to v1.0, then what is deliberately not built
@@ -755,6 +765,7 @@ conformance/           scripts for the official Next.js adapter compatibility su
 packages/
   adapter/             Next.js Adapter API implementation, injected via NEXT_ADAPTER_PATH
   cli/                 every command; runtime/ holds the files copied into a build
+site/                  the marketing site and documentation, a Next.js app
 ```
 
 ## How correctness is proven

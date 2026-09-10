@@ -4,6 +4,17 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Added
+
+- **The logo, in the terminal and across the project.** `nextship` on its own draws
+  the NextShip logo, the gold block N on the blue light burst with the wordmark and
+  tagline, in character cells laid out and coloured from `brand/nextship-logo.png`:
+  truecolor where the terminal supports it and the 256 colour palette where it does
+  not. A pipe, `NO_COLOR`, a 16 colour terminal or a window narrower than the logo
+  still gets the usage, so a script sees the same output as before. The artwork is in
+  `brand/`, the README and the npm page show it, and the site uses the N as its mark
+  and favicon. (Gowtham)
+
 ## [0.4.3] - 2026-09-10
 
 A change is refused while the app has a deployment in progress, the README stops

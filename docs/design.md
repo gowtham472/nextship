@@ -76,6 +76,12 @@ repeating stages that already succeeded. Stages 2 and 3 are two targets of one
 Dockerfile with identical inputs, so BuildKit serves the compile from cache and
 `package` only does the runtime stage's work.
 
+Run with no arguments, `nextship` draws the logo from `brand/nextship-logo.png` in
+character cells and points to `detect` and `--help`. It does so only when standard
+output is a terminal with 256 or more colours, at least 58 columns wide and without
+`NO_COLOR`. Anywhere else, including a pipe, it prints the usage, so a script sees the
+same text it always has.
+
 **Nothing is compiled on the developer's machine.** The build runs in Docker on the
 platform the image runs on, which is what makes native binaries, lockfile
 resolution and trace files correct by construction (§7).

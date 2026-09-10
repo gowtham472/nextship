@@ -22,6 +22,7 @@ import { listImages, pruneImages, DEFAULT_KEEP } from './images.js'
 import { destroy } from './destroy.js'
 import { rollback } from './rollback.js'
 import { logs } from './logs.js'
+import { logoDepth, renderLogo } from './logo.js'
 import { DEFAULT_INSTANCE_SIZE } from './targets/digitalocean.js'
 import { NextshipError } from './errors.js'
 import { TARGET_PLATFORM } from './image/dockerfile.js'
@@ -97,8 +98,31 @@ Domain options
   --min-tls <1.2|1.3> Minimum TLS version clients may use (default ${DEFAULT_MIN_TLS})
 `
 
+/**
+ * Draws the logo when standard output can show it as drawn, and reports whether it
+ * did. Anywhere else `nextship` on its own prints the usage, which is what a script
+ * running it has always received.
+ */
+function showLogo(): boolean {
+  const depth = logoDepth({
+    isTTY: process.stdout.isTTY === true,
+    columns: process.stdout.columns ?? 0,
+    colorDepth: process.stdout.isTTY ? process.stdout.getColorDepth() : 1,
+    noColor: Boolean(process.env.NO_COLOR),
+  })
+  if (!depth) return false
+  process.stdout.write(
+    `\n${renderLogo(depth)}\n  nextship ${VERSION}\n` +
+      '  Start with `nextship detect` in a Next.js project.\n' +
+      '  `nextship --help` lists every command.\n\n'
+  )
+  return true
+}
+
 async function main(argv: string[]): Promise<void> {
   const command = argv[0]
+
+  if (!command && showLogo()) return
 
   if (!command || command === '-h' || command === '--help') {
     process.stdout.write(USAGE)

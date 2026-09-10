@@ -1,21 +1,23 @@
 /**
- * Marks and icons, inline as SVG.
+ * Marks and icons.
  *
- * Inline rather than files, because these are small, they need to inherit the
- * current colour to survive a theme switch, and an <img> would flash the wrong
- * colour for a frame on every navigation.
+ * The icons are inline SVG: they inherit the current colour to survive a theme
+ * switch, and an <img> would flash the wrong colour for a frame on every
+ * navigation. The logomark is the exception. It keeps the brand's gold and blue in
+ * either theme, so it has no colour to inherit, and it is the favicon file itself,
+ * so the two cannot drift apart.
  *
  * Author: Gowtham
  */
 
-/** The logotype: a hull pushing right, which is also a play button. */
+import Image from 'next/image'
+
+import mark from '@/app/icon.svg'
+
+/** The block N on its blue tile, drawn from `brand/nextship-logo.png`. */
 export function Logomark({ className = 'h-5 w-5' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
-      <path d="M3 12 L21 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.35" />
-      <path d="M6 5.5 L19 12 L6 18.5 Z" fill="currentColor" />
-    </svg>
-  )
+  // The image optimizer rasterizes bitmaps only; an SVG is served as it is.
+  return <Image src={mark} alt="" className={className} unoptimized />
 }
 
 export function Wordmark() {

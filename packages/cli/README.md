@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/gowtham472/nextship/main/brand/nextship-logo-560.jpg" alt="The NextShip logo: a gold block N on a blue light burst" width="240">
+</p>
+
 # nextship
 
 Deploy a Next.js app to infrastructure you own, with no Dockerfile, no `next.config` edits
@@ -50,6 +54,9 @@ domain           List domains; domain add to attach, domain rm to detach
 images           List pushed images; images prune to remove old ones
 destroy <name>   Destroy the app this project created
 ```
+
+`nextship` on its own draws the logo in a colour terminal; `nextship --help` prints every
+command and option.
 
 ## What it will not do
 

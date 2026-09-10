@@ -29,6 +29,10 @@ nextship destroy       Destroy the app this project created
 Unknown commands and unknown flags are errors. A mistyped option is never silently
 ignored.
 
+`nextship` on its own draws the logo and points to `detect` and `--help`, in a terminal
+with 256 or more colours and at least 58 columns. Anywhere else, including a pipe, a
+narrower window or `NO_COLOR`, it prints the usage above.
+
 ## Local commands
 
 These need Docker and nothing else. No cloud account is involved.
