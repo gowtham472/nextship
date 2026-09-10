@@ -135,8 +135,8 @@ authors rather than with any organisation. Publish rights are granted separately
 only after the first publish exists:
 
 ```bash
-npm owner add <npm-username> nextship
-npm owner ls nextship
+npm owner add <npm-username> nextship-cli
+npm owner ls nextship-cli
 ```
 
 A maintainer can publish new versions and can unpublish, so it is a real grant rather

@@ -6,8 +6,12 @@ description: Install the published CLI, or build from source while it is unpubli
 ## From npm
 
 ```bash
-npm install -g nextship
+npm install -g nextship-cli
 ```
+
+The package is `nextship-cli`; the command it installs is `nextship`. npm refuses the
+name `nextship` because an unrelated package called `next-ship` exists and its similarity
+check treats the two as the same name.
 
 The published package carries a provenance attestation linking it to the exact commit it
 was built from, which you can verify on its npm page.
@@ -47,7 +51,7 @@ it.
 ## Upgrading
 
 ```bash
-npm install -g nextship@latest
+npm install -g nextship-cli@latest
 ```
 
 Nothing in your project is version-pinned to the CLI. The one file nextship writes,

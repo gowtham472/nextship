@@ -4,7 +4,7 @@ import { ArrowIcon } from '@/components/brand'
 import { CopyButton } from '@/components/copy-button'
 import { Terminal, type Line } from '@/components/terminal'
 
-const INSTALL = 'npm install -g nextship'
+const INSTALL = 'npm install -g nextship-cli'
 
 const TRANSCRIPT: Line[] = [
   { kind: 'command', text: 'nextship deploy --yes' },

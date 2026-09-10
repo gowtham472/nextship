@@ -4,6 +4,28 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-10
+
+Published as `nextship-cli`. The command it installs is still `nextship`.
+
+npm refused the name `nextship`: an unrelated package called `next-ship` exists, and npm's
+similarity check treats a name that differs only by punctuation as the same name. There is
+no appeal, so the package took the closest available name. Only the install command
+changes; nothing about using the tool does.
+
+Publishing 0.4.0 also exposed a defect it would have shipped. npm rejects a `./` prefix in
+a `bin` path and drops the entry rather than failing, so the package would have installed
+with no `nextship` command at all, recorded only as a warning buried in the file listing:
+
+```
+npm warn publish "bin[nextship]" script name dist/index.js was invalid and removed
+```
+
+The release check missed it because it ran `node node_modules/nextship/dist/index.js`,
+which works whether or not a binary is declared. It now runs the installed binary through
+`node_modules/.bin` and asserts the package still declares one, so a dropped `bin` fails
+the release instead of reaching a user. (Gowtham)
+
 ## [0.4.0] - 2026-09-10
 
 **The first published version.** Everything before this lived only in the repository.

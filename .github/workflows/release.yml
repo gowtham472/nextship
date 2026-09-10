@@ -91,7 +91,7 @@ jobs:
           npm pack --pack-destination /tmp
           mkdir -p /tmp/install-check && cd /tmp/install-check
           npm init -y > /dev/null
-          npm install --silent /tmp/nextship-*.tgz
+          npm install --silent /tmp/nextship-cli-*.tgz
           # Proves the adapter resolves from the packed tree rather than from the
           # workspace, which is the defect this check exists to catch.
           node -e "
@@ -106,7 +106,7 @@ jobs:
           # directly passes while the published package has no command at all.
           ./node_modules/.bin/nextship --version
           node -e "
-            const pkg = require('./node_modules/nextship/package.json')
+            const pkg = require('./node_modules/nextship-cli/package.json')
             const bin = pkg.bin && pkg.bin.nextship
             if (!bin) { console.error('the published package declares no nextship binary'); process.exit(1) }
             console.log('binary declared as', bin)

@@ -21,7 +21,7 @@ live, and prints the URL.
 
 ## Status
 
-**Version 0.4.0, the first published release.** v0.4 is complete and verified against a live deployment. v0.5 is started, not finished: the driver interface exists, the AWS driver does not.
+**Version 0.4.1, the first published release.** v0.4 is complete and verified against a live deployment. v0.5 is started, not finished: the driver interface exists, the AWS driver does not.
 
 | Area | State |
 |---|---|
@@ -60,8 +60,12 @@ Docker must be running. The local commands need nothing else.
 ## Install
 
 ```bash
-npm install -g nextship
+npm install -g nextship-cli
 ```
+
+The package is `nextship-cli` and the command is `nextship`. npm refuses the name
+`nextship` because an unrelated package called `next-ship` already exists and its
+similarity check does not distinguish the two.
 
 Or build from source, which puts the same binary on your PATH:
 
