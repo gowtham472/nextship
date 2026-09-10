@@ -101,7 +101,16 @@ jobs:
             if (!fs.existsSync(adapter)) { console.error('adapter missing from the published package'); process.exit(1) }
             console.log('installed package carries its adapter')
           "
-          node node_modules/nextship/dist/index.js --version
+          # Invoke the installed binary, not dist/index.js. npm silently drops a
+          # malformed bin entry at publish time, and a check that runs the file
+          # directly passes while the published package has no command at all.
+          ./node_modules/.bin/nextship --version
+          node -e "
+            const pkg = require('./node_modules/nextship/package.json')
+            const bin = pkg.bin && pkg.bin.nextship
+            if (!bin) { console.error('the published package declares no nextship binary'); process.exit(1) }
+            console.log('binary declared as', bin)
+          "
 
       - name: Publish
         if: ${{ github.event_name == 'push' || inputs.dryRun == false }}

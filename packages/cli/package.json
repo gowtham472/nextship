@@ -21,7 +21,7 @@
   },
   "type": "module",
   "bin": {
-    "nextship": "./dist/index.js"
+    "nextship": "dist/index.js"
   },
   "exports": {
     ".": "./dist/index.js"
