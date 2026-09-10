@@ -10,6 +10,13 @@ Packaging and project detection fixes.
 
 ### Fixed
 
+- **Releases could not authenticate once the npm token was removed.** `actions/setup-node`
+  with `registry-url` writes `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` into
+  `.npmrc`. With the variable empty, npm treats authentication as already configured and
+  never attempts the OIDC exchange, so the publish failed with `ENEEDAUTH` and nothing was
+  released. The workflow no longer sets `registry-url` or `NODE_AUTH_TOKEN`, which leaves
+  the trusted publisher as the only credential. (Gowtham)
+
 - **A project inside another project's workspace was treated as a member of it.** `detect`
   took the nearest ancestor with a `pnpm-workspace.yaml` or a `workspaces` field as the
   build root without checking whether its patterns include the project, so an npm project

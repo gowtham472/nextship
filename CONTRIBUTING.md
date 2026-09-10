@@ -87,31 +87,30 @@ Provenance signs a statement linking the published bytes to this repository and 
 commit, which anyone can verify on the npm page. For a tool that asks people for a cloud
 token, that is worth more than a promise.
 
-**Authentication is two phases, and the second one is the goal.**
+**Authentication is npm trusted publishing.** npm accepts a publish only from
+`release.yml` in this repository, exchanging the job's short-lived OIDC token for a publish
+token at the moment of publishing. No npm token exists, in the repository or on a laptop,
+and none should be created: a long-lived credential with publish rights on a package that
+asks people for cloud tokens is exactly the thing worth not having.
 
-npm cannot publish a package for the first time over OIDC: a trusted publisher is
-configured in a package's settings, and those settings do not exist until the package
-does ([npm/cli#8544](https://github.com/npm/cli/issues/8544)).
-
-*Phase 1, once.* Create an npm **automation** token (npmjs.com, Access Tokens, Generate).
-An interactive token fails in CI because it prompts for 2FA. Add it as a repository secret
-named `NPM_TOKEN`.
-
-*Phase 2, immediately after the first publish.* On the package page, Settings, Trusted
-Publisher, add:
+The trusted publisher is configured on npmjs.com, in the package's Settings, Trusted
+Publisher:
 
 | Field | Value |
 |---|---|
 | Organization or user | `gowtham472` |
 | Repository | `nextship` |
 | Workflow filename | `release.yml` |
+| Environment name | empty |
 
-Then **delete the `NPM_TOKEN` secret**. The npm CLI detects the OIDC token automatically
-and prefers it, so the workflow does not change; the deleted secret simply leaves
-`NODE_AUTH_TOKEN` empty and unused.
+These fields cannot be edited once saved, and they are case-sensitive. Renaming
+`release.yml` breaks publishing until the connection is deleted and recreated with the new
+filename. Setting the package's publishing access to require two-factor authentication and
+disallow tokens means a token could not publish even if one were created.
 
-Deleting it is the point. A long-lived credential with publish rights on a package that
-asks people for cloud tokens is exactly the thing worth not having.
+The workflow deliberately passes no `registry-url` to `actions/setup-node`. That input
+writes an `_authToken` line into `.npmrc`, and with no token the empty line makes npm skip
+the OIDC exchange and fail with `ENEEDAUTH`.
 
 **Each release:**
 

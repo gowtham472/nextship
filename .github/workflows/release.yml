@@ -1,4 +1,4 @@
-# Publishes nextship to npm with provenance.
+# Publishes nextship-cli to npm with provenance.
 #
 # Publishing happens here rather than from a laptop so npm can attest where the
 # tarball came from. Provenance signs a statement linking the published bytes to
@@ -9,23 +9,15 @@
 # cloud token and builds their source, so "the code you audited is the code you
 # installed" is a claim worth being able to prove rather than assert.
 #
-# Authentication happens in two phases, because npm cannot publish a package for
-# the first time over OIDC: a trusted publisher is configured in a package's
-# settings, and those settings do not exist until the package does.
-# See https://github.com/npm/cli/issues/8544.
+# Authentication is npm trusted publishing. npm accepts publishes from this
+# workflow file in this repository, exchanging the job's short-lived OIDC token for
+# a publish token at the moment of publishing. No long-lived npm credential exists
+# anywhere, which is the point: a token with publish rights on a package that asks
+# people for cloud tokens is exactly the thing worth not having.
 #
-#   Phase 1, once: NPM_TOKEN, an npm automation token. Automation tokens bypass
-#   the 2FA prompt, which interactive tokens cannot do from CI.
-#
-#   Phase 2, every release after: configure this repository and this workflow
-#   filename as a trusted publisher on npmjs.com, then delete NPM_TOKEN. The npm
-#   CLI detects the OIDC token automatically and prefers it, so nothing here
-#   changes. A deleted secret makes NODE_AUTH_TOKEN empty and unused rather than
-#   breaking the job.
-#
-# Deleting the token is the point of the exercise. A long-lived credential with
-# publish rights on an infrastructure package is exactly the thing worth not
-# having.
+# The trusted publisher is configured on npmjs.com in the package's settings and
+# names this repository and the filename release.yml. Renaming this file breaks
+# publishing until that configuration is recreated with the new name.
 #
 # Author: Gowtham
 name: release
@@ -44,21 +36,23 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      # Provenance is signed with a short-lived OIDC token, so this is what makes
-      # the attestation possible at all.
+      # The OIDC token this grants is both the publish credential, through the
+      # trusted publisher, and the signature behind the provenance attestation.
       id-token: write
       contents: read
     steps:
       - uses: actions/checkout@v4
 
+      # No registry-url. With it, setup-node writes
+      # //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN} into .npmrc, and with no
+      # token that empty line tells npm authentication is already configured, so it
+      # never attempts the OIDC exchange and the publish fails with ENEEDAUTH.
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
 
       # Node 22 ships npm 10, which has no OIDC support at all. Trusted
-      # publishing needs 11.5.1 or newer, so the upgrade is what makes phase 2
-      # possible rather than an optimisation.
+      # publishing needs 11.5.1 or newer.
       - run: npm i -g npm@latest corepack@latest && corepack enable
 
       - name: Record the toolchain that produced this release
@@ -125,16 +119,10 @@ jobs:
       - name: Publish
         if: ${{ github.event_name == 'push' || inputs.dryRun == false }}
         working-directory: packages/cli
-        # --provenance signs a statement linking these bytes to this commit.
-        # Under a trusted publisher it is implied, but passing it explicitly means
-        # the token phase produces an attested package too, rather than the first
-        # published version being the one nobody can verify.
+        # Authenticates through the trusted publisher described in the header.
+        # Provenance is implied under trusted publishing; the flag is passed so the
+        # attestation does not depend on that default.
         run: npm publish --provenance --access public
-        env:
-          # Empty once NPM_TOKEN is deleted, at which point npm uses the OIDC
-          # token instead. Both paths are authenticated; only one leaves a
-          # long-lived credential lying around.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Dry run only
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.dryRun }}
