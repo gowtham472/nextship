@@ -4,7 +4,7 @@ import { useRef, type RefObject } from 'react'
 import Image from 'next/image'
 import { Cloud, FolderCode, Package } from 'lucide-react'
 
-import icon from '@/app/icon.png'
+import icon from '@/app/apple-icon.png'
 import { AnimatedBeam } from '@/components/ui/animated-beam'
 
 /**
@@ -27,7 +27,8 @@ export function FlowDiagram() {
         <FolderCode className="h-6 w-6 text-muted-strong" aria-hidden="true" />
       </Stop>
       <Stop nodeRef={cli} label="nextship" detail="builds in Docker" emphasis>
-        <Image src={icon} alt="" className="h-9 w-9 rounded-lg" />
+        {/* The 180 pixel icon, so it stays sharp filling an 80 pixel tile at 2x. */}
+        <Image src={icon} alt="" fill sizes="80px" className="object-cover" />
       </Stop>
       <Stop nodeRef={registry} label="Your registry" detail="DigitalOcean">
         <Package className="h-6 w-6 text-muted-strong" aria-hidden="true" />
@@ -60,7 +61,7 @@ function Stop({
     <div className="flex w-20 flex-col items-center text-center sm:w-32">
       <div
         ref={nodeRef}
-        className={`relative z-10 grid h-16 w-16 place-items-center rounded-2xl border bg-card sm:h-20 sm:w-20 ${
+        className={`relative z-10 grid h-16 w-16 place-items-center overflow-hidden rounded-2xl border bg-card sm:h-20 sm:w-20 ${
           emphasis ? 'border-accent/40 shadow-[0_0_0_6px_var(--spotlight)]' : 'border-border'
         }`}
       >
