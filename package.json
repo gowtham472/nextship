@@ -3,7 +3,7 @@
   "private": true,
   "license": "Apache-2.0",
   "author": "Gowtham <gowtham9112006@gmail.com>",
-  "contributors": ["Ragul D"],
+  "contributors": ["Ragul D <raguld2105@gmail.com>"],
   "engines": { "node": ">=22" },
   "scripts": {
     "build": "pnpm -r build",

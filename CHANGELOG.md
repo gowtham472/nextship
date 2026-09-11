@@ -15,6 +15,12 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   testing layer answers, and the roadmap records that Lightsail needs AWS's Paid plan.
   (Gowtham)
 
+### Changed
+
+- **Ragul D's contact address in package metadata.** Every package's `contributors` entry
+  now carries an email, matching the `author` entry, so the published package names a way
+  to reach both copyright holders. (Gowtham)
+
 ## [1.0.0] - 2026-09-11
 
 v1.0: trustworthy for personal use on DigitalOcean. Streaming is a test that runs on

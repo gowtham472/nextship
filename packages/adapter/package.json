@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "author": "Gowtham <gowtham9112006@gmail.com>",
   "contributors": [
-    "Ragul D"
+    "Ragul D <raguld2105@gmail.com>"
   ],
   "description": "Next.js Deployment Adapter. Not published: the CLI ships it as a runtime asset and copies it into each build context.",
   "keywords": [
