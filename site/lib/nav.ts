@@ -55,6 +55,13 @@ export const DOCS_ORDER: NavItem[] = DOCS_NAV.flatMap((section) => section.items
 
 export const DOCS_SLUGS: string[] = DOCS_ORDER.map((item) => item.slug)
 
+/** The title of the section a page sits in, for breadcrumbs and search results. */
+export function getSection(slug: string): string {
+  const section = DOCS_NAV.find((candidate) => candidate.items.some((item) => item.slug === slug))
+  if (!section) throw new Error(`No section in lib/nav.ts lists the page "${slug}".`)
+  return section.title
+}
+
 /** The neighbours of a page, for the footer links. `null` at either end. */
 export function getNeighbours(slug: string): { previous: NavItem | null; next: NavItem | null } {
   const index = DOCS_ORDER.findIndex((item) => item.slug === slug)

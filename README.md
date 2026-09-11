@@ -877,6 +877,11 @@ contributor, which is why it is preferable to MIT for anything a company might a
 
 Copyright holders are listed in [`NOTICE`](./NOTICE).
 
+The marketing site carries a few third-party components under their own licences, listed
+in [`site/THIRD_PARTY_NOTICES.md`](./site/THIRD_PARTY_NOTICES.md). One of them, the hero's
+light, is under the React Bits licence rather than Apache-2.0. None of them is part of
+the CLI or the npm package.
+
 ## Acknowledgements
 
 **Ragul D**, for mentorship and technical guidance throughout, and a joint copyright

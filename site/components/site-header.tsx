@@ -1,7 +1,9 @@
 import Link from 'next/link'
 
 import { GitHubIcon, Wordmark } from '@/components/brand'
+import { Search } from '@/components/search'
 import { ThemeToggle } from '@/components/theme-toggle'
+import type { SearchEntry } from '@/lib/search'
 
 const LINKS = [
   { href: '/docs', label: 'Docs' },
@@ -11,10 +13,10 @@ const LINKS = [
 
 export const REPOSITORY = 'https://github.com/gowtham472/nextship'
 
-export function SiteHeader() {
+export function SiteHeader({ searchEntries }: { searchEntries: SearchEntry[] }) {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5 sm:px-8">
+      <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-5 sm:px-8">
         <Link href="/" className="shrink-0 transition-opacity hover:opacity-70" aria-label="nextship home">
           <Wordmark />
         </Link>
@@ -32,6 +34,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-1">
+          <Search entries={searchEntries} />
           <ThemeToggle />
           <a
             href={REPOSITORY}

@@ -1,15 +1,17 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { ArrowLeft, ArrowRight, ChevronRight, SquarePen } from 'lucide-react'
 import { MDXRemote } from 'next-mdx-remote/rsc'
 import rehypeAutolinkHeadings from 'rehype-autolink-headings'
 import rehypePrettyCode from 'rehype-pretty-code'
 import rehypeSlug from 'rehype-slug'
 import remarkGfm from 'remark-gfm'
 
+import { TableOfContents } from '@/components/docs/toc'
 import { mdxComponents } from '@/components/mdx'
 import { getDoc, getHeadings } from '@/lib/docs'
-import { DOCS_SLUGS, getNeighbours } from '@/lib/nav'
+import { DOCS_SLUGS, getNeighbours, getSection } from '@/lib/nav'
 
 /**
  * Every documentation page.
@@ -25,16 +27,34 @@ import { DOCS_SLUGS, getNeighbours } from '@/lib/nav'
 // unknown path is a 404 rather than an on-demand render.
 export const dynamicParams = false
 
+const EDIT_BASE = 'https://github.com/gowtham472/nextship/blob/main/site/content/docs'
+
 // Not `as const`: MDXRemote expects mutable Pluggable arrays, and a readonly
 // tuple is not assignable to one.
 const mdxOptions: NonNullable<React.ComponentProps<typeof MDXRemote>['options']>['mdxOptions'] = {
   remarkPlugins: [remarkGfm],
   rehypePlugins: [
     rehypeSlug,
-    [rehypeAutolinkHeadings, { behavior: 'wrap', properties: { className: 'no-underline' } }],
+    [
+      rehypeAutolinkHeadings,
+      {
+        behavior: 'append',
+        properties: { className: ['heading-anchor'], ariaLabel: 'Link to this section' },
+        content: { type: 'text', value: '#' },
+      },
+    ],
     // Both themes are emitted and the stylesheet drops the unused one, so code
-    // colours follow a theme switch without re-highlighting on the client.
-    [rehypePrettyCode, { theme: { light: 'github-light', dark: 'github-dark-dimmed' }, keepBackground: false }],
+    // colours follow a theme switch without re-highlighting on the client. Untagged
+    // fences, which hold what the CLI prints, are treated as plain text so they get
+    // the same block as everything else rather than falling through unstyled.
+    [
+      rehypePrettyCode,
+      {
+        theme: { light: 'github-light', dark: 'github-dark-dimmed' },
+        keepBackground: false,
+        defaultLang: { block: 'text' },
+      },
+    ],
   ],
 }
 
@@ -75,66 +95,79 @@ export default async function DocsPage({ params }: { params: Promise<{ slug?: st
   const doc = await getDoc(slug)
   const headings = getHeadings(doc.body)
   const { previous, next } = getNeighbours(slug)
+  const editUrl = `${EDIT_BASE}/${slug}.mdx`
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_13rem] lg:gap-10">
-      <article className="min-w-0 py-10 lg:py-14">
-        <header>
-          <p className="font-mono text-xs text-muted">Documentation</p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight text-balance">{doc.title}</h1>
-          <p className="mt-4 text-lg leading-relaxed text-muted text-pretty">{doc.description}</p>
-        </header>
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-12">
+      <article className="min-w-0 pt-8 pb-16 lg:pt-12">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-muted">
+          <Link href="/docs" className="transition-colors hover:text-foreground">
+            Docs
+          </Link>
+          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="font-medium text-accent-text">{getSection(slug)}</span>
+        </nav>
 
-        <div className="mt-10">
+        <h1 className="mt-4 text-4xl font-extrabold tracking-[-0.03em] text-balance sm:text-5xl">{doc.title}</h1>
+        <p className="mt-4 text-lg leading-relaxed text-muted text-pretty">{doc.description}</p>
+
+        <div className="mt-10 border-t border-border">
           <MDXRemote source={doc.body} components={mdxComponents} options={{ mdxOptions }} />
         </div>
 
-        <nav className="mt-16 grid gap-4 border-t border-border pt-8 sm:grid-cols-2" aria-label="Page navigation">
-          {previous ? (
-            <Link
-              href={`/docs/${previous.slug}`}
-              className="rounded-lg border border-border p-4 transition-colors hover:bg-card-hover"
-            >
-              <span className="text-xs text-muted">Previous</span>
-              <span className="mt-1 block font-medium">{previous.title}</span>
-            </Link>
-          ) : (
-            <span />
-          )}
+        <footer className="mt-16 border-t border-border pt-8">
+          {/* The outline column carries this link from lg up. */}
+          <a
+            href={editUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="mb-8 inline-flex items-center gap-2 text-sm text-muted transition-colors hover:text-foreground lg:hidden"
+          >
+            <SquarePen className="h-4 w-4" aria-hidden="true" />
+            Edit this page on GitHub
+          </a>
 
-          {next ? (
-            <Link
-              href={`/docs/${next.slug}`}
-              className="rounded-lg border border-border p-4 text-right transition-colors hover:bg-card-hover sm:col-start-2"
-            >
-              <span className="text-xs text-muted">Next</span>
-              <span className="mt-1 block font-medium">{next.title}</span>
-            </Link>
-          ) : null}
-        </nav>
+          <nav className="grid gap-4 sm:grid-cols-2" aria-label="Page navigation">
+            {previous ? (
+              <Link
+                href={`/docs/${previous.slug}`}
+                className="group rounded-xl border border-border p-5 transition-colors hover:border-accent/50 hover:bg-card-hover"
+              >
+                <span className="flex items-center gap-1.5 text-xs text-muted">
+                  <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                  Previous
+                </span>
+                <span className="mt-1.5 block font-semibold transition-colors group-hover:text-accent-text">
+                  {previous.title}
+                </span>
+              </Link>
+            ) : (
+              <span />
+            )}
+
+            {next ? (
+              <Link
+                href={`/docs/${next.slug}`}
+                className="group rounded-xl border border-border p-5 text-right transition-colors hover:border-accent/50 hover:bg-card-hover sm:col-start-2"
+              >
+                <span className="flex items-center justify-end gap-1.5 text-xs text-muted">
+                  Next
+                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+                <span className="mt-1.5 block font-semibold transition-colors group-hover:text-accent-text">
+                  {next.title}
+                </span>
+              </Link>
+            ) : null}
+          </nav>
+        </footer>
       </article>
 
-      {headings.length > 0 ? (
-        <aside className="hidden lg:block">
-          <div className="sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto py-14">
-            <h2 className="text-xs font-medium tracking-wide text-muted uppercase">On this page</h2>
-            <ul className="mt-3 space-y-2 border-l border-border">
-              {headings.map((heading) => (
-                <li key={heading.id}>
-                  <a
-                    href={`#${heading.id}`}
-                    className={`-ml-px block border-l border-transparent text-sm leading-snug text-muted transition-colors hover:border-border-strong hover:text-foreground ${
-                      heading.level === 3 ? 'pl-7' : 'pl-4'
-                    }`}
-                  >
-                    {heading.text}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </aside>
-      ) : null}
+      <aside className="hidden lg:block">
+        <div className="sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto py-12">
+          <TableOfContents headings={headings} editUrl={editUrl} />
+        </div>
+      </aside>
     </div>
   )
 }

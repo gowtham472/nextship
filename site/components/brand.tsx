@@ -48,11 +48,3 @@ export function MoonIcon({ className = 'h-[18px] w-[18px]' }: { className?: stri
     </svg>
   )
 }
-
-export function ArrowIcon({ className = 'h-4 w-4' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
-    </svg>
-  )
-}

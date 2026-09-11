@@ -4,6 +4,7 @@ import { Plus_Jakarta_Sans } from 'next/font/google'
 
 import { SiteFooter } from '@/components/site-footer'
 import { SiteHeader } from '@/components/site-header'
+import { getSearchIndex } from '@/lib/search'
 import { THEME_SCRIPT } from '@/lib/theme'
 import './globals.css'
 
@@ -46,7 +47,9 @@ export const viewport: Viewport = {
   ],
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const searchEntries = await getSearchIndex()
+
   return (
     <html lang="en" className={`${jakarta.variable} ${GeistMono.variable}`} suppressHydrationWarning>
       <head>
@@ -59,7 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="font-sans antialiased">
         <div className="flex min-h-screen flex-col">
-          <SiteHeader />
+          <SiteHeader searchEntries={searchEntries} />
           <main className="flex-1">{children}</main>
           <SiteFooter />
         </div>

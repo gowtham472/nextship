@@ -32,6 +32,33 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   screen icon come from `brand/nextship-favicon.png`, and `brand/logo.png` is the image a
   shared link previews with. (Gowtham)
 
+- **The landing page is redesigned.** The headline blurs in word by word and ends on the
+  wordmark's yellow square, the hero terminal plays the deploy transcript, a marquee
+  lists the Next.js features that keep working, the measured results count up, and a
+  flow diagram, the pipeline, the guarantees and the Vercel comparison follow. The
+  entrance and the playback are CSS, so they run from the first paint without
+  JavaScript, and every animation stops under reduced motion. The chip above the
+  headline is gone. Rays of the brand blue fall through the hero: React Bits' LightRays,
+  tuned in its Background Studio, following the theme, pausing off screen and left out
+  under reduced motion. That one file keeps its own licence, MIT with the Commons Clause,
+  rather than Apache-2.0. The animated beam, border beam, marquee and number ticker are
+  adapted from Magic UI under the MIT License. Both are recorded in
+  `site/THIRD_PARTY_NOTICES.md`. (Gowtham)
+
+- **The docs gain search and a fuller page.** Ctrl K, Cmd K or `/` searches every page
+  and heading from an index built at build time. Each page has a breadcrumb, an outline
+  that marks the section being read, an edit link, previous and next cards and anchors
+  on its headings, and narrow screens get a menu. Code blocks say whether they hold a
+  command or output and copy with one click, and callouts mark the passages not to skim.
+  (Gowtham)
+
+### Fixed
+
+- **Docs code blocks were drawn with inline code's border and padding.** The style for
+  inline code matched every `code` element, and untagged fences, which hold the CLI's
+  output, skipped highlighting altogether. Every fence is now a highlighted block, and
+  inline code keeps its own style. (Gowtham)
+
 ## [0.4.3] - 2026-09-10
 
 A change is refused while the app has a deployment in progress, the README stops

@@ -59,10 +59,14 @@ Deliberately narrow, in a tool whose guarantee is that nothing is deleted:
 **`NEXT_PUBLIC_*` are inert until a rebuild.** They are inlined at build time, so pushing a
 new value changes nothing a browser sees until you deploy again. The plan says so.
 
+<Callout type="warning">
+
 **A re-push restarts the app.** Stored secrets come back encrypted, so the CLI cannot
 compare a new value against the stored one and cannot detect a no-op. What it can detect
 is the case where every key is already set and nothing is being added; there it says so
 and asks you to confirm a restart you may not want.
+
+</Callout>
 
 **Pushed values are readable inside the container.** Your platform encrypts them at rest,
 but anyone who can open a console on the running app can read them.
