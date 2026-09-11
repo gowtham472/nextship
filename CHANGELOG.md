@@ -4,6 +4,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-09-11
+
+The CLI draws the nextship wordmark when it runs on its own, and the site is
+redesigned in the brand's type and colours, searchable, and served from Cloudflare.
+
 ### Added
 
 - **The wordmark, in the terminal and across the project.** `nextship` on its own

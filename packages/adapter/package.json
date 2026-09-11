@@ -1,7 +1,7 @@
 {
   "name": "@nextship/adapter",
   "private": true,
-  "version": "0.4.3",
+  "version": "0.4.4",
   "license": "Apache-2.0",
   "author": "Gowtham <gowtham9112006@gmail.com>",
   "contributors": [

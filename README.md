@@ -31,7 +31,7 @@ live, and prints the URL.
 
 ## Status
 
-**Version 0.4.3.** v0.4 is complete and verified against a live deployment. v0.5 is started, not finished: the driver interface exists, the AWS driver does not.
+**Version 0.4.4.** v0.4 is complete and verified against a live deployment. v0.5 is started, not finished: the driver interface exists, the AWS driver does not.
 
 | Area | State |
 |---|---|
