@@ -31,7 +31,7 @@ live, and prints the URL.
 
 ## Status
 
-**Version 0.4.4.** v0.4 is complete and verified against a live deployment. v1.0, trustworthy for personal use on DigitalOcean, is complete, with streaming verified on App Platform itself. AWS follows as v1.1: the driver interface exists, the AWS driver does not.
+**Version 1.0.0.** v0.4 is complete and verified against a live deployment. v1.0, trustworthy for personal use on DigitalOcean, is complete, with streaming verified on App Platform itself. AWS follows as v1.1: the driver interface exists, the AWS driver does not.
 
 | Area | State |
 |---|---|

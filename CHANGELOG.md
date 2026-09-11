@@ -4,6 +4,12 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-11
+
+v1.0: trustworthy for personal use on DigitalOcean. Streaming is a test that runs on
+every change and has passed against App Platform itself, and the roadmap, README and
+design agree on where the project stands.
+
 ### Added
 
 - **Streaming conformance runs on every change.** Streaming was verified once, by hand,
