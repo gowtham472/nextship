@@ -21,6 +21,12 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   now carries an email, matching the `author` entry, so the published package names a way
   to reach both copyright holders. (Gowtham)
 
+### Fixed
+
+- **Duplicate section numbers in `docs/design.md` §7.** Two subsections were numbered 7.5
+  and two 7.6, so a reference to §7.6 was ambiguous. They now run 7.1 to 7.9, and the two
+  references to the base image section point at §7.9. (Gowtham)
+
 ## [1.0.0] - 2026-09-11
 
 v1.0: trustworthy for personal use on DigitalOcean. Streaming is a test that runs on

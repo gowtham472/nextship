@@ -138,7 +138,7 @@ The things that turn a deploy script into something worth relying on.
 | **Done, verified live.** `logs --follow`, over the websocket App Platform returns. Forwarding is **not** built: it needs an external destination and credentials the user must choose, so there is nothing to verify against |
 | **Done, verified live.** `destroy`: removes the app and optionally its images, never the registry or DNS. The app name is a required argument, so `--yes` in the wrong directory cannot destroy the wrong app. Verified against a disposable app rather than a real one |
 | **Done.** Exclude dependency source maps and development runtimes at copy time, not only while tracing. Saved 69 MB: image 660 MB to 591 MB. The over-inclusion was larger than the 25 MB estimated, and had a different cause |
-| **Done, concluded no.** Alpine is 2.5x slower at image optimization on identical libvips and saves 97 MB, not the 150 to 200 estimated. Distroless keeps glibc and saves 129 MB but removes the shell this project has repeatedly needed to diagnose real problems. Base layers are cached per node anyway, so this optimises a number that does not travel. See `design.md` §7.6 |
+| **Done, concluded no.** Alpine is 2.5x slower at image optimization on identical libvips and saves 97 MB, not the 150 to 200 estimated. Distroless keeps glibc and saves 129 MB but removes the shell this project has repeatedly needed to diagnose real problems. Base layers are cached per node anyway, so this optimises a number that does not travel. See `design.md` §7.9 |
 
 ## v1.0: trustworthy for personal use, DigitalOcean only (Complete, 2026-09-11)
 

@@ -290,7 +290,7 @@ that ran the command, so an arm64 laptop produces an image that cannot run on th
 amd64 hosts both AWS and DigitalOcean default to, and the failure surfaces at deploy
 time rather than build time.
 
-### 7.5 What the CLI writes into your project
+### 7.6 What the CLI writes into your project
 
 Everything goes in `.nextship/`, which carries its own `.gitignore` containing `*` so
 nothing inside can be committed:
@@ -307,13 +307,13 @@ nothing inside can be committed:
 
 The user's own `.gitignore` and `.dockerignore` are never edited.
 
-### 7.6 Running it locally
+### 7.7 Running it locally
 
 `nextship run` starts the image attached, publishing port 3000 and loading the
 highest-precedence env file the project has. Ctrl+C stops and removes the container;
 the CLI treats that exit as a normal stop, not a failure.
 
-### 7.7 Measured on a real project
+### 7.8 Measured on a real project
 
 `company_portfolio`, Next.js 16.2.9, pnpm, 21 routes, `next/image` in 21 files:
 
@@ -327,7 +327,7 @@ the CLI treats that exit as a normal stop, not a failure.
 Of the 591 MB, 332 MB is `node:24-slim` itself and 78 MB is the project's `public/`
 media. The application code and dependencies are about 58 MB.
 
-### 7.6 Base image, evaluated and kept (Implemented)
+### 7.9 Base image, evaluated and kept (Implemented)
 
 `node:24-slim` is 332 MB of the 591 MB image, so it looked like the largest remaining
 saving. Both alternatives were measured rather than assumed, and neither is worth
@@ -716,7 +716,7 @@ credentials in CI.
 |---|---|---|
 | **`output: 'standalone'` is incompatible with the Adapter API.** Verified against Next.js 16.3.4: setting it while any adapter is configured fails the build with `ENOENT` on `.next/next-server.js.nft.json`. Reproduces with a no-op adapter. | The CLI assembles the equivalent tree itself from the same trace files (§7.1). | Open upstream. Worth reporting to Next.js. |
 | **Only production runtimes ship.** Development runtime variants and dependency source maps are never copied, because `NODE_ENV=production` makes the development ones unreachable. | Setting `NODE_ENV=development` on a deployed app would stop it starting. `env push` warns about exactly that. | Deliberate: it removed 53 MB |
-| **The base image is 332 MB.** `node:24-slim`, kept deliberately after measuring the alternatives (§7.6). | Over half the image is the base, but it is a shared layer pulled once per node rather than per deploy. | Revisit if the base ever has to travel per deploy |
+| **The base image is 332 MB.** `node:24-slim`, kept deliberately after measuring the alternatives (§7.9). | Over half the image is the base, but it is a shared layer pulled once per node rather than per deploy. | Revisit if the base ever has to travel per deploy |
 | **`public/` ships inside the image.** 78 MB on the real project. | Media is served by the container rather than a CDN. | v0.4 |
 | **The ISR cache does not survive a restart.** `.next/cache` lives inside the container, so every restart, redeploy and rescheduling starts cold. Optimized images share the same directory and are re-generated too. Single-instance ISR is correct per process, which is not the same as durable. | The first request to each cached route after any restart renders instead of reading cache. On an image-heavy site the cold-start cost is dominated by re-optimizing images. | **Decided: accepted for v1.** Verify whether App Platform offers a persistent volume for a service before v0.3; if not, this is inherent until the v2 shared cache handler |
 | **Dependencies referenced by `file:` paths outside the build context fail.** The context is the project or workspace root, and nothing outside it exists in the builder. | The install step fails. | Accepted |
