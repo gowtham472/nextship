@@ -34,6 +34,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 - **Duplicate section numbers in `docs/design.md` §7.** Two subsections were numbered 7.5
   and two 7.6, so a reference to §7.6 was ambiguous. They now run 7.1 to 7.9, and the two
   references to the base image section point at §7.9. (Gowtham)
+- **Three statements that no longer matched the code.** The example manifest in
+  `docs/design.md` §5.1 omitted `healthPath`, which the adapter writes and `deploy` uses
+  for the health check; it is now shown, with how the route is chosen. §8.2 gave the
+  deployment id as `dpl-<commit>`, while the CLI produces `dpl-<commit>-<digest>` for a
+  clean tree, a random suffix for a dirty one and `dpl-local-<random>` outside git. The
+  comments in `config.ts` and `targets/target.ts` still placed AWS at v0.5 rather than
+  v1.1. (Gowtham)
 
 ## [1.0.0] - 2026-09-11
 

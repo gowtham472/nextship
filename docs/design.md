@@ -105,7 +105,8 @@ disk by building the `manifest` target, a scratch image holding only that file.
   "version": 1,
   "buildId": "Xk3f…",
   "deploymentId": "dpl-8fk2j…",
-  "framework": { "name": "next", "version": "16.2.9" }
+  "framework": { "name": "next", "version": "16.2.9" },
+  "healthPath": "/"
 }
 ```
 
@@ -113,7 +114,16 @@ Every field has a reader ([`../AGENTS.md`](../AGENTS.md) §3.1): `version` is
 checked for compatibility and a mismatch is refused; `buildId` and
 `framework.version` are reported by `nextship build`; `deploymentId` is compared
 with the id the CLI passed in, and a difference means the adapter did not apply the
-config it was given, which is reported as a defect rather than shipped.
+config it was given, which is reported as a defect rather than shipped; `healthPath`
+becomes the path the platform's health check polls (§10.7).
+
+`healthPath` is chosen from `.next/prerender-manifest.json` so the check is served
+from disk rather than rendered every few seconds for the life of the app: `/` when it
+is prerendered, because that is the path users take, otherwise the first prerendered
+route in sorted order, so the same build always picks the same route. It is `null`
+when nothing is prerendered, and `deploy` then falls back to `/` and says the probe
+renders on every request. The CLI reads the field as optional, so a manifest from an
+adapter that predates it still reads.
 
 The manifest is versioned, so later versions add fields in the change that starts
 reading them.
@@ -384,8 +394,11 @@ Deployment Adapter API stable.
 into `.nextship/secrets.local.json` and reused. Generating a new key per build would
 break Server Actions for any client still running the previous build.
 
-The deployment id is `dpl-<commit>` for a clean tree, gains a random suffix when the
-tree has uncommitted changes, and is random outside git (§7.4).
+The deployment id is `dpl-<commit>-<digest>` for a clean tree, where the commit is 12
+characters and the digest the first 8 of the build digest. With uncommitted changes
+the digest is replaced by a random suffix, and outside git the id is
+`dpl-local-<random>`. `NEXTSHIP_DEPLOYMENT_ID` in the environment overrides all three
+(§7.4).
 
 Build-time environment comes only from the project's env files, mounted as build
 secrets. Variables set in the developer's shell are not forwarded, which matches how

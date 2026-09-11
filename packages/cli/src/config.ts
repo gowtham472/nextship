@@ -22,7 +22,7 @@ const CONFIG_VERSION = 1
 
 export interface ProjectConfig {
   version: number
-  /** Only DigitalOcean today. AWS is v0.5. */
+  /** Only DigitalOcean today. AWS is v1.1. */
   target: 'digitalocean'
   region: string
   /** App Platform app name, and the repository name inside the registry. */
