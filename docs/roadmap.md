@@ -140,7 +140,7 @@ The things that turn a deploy script into something worth relying on.
 | **Done.** Exclude dependency source maps and development runtimes at copy time, not only while tracing. Saved 69 MB: image 660 MB to 591 MB. The over-inclusion was larger than the 25 MB estimated, and had a different cause |
 | **Done, concluded no.** Alpine is 2.5x slower at image optimization on identical libvips and saves 97 MB, not the 150 to 200 estimated. Distroless keeps glibc and saves 129 MB but removes the shell this project has repeatedly needed to diagnose real problems. Base layers are cached per node anyway, so this optimises a number that does not travel. See `design.md` §7.6 |
 
-## v1.0: trustworthy for personal use, DigitalOcean only
+## v1.0: trustworthy for personal use, DigitalOcean only (Complete, 2026-09-11)
 
 The bar is honest reliability, not features. **Scope is DigitalOcean alone**: it is the
 target that is built, verified live, and actually used. AWS is v1.1.
@@ -150,7 +150,7 @@ target that is built, verified live, and actually used. AWS is v1.1.
 | A license, so the code may legally be used | **Done.** Apache-2.0, copyright Gowtham and Ragul D |
 | Adapter compatibility suite **run**, results published as a support matrix | **Done.** 1051 of 1115 suites pass (94.3%), reproduced exactly across two runs, every failure attributed in the README's support matrix |
 | The harness scripts proven to work before spending CI hours on them | **Done.** Run against a real app: `e2e-deploy.sh` exits 0 with exactly one URL on stdout that serves 200, `e2e-logs.sh` emits all five markers the harness reads, `e2e-cleanup.sh` removes the container and image |
-| Streaming conformance as a repeatable test rather than a one-off measurement | **Done for the container, open for App Platform.** `conformance/streaming/` builds a fixture with nextship, runs it and fails unless the shell arrives before the tail; CI runs it on every change, first byte 182 ms against a 2146 ms total. The same script has not yet been pointed at App Platform, and until it is, App Platform streaming is unverified |
+| Streaming conformance as a repeatable test rather than a one-off measurement | **Done.** `conformance/streaming/` builds a fixture with nextship, runs it and fails unless the shell arrives before the tail; CI runs it on every change, first byte 96 ms against a 2063 ms total. Pointed at a live App Platform app it passed three runs of three, first byte 230 to 448 ms against 2.2 to 2.4 s, sent chunked through DigitalOcean's Cloudflare edge with the cache bypassed. The app and its images were removed afterwards |
 | Documented limitations, with nothing claimed that has not been observed working | **Done.** The README states what is not supported and why, and refuses to claim PPR, middleware or Cache Components |
 | An install path that needs no prior knowledge | **Done.** `npm install -g nextship-cli`, published with provenance, each release staged and approved with 2FA |
 

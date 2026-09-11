@@ -425,12 +425,11 @@ interface Driver {
 | Cron | EventBridge Scheduler to HTTPS | Scheduled job hitting the route |
 | Logs | CloudWatch | App Platform logs |
 
-**Open risk.** Whether a Lightsail container service and App Platform pass responses through unbuffered
-is unverified. Streaming end to end is non-negotiable: without it, PPR and Suspense
-degrade silently while appearing to work. The streaming conformance test (§11) now
-exists and passes on the container itself; pointed at each platform's URL, it decides
-the default compute choice per cloud before a driver is written around the wrong
-assumption.
+**Open risk, half settled.** App Platform streams: the streaming conformance test (§11)
+passed against a live app. Whether a Lightsail container service does is still
+unverified. Streaming end to end is non-negotiable: without it, PPR and Suspense degrade
+silently while appearing to work. The same test, pointed at a Lightsail endpoint,
+decides the default AWS compute before a driver is written around the wrong assumption.
 
 ### 9.1 The driver interface (Implemented)
 
@@ -669,16 +668,18 @@ logs process, and cleanup of the container and image after each test. 1051 of 11
 suites pass (94.3%), reproduced exactly across two runs, with every failure attributed
 in the README's support matrix.
 
-**Streaming conformance (Implemented for the container).** `conformance/streaming/`
+**Streaming conformance (Implemented).** `conformance/streaming/`
 holds a fixture whose `/stream` page renders its shell at once and its tail two seconds
 later behind a Suspense boundary, and `measure.mjs`, which fails unless the first byte
 arrives well before the last and the shell arrives before the tail. `run.sh` builds the
 fixture with nextship, runs the image and measures it, and CI runs that on every push
 and pull request. The script was shown to fail against a server that buffers, one that
 never answers and one that drops the connection part way. It takes any URL, which is
-how a deployed target is checked: App Platform has not been measured yet, and each new
-target is measured before its driver is trusted, which decides the default compute per
-cloud (§9).
+how a deployed target is checked. App Platform was measured live on 2026-09-11: three
+runs of three passed, first byte 230 to 448 ms against a 2.2 to 2.4 s total, the shell
+before the tail, sent chunked through DigitalOcean's Cloudflare edge with the cache
+bypassed. Each new target is measured the same way before its driver is trusted, which
+decides the default compute per cloud (§9).
 
 **Per-target end-to-end acceptance (Designed, not a v1.0 gate)** on real clouds per
 pull request: static page, SSR page, ISR page (time-based and `revalidateTag`), PPR

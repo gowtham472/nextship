@@ -22,3 +22,5 @@ packages/cli/LICENSE
 packages/cli/NOTICE
 site/out
 site/.wrangler
+# A deploy of the streaming fixture records an app in the account it ran against.
+conformance/streaming/app/nextship.json
