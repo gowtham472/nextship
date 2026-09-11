@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, ResolvingMetadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, ArrowRight, ChevronRight, SquarePen } from 'lucide-react'
@@ -72,19 +72,21 @@ function resolveSlug(slug: string[] | undefined): string | null {
   return first && DOCS_SLUGS.includes(first) ? first : null
 }
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug?: string[] }>
-}): Promise<Metadata> {
+export async function generateMetadata(
+  { params }: { params: Promise<{ slug?: string[] }> },
+  parent: ResolvingMetadata
+): Promise<Metadata> {
   const slug = resolveSlug((await params).slug)
   if (!slug) return {}
 
   const doc = await getDoc(slug)
+  // A page's own openGraph replaces the inherited one whole, image included, so the
+  // site's share image is carried over or a docs link previews without one.
+  const images = (await parent).openGraph?.images ?? []
   return {
     title: doc.title,
     description: doc.description,
-    openGraph: { title: doc.title, description: doc.description, type: 'article' },
+    openGraph: { title: doc.title, description: doc.description, type: 'article', images },
   }
 }
 
