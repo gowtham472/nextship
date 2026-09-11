@@ -25,6 +25,9 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 - **Ragul D's contact address in package metadata.** Every package's `contributors` entry
   now carries an email, matching the `author` entry, so the published package names a way
   to reach both copyright holders. (Gowtham)
+- **The README and site status describe 1.0.0 as released.** The status line read as a
+  list of milestones, and both pages still gave the compatibility suite not having run as
+  the reason for one cloud, though it has run. (Gowtham)
 
 ### Fixed
 

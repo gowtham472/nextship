@@ -31,7 +31,7 @@ live, and prints the URL.
 
 ## Status
 
-**Version 1.0.0.** v0.4 is complete and verified against a live deployment. v1.0, trustworthy for personal use on DigitalOcean, is complete, with streaming verified on App Platform itself. AWS follows as v1.1: the driver interface exists, the AWS driver does not.
+**Version 1.0.0: trustworthy for personal use on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. AWS follows as v1.1: the driver interface exists, the AWS driver does not.
 
 | Area | State |
 |---|---|
@@ -51,8 +51,8 @@ in [`docs/roadmap.md`](./docs/roadmap.md) under "Beyond v1.0", each with the
 trigger that would justify building it.
 
 **v1.0 is DigitalOcean only.** That is the target that is built, verified against a live
-app, and actually used. Supporting a second cloud before the compatibility suite has run
-would add breadth on top of an unproven base.
+app, and actually used. A second cloud is built on the proven one rather than beside it,
+so AWS follows as v1.1.
 
 ---
 

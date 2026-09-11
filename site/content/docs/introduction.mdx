@@ -50,8 +50,10 @@ runtime are platform products or platform infrastructure, and they do not come w
 
 ## Current state
 
-Version 1.0.0. The local pipeline and DigitalOcean deployment are complete and verified
-against a live app, including two rollbacks in opposite directions.
+Version 1.0.0, trustworthy for personal use on DigitalOcean. The local pipeline and
+DigitalOcean deployment are verified against live App Platform apps, including two
+rollbacks in opposite directions and streaming through App Platform itself, and have
+deployed from both Windows and an Apple Silicon Mac.
 
 Verified on real containers: every route serves, image optimization produces WebP,
 streaming does not buffer (27 ms to first byte against a 2.02 s total), ISR works both
@@ -59,5 +61,5 @@ time based and on demand, Server Actions execute, and `after()` runs. The runtim
 591 MB uncompressed, against 1.13 GB before pruning.
 
 **v1.0 targets DigitalOcean only.** That is the target that is built, verified and
-actually used. Supporting a second cloud before the compatibility suite has run would add
-breadth on top of an unproven base. The driver interface exists, and AWS is v1.1.
+actually used. A second cloud is built on the proven one rather than beside it: the driver
+interface exists, and AWS is v1.1.
