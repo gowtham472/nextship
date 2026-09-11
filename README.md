@@ -31,7 +31,7 @@ live, and prints the URL.
 
 ## Status
 
-**Version 0.4.4.** v0.4 is complete and verified against a live deployment. v0.5 is started, not finished: the driver interface exists, the AWS driver does not.
+**Version 0.4.4.** v0.4 is complete and verified against a live deployment. v1.0, trustworthy for personal use on DigitalOcean, has one check left: the streaming test against App Platform itself. AWS follows as v1.1: the driver interface exists, the AWS driver does not.
 
 | Area | State |
 |---|---|
@@ -547,8 +547,9 @@ next `deploy` creates a fresh one rather than refusing.
 
 ### Planned
 
-v0.4 is complete. Next is v0.5, a second cloud target, which is where the claim that
-this ports beyond DigitalOcean is either proven or shown to cost more than it looked.
+v0.4 is complete, and v1.0 needs only the streaming test run against App Platform. After
+it comes v1.1, a second cloud target, which is where the claim that this ports beyond
+DigitalOcean is either proven or shown to cost more than it looked.
 See [`docs/roadmap.md`](./docs/roadmap.md), which also records what is
 deliberately not being built and why.
 
@@ -792,7 +793,11 @@ node packages/cli/scripts/verify-pack.mjs   # pack, install, run the command
    are present and that the `nextship` command runs.
 2. **The Next.js adapter compatibility suite**, the official one, the same suite
    Vercel's adapter runs against. Results below.
-3. **Live verification on real containers and a real DigitalOcean app**, by hand:
+3. **Streaming conformance**, on every push and pull request: nextship builds a fixture
+   whose page renders its shell at once and its tail two seconds later, runs the image,
+   and fails unless the shell arrives before the tail. The check takes any URL, so the
+   same script measures a deployed target (`conformance/streaming/`).
+4. **Live verification on real containers and a real DigitalOcean app**, by hand:
    every route serves, image optimization produces WebP, streaming does not buffer,
    ISR works both time-based and on-demand, Server Actions execute, and `after()`
    runs.
@@ -847,8 +852,8 @@ install. Fixing those three moved the rate from 93.4% to 94.3% with no regressio
 | **v0.2** | Build in Docker, prune, run and verify locally | Done |
 | **v0.3** | First cloud deployment to DigitalOcean: deploy, rollback, logs | Done, verified live. Image retention and a health endpoint were moved to v0.4 with reasons |
 | **v0.4** | Day-two operations: domains and TLS, env, images, destroy, logs | Done, verified live |
-| **v0.5** | AWS | In progress. The driver interface exists and DigitalOcean implements it; the AWS driver needs an account to verify against |
-| **v1.0** | Trustworthy for personal use: compatibility suite results, streaming conformance, honest limitations | Not started |
+| **v1.0** | Trustworthy for personal use: compatibility suite results, streaming conformance, honest limitations | Nearly done. The suite has run (94.3%), the package is on npm under Apache-2.0, and streaming conformance passes on the local container in CI; running it against App Platform is what is left |
+| **v1.1** | AWS | Planned. The driver interface exists and DigitalOcean implements it; the AWS driver needs an account to verify against |
 
 Beyond v1.0, each with the trigger that would justify it: correctness at scale (a
 shared cache and distributed tags, needed once there is more than one instance),

@@ -62,6 +62,33 @@ jobs:
         working-directory: packages/cli
         run: node scripts/verify-pack.mjs
 
+  streaming:
+    name: Streaming
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # nextship reads the installed Next.js version, so the fixture is installed
+      # before it is built.
+      - name: Install the streaming fixture
+        working-directory: conformance/streaming/app
+        run: npm ci --no-audit --no-fund
+
+      # Builds the fixture in Docker exactly as nextship builds any app, runs the
+      # image, and fails unless the slow page's shell arrives before its tail.
+      - run: bash conformance/streaming/run.sh
+
   site:
     name: Site
     runs-on: ubuntu-latest

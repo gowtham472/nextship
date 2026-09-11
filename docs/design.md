@@ -427,9 +427,10 @@ interface Driver {
 
 **Open risk.** Whether a Lightsail container service and App Platform pass responses through unbuffered
 is unverified. Streaming end to end is non-negotiable: without it, PPR and Suspense
-degrade silently while appearing to work. The streaming conformance test (§11)
-decides the default compute choice per cloud before either driver is written around
-the wrong assumption.
+degrade silently while appearing to work. The streaming conformance test (§11) now
+exists and passes on the container itself; pointed at each platform's URL, it decides
+the default compute choice per cloud before a driver is written around the wrong
+assumption.
 
 ### 9.1 The driver interface (Implemented)
 
@@ -634,8 +635,8 @@ one unreachable chunk cannot discard the rest.
 
 ## 11. Conformance
 
-**Unit tests (Implemented).** 124 `node:test` cases under `packages/cli/src`, run with
-`pnpm test`: detection against on-disk fixtures (standalone, workspace, hoisted
+**Unit tests (Implemented).** The `node:test` suite under `packages/cli/src`, run with
+`pnpm test` and by CI on Linux and Windows: detection against on-disk fixtures (standalone, workspace, hoisted
 dependencies, version gate, missing install, build command fallback, node major
 resolution), Dockerfile and ignore file rendering for both layouts, build identity,
 the `docker build` argument list, DigitalOcean registry region matching, rollback
@@ -660,28 +661,31 @@ creating symlinks, which is the default on Windows without developer mode.
 That app is 16.3.4, where Next.js writes no server trace at all while an adapter is
 configured, so it also confirms the launcher-trace fallback (§7.1) in production.
 
-**Compatibility harness (Scripts verified, suite not run).** The three scripts have now been executed against a real application, which had never been done: `e2e-deploy.sh` exits 0 having printed exactly one URL on stdout, and that URL serves; `e2e-logs.sh` emits every marker the harness reads; `e2e-cleanup.sh` removes both the container and the image. What remains is the suite itself, which clones and builds Next.js and runs sixteen parallel groups, so it needs CI rather than a laptop.
+**Compatibility suite (Run).** `conformance/` holds the three scripts the official
+suite requires, and `.github/workflows/conformance.yml` clones Next.js, builds it and
+runs the suite in thirty-two groups. The scripts follow the documented contract:
+exactly the deployment URL on stdout, the required markers persisted for the separate
+logs process, and cleanup of the container and image after each test. 1051 of 1115
+suites pass (94.3%), reproduced exactly across two runs, with every failure attributed
+in the README's support matrix.
 
-**Original note.** `conformance/` holds the three
-scripts the official suite requires, and `.github/workflows/conformance.yml` clones
-Next.js, builds it and runs the suite in sixteen groups. The scripts follow the
-documented contract: exactly the deployment URL on stdout, the required markers
-persisted for the separate logs process, and cleanup of the container and image
-after each test. What remains is executing it, which is compute rather than design.
+**Streaming conformance (Implemented for the container).** `conformance/streaming/`
+holds a fixture whose `/stream` page renders its shell at once and its tail two seconds
+later behind a Suspense boundary, and `measure.mjs`, which fails unless the first byte
+arrives well before the last and the shell arrives before the tail. `run.sh` builds the
+fixture with nextship, runs the image and measures it, and CI runs that on every push
+and pull request. The script was shown to fail against a server that buffers, one that
+never answers and one that drops the connection part way. It takes any URL, which is
+how a deployed target is checked: App Platform has not been measured yet, and each new
+target is measured before its driver is trusted, which decides the default compute per
+cloud (§9).
 
-**Three gates still Designed**, all blocking a v1.0 release, none run yet:
-
-1. **Next.js adapter compatibility suite** against our adapter, published as a
-   support matrix.
-2. **Streaming conformance test**: a route with a slow Suspense boundary deployed to
-   each target, asserting the first byte arrives well before the last. This decides
-   the default compute choice per cloud (§9).
-3. **Per-target end-to-end acceptance** on real AWS and real DigitalOcean per pull
-   request: static page, SSR page, ISR page (time-based and `revalidateTag`), PPR
-   route, Server Action, `next/image`, middleware redirect, cron fire, rolling
-   deploy with no 5xx, and rollback.
-
-Plus the correctness checklist from research §6.6, encoded as assertions.
+**Per-target end-to-end acceptance (Designed, not a v1.0 gate)** on real clouds per
+pull request: static page, SSR page, ISR page (time-based and `revalidateTag`), PPR
+route, Server Action, `next/image`, middleware redirect, cron fire, rolling deploy with
+no 5xx, and rollback, plus the correctness checklist from research §6.6 encoded as
+assertions. Live verification is done by hand today; automating it needs cloud
+credentials in CI.
 
 ## 12. Known limitations
 

@@ -80,7 +80,7 @@ new customers. There are two realistic replacements and they are not close:
 Lightsail's price includes a load balanced TLS endpoint, custom domains with a free
 certificate, and 500 GB of transfer per service, verified against the Lightsail container
 services FAQ. It is billed hourly and prorated. That is why `roadmap.md` makes it the
-v0.5 default and puts ECS behind `--compute ecs`: the load balancer is only unavoidable
+v1.1 default and puts ECS behind `--compute ecs`: the load balancer is only unavoidable
 on the ECS path.
 
 The Fargate + ALB column below is therefore the **upper** bound for AWS, not the only

@@ -4,6 +4,26 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Added
+
+- **Streaming conformance runs on every change.** Streaming was verified once, by hand,
+  as 27 ms to first byte against a 2.02 s total. `conformance/streaming/` makes it a
+  test: a fixture whose page renders its shell at once and its tail two seconds later,
+  built by nextship and run as an image, with a check that fails unless the shell
+  arrives before the tail. CI runs it on every push and pull request. The check was
+  shown to fail against a server that buffers, one that never answers and one that
+  drops the connection, and it takes any URL, so the same script measures a deployed
+  target. (Gowtham)
+
+### Docs
+
+- **The roadmap and design say where v1.0 actually stands.** The licence, the
+  compatibility suite and the npm install were all done while the v1.0 checklist still
+  called them blockers, the README placed AWS before v1.0 as a "v0.5" the roadmap never
+  had, and the design doc still counted 124 unit tests and called the suite unrun. They
+  now agree: v1.0 needs only the streaming check run against App Platform, and AWS is
+  v1.1. (Gowtham)
+
 ## [0.4.4] - 2026-09-11
 
 The CLI draws the nextship wordmark when it runs on its own, and the site is
