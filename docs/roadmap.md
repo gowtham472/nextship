@@ -262,6 +262,17 @@ point-in-time fact, not a commitment, and it is a much weaker statement than act
 investment. Re-check both lists immediately before committing to the driver, and treat
 the ECS path as the hedge that already exists.
 
+### Testing it
+
+`design.md` §9.2 sets out the three layers. Two facts shape the plan:
+
+- **Floci, the local emulator, does not emulate Lightsail container services.** It runs
+  the ECS path for real, so `conformance/aws/probe.sh` rehearses a nextship image there,
+  but every Lightsail call is tested with recorded responses and a real account.
+- **Lightsail is not available on AWS's Free plan.** A Free plan account has to switch to
+  the Paid plan, which keeps its credits and unlocks a 90 day trial of the Micro container
+  service. A budget alert comes first, because the Paid plan bills anything beyond them.
+
 ### What has to happen first
 
 There is no driver interface today. Every command imports the DigitalOcean client
@@ -284,6 +295,7 @@ driver.
 | Deliverable |
 |---|
 | **Done.** A driver interface expressed as intent (`targets/target.ts`), with the DigitalOcean driver reshaped to implement it. Every command now talks to `Target`, platform orchestration moved into the driver, and all tests plus the live commands behave identically. Proven against one cloud, which makes it a hypothesis until the second exists |
+| **Done.** A local rehearsal of the container path against Floci: `conformance/aws/probe.sh` pushes a nextship image to an emulated ECR, runs it as an ECS task, checks it streams and reads its CloudWatch logs. Not in CI until a driver exists for it to test |
 | Settle the streaming question with a real container before writing a driver against it |
 | Lightsail driver: create the service, deploy, wait, report its URL |
 | Image push through `lightsail push-container-image`, with a preflight that names the missing `lightsailctl` plugin rather than failing inside the AWS CLI |

@@ -464,6 +464,28 @@ in a plan without knowing the words `SECRET` or `GENERAL`.
 interface, and the live commands behave identically, but an interface with one
 implementation is a hypothesis. The second driver is what tests it.
 
+### 9.2 Testing against AWS (Designed; the emulator harness is Implemented)
+
+No single tool covers the AWS driver, so it is tested in three layers, each answering
+what the others cannot:
+
+| Layer | Covers | Cannot answer |
+|---|---|---|
+| Unit tests with recorded API responses | Every Lightsail call the driver makes, its error paths, and image retention | Whether AWS actually behaves as recorded |
+| Floci, a local AWS emulator (`conformance/aws/probe.sh`) | ECR repositories and pushes, ECS tasks run as real containers, CloudWatch Logs, STS | Lightsail container services, which it does not emulate; any real endpoint's behaviour |
+| A real AWS account | Streaming through a Lightsail endpoint (§11), TLS, IAM permissions, the final live check | Nothing, but it costs money and needs the account holder's approval per run |
+
+The probe builds the streaming fixture with nextship, pushes it to Floci's registry,
+runs it as an ECS task, runs the streaming check against it and confirms its output
+reaches CloudWatch Logs. Against Floci 2.0.1 it passes in about five minutes: first byte
+192 ms against a 2141 ms total, five log events. Two gaps were found running it, and are
+recorded in its header: ECR `ListImages` and `DescribeImages` fail, so image retention
+stays with the unit tests, and the registry host Floci returns does not resolve on Docker
+Desktop for Windows, so images are pushed through `localhost:5100`.
+
+The probe is not in CI yet. Until a driver exists it exercises the emulator rather than
+nextship, and a failure would say nothing about this code.
+
 ## 10. Deploy lifecycle
 
 Immutable by construction, which is where rollback and skew protection come from.

@@ -88,6 +88,24 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 One fixed key is required because the suite builds many apps and Server Actions must stay
 decryptable across all of them.
 
+## Rehearsing the AWS path locally
+
+`conformance/aws/probe.sh` runs nextship's container path against Floci, a local AWS
+emulator, with no AWS account: it builds the streaming fixture, pushes it to an emulated
+ECR, runs it as an ECS task, checks it streams and reads its CloudWatch logs. It needs
+only Docker, runs the AWS CLI from its official image, and removes every container it
+starts:
+
+```bash
+pnpm build
+(cd conformance/streaming/app && npm ci)
+bash conformance/aws/probe.sh
+```
+
+Floci does not emulate Lightsail container services, so this is not a test of the
+default AWS target. `docs/design.md` §9.2 explains what each testing layer can and cannot
+answer.
+
 ## Releasing
 
 Releases are published from CI, never from a laptop. `.github/workflows/release.yml`

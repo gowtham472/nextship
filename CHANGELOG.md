@@ -4,6 +4,17 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Added
+
+- **A local rehearsal of the AWS container path.** `conformance/aws/probe.sh` runs Floci,
+  a local AWS emulator, and pushes the streaming fixture nextship builds to its container
+  registry, runs it as an ECS task, checks that it streams and confirms its output reaches
+  CloudWatch Logs, all without an AWS account. Against Floci 2.0.1 it passes: first byte
+  192 ms against 2141 ms, five log events. Floci does not emulate Lightsail container
+  services and fails to list ECR images, so `docs/design.md` §9.2 records what each
+  testing layer answers, and the roadmap records that Lightsail needs AWS's Paid plan.
+  (Gowtham)
+
 ## [1.0.0] - 2026-09-11
 
 v1.0: trustworthy for personal use on DigitalOcean. Streaming is a test that runs on
