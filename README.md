@@ -36,7 +36,7 @@ live, and prints the URL.
 | Area | State |
 |---|---|
 | Local pipeline: `detect`, `build`, `package`, `run` | Done. Verified on a real production project and a purpose-built feature app |
-| DigitalOcean deployment: `deploy`, `rollback`, `logs` | Done. Verified against a live app, including two rollbacks in opposite directions |
+| DigitalOcean deployment: `deploy`, `rollback`, `logs` | Done. Verified against a live app, including two rollbacks in opposite directions, and deployed from an Apple Silicon Mac (M3 Max) with 0.4.4 installed from npm |
 | AWS | Not in v1.0. The driver interface exists and DigitalOcean implements it; the AWS driver is v1.1 |
 | Official Next.js adapter compatibility suite | Run. 1051 of 1115 suites pass (94.3%), with every failure attributed. See the support matrix below |
 

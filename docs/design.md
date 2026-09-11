@@ -290,6 +290,10 @@ that ran the command, so an arm64 laptop produces an image that cannot run on th
 amd64 hosts both AWS and DigitalOcean default to, and the failure surfaces at deploy
 time rather than build time.
 
+Verified on Apple Silicon: nextship 0.4.4, installed from npm on a MacBook Pro with an
+M3 Max, built a Next.js app there and deployed it to App Platform, and its live URL
+served.
+
 ### 7.6 What the CLI writes into your project
 
 Everything goes in `.nextship/`, which carries its own `.gitignore` containing `*` so

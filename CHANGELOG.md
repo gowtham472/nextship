@@ -14,6 +14,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   services and fails to list ECR images, so `docs/design.md` §9.2 records what each
   testing layer answers, and the roadmap records that Lightsail needs AWS's Paid plan.
   (Gowtham)
+- **Apple Silicon recorded as verified.** nextship 0.4.4, installed from npm on a MacBook
+  Pro with an M3 Max, deployed a Next.js app to App Platform and its live URL served. It
+  is the first run on macOS and on arm64, where the image is built for `linux/amd64`, and
+  `docs/design.md` §7.5, the requirements page, the roadmap and the README now say so.
+  (Gowtham)
 
 ### Changed
 

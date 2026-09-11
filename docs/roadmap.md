@@ -152,7 +152,7 @@ target that is built, verified live, and actually used. AWS is v1.1.
 | The harness scripts proven to work before spending CI hours on them | **Done.** Run against a real app: `e2e-deploy.sh` exits 0 with exactly one URL on stdout that serves 200, `e2e-logs.sh` emits all five markers the harness reads, `e2e-cleanup.sh` removes the container and image |
 | Streaming conformance as a repeatable test rather than a one-off measurement | **Done.** `conformance/streaming/` builds a fixture with nextship, runs it and fails unless the shell arrives before the tail; CI runs it on every change, first byte 96 ms against a 2063 ms total. Pointed at a live App Platform app it passed three runs of three, first byte 230 to 448 ms against 2.2 to 2.4 s, sent chunked through DigitalOcean's Cloudflare edge with the cache bypassed. The app and its images were removed afterwards |
 | Documented limitations, with nothing claimed that has not been observed working | **Done.** The README states what is not supported and why, and refuses to claim PPR, middleware or Cache Components |
-| An install path that needs no prior knowledge | **Done.** `npm install -g nextship-cli`, published with provenance, each release staged and approved with 2FA |
+| An install path that needs no prior knowledge | **Done.** `npm install -g nextship-cli`, published with provenance, each release staged and approved with 2FA. Installed that way on a MacBook Pro with an M3 Max, 0.4.4 deployed a Next.js app to App Platform and its live URL served, the first run on Apple Silicon and on macOS |
 
 **Explicitly not in v1.0:** AWS, a second compute option, CDN assets, and anything from
 "Beyond v1.0". Shipping one target honestly beats shipping two badly.
