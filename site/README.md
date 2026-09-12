@@ -2,10 +2,10 @@
 
 The marketing page and documentation, exported as static files and served by Cloudflare.
 
-Live at https://nextship.saap.workers.dev. Absolute URLs for Open Graph images come from
-`NEXT_PUBLIC_SITE_URL`, which the Worker's build variables set to that address. Without it
-they default to `http://localhost:3000`, so a local build links to itself rather than to a
-site that is not serving it.
+Live at https://nextship.saap.workers.dev, which is also `SITE_URL` in
+[`lib/site.ts`](./lib/site.ts). Open Graph images, canonical links and the sitemap are all
+absolute, so they are built from that one constant. Moving the site is a change to that
+line.
 
 ```bash
 cd site
@@ -100,7 +100,7 @@ Workers Builds, with the Cloudflare GitHub app limited to this repository alone:
 | Root directory | `site` |
 | Build command | `npm ci && npm run build` |
 | Deploy command | `npx wrangler deploy` |
-| Build variables | `NODE_VERSION` set to `22`, `SKIP_DEPENDENCY_INSTALL` set to `1`, `NEXT_PUBLIC_SITE_URL` set to the site's address |
+| Build variables | `NODE_VERSION` set to `22`, `SKIP_DEPENDENCY_INSTALL` set to `1` |
 
 The Worker's name in the dashboard is the `name` in `wrangler.jsonc`, `nextship`.
 

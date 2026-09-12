@@ -86,6 +86,9 @@ export async function generateMetadata(
   return {
     title: doc.title,
     description: doc.description,
+    // The introduction is served at /docs and at /docs/introduction. Pointing
+    // both at /docs stops the two addresses competing for the same page.
+    alternates: { canonical: slug === 'introduction' ? '/docs' : `/docs/${slug}` },
     openGraph: { title: doc.title, description: doc.description, type: 'article', images },
   }
 }

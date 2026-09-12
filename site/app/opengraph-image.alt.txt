@@ -1,0 +1,1 @@
+nextship: deploy Next.js to infrastructure you own

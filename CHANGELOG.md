@@ -6,6 +6,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Added
 
+- **The site can be found and shared.** A sitemap and a robots file, both derived from the
+  documentation navigation, and a canonical link on every page, with the introduction
+  pointing at `/docs` so its two addresses stop competing. The share image is now
+  1200x630 with the wordmark, the tagline and the install command, and the card type is
+  `summary_large_image`, so a shared link renders wide instead of as a small square.
+  (Gowtham)
+
 - **A local rehearsal of the AWS container path.** `conformance/aws/probe.sh` runs Floci,
   a local AWS emulator, and pushes the streaming fixture nextship builds to its container
   registry, runs it as an ECS task, checks that it streams and confirms its output reaches
@@ -21,6 +28,10 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   (Gowtham)
 
 ### Changed
+
+- **The site's address is a constant, not a build variable.** `NEXT_PUBLIC_SITE_URL`
+  defaulted to localhost, so a build that forgot it shipped cards nobody could open, and
+  one wrong value already did. It now lives in `site/lib/site.ts`. (Gowtham)
 
 - **The README and the npm page now link to the documentation site.** It existed at
   nextship.saap.workers.dev and nothing public pointed at it, including the package's own
