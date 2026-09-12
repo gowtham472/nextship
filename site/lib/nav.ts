@@ -46,6 +46,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: 'commands', title: 'CLI reference' },
       { slug: 'how-it-works', title: 'How it works' },
       { slug: 'security', title: 'Security' },
+      { slug: 'evidence', title: 'Evidence' },
     ],
   },
 ]

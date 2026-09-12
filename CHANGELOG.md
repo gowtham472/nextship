@@ -6,6 +6,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Added
 
+- **An evidence page on the site.** The suite results, the streaming measurements from
+  three places, the image sizes, the base image benchmark, what was verified against a
+  live account, the supply chain and what the CLI can reach, each with where it was
+  measured. It ends with what has not been proven, including that every verification but
+  the macOS run was done by the author. The README and the introduction link to it.
+  (Gowtham)
+
 - **The site can be found and shared.** A sitemap and a robots file, both derived from the
   documentation navigation, and a canonical link on every page, with the introduction
   pointing at `/docs` so its two addresses stop competing. The share image is now

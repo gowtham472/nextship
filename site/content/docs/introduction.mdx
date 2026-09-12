@@ -54,6 +54,9 @@ Version 1.0.0. The local pipeline and DigitalOcean deployment are verified again
 App Platform apps, including two rollbacks in opposite directions and streaming through
 App Platform itself, and have deployed from both Windows and an Apple Silicon Mac.
 
+Every figure below has a source on the [evidence page](/docs/evidence), which also lists
+what has not been proven.
+
 Verified on real containers: every route serves, image optimization produces WebP,
 streaming does not buffer (27 ms to first byte against a 2.02 s total), ISR works both
 time based and on demand, Server Actions execute, and `after()` runs. The runtime image is

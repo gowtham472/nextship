@@ -774,6 +774,9 @@ site/                  the marketing site and documentation, exported as static 
 
 ## How correctness is proven
 
+Every measured result, and what each one was measured on, is collected on one page:
+[Evidence](https://nextship.saap.workers.dev/docs/evidence). It ends with what has not been proven.
+
 ```bash
 pnpm build                                  # compile both packages
 pnpm typecheck                              # no emit

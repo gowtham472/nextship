@@ -1,0 +1,110 @@
+---
+title: Evidence
+description: Every claim nextship makes, the measurement behind it, and where that measurement was taken.
+---
+
+Everything below was produced by running something, not by reading code. Each row says
+where it came from, so you can disagree with the method rather than with the number. The
+last section is the honest list of what has not been proven.
+
+## The adapter compatibility suite
+
+The official Next.js adapter test suite is the arbiter of whether an adapter works. It
+builds a real container per test file and deploys it.
+
+| Result | Value |
+|---|---|
+| Suites passing | 1051 of 1115, 94.3% |
+| Next.js version | 16.4.0-canary.22 |
+| Mode | `deploy`, a real container per test file |
+| Reproduced | Two runs, hours apart, on separate runners, failing the same 64 suites with a byte identical set |
+
+The 64 failures are attributed rather than waved away: 17 need a `next.config.ts` flag,
+16 depend on vendored `node_modules`, 18 deployed cleanly and then failed an assertion, 6
+use webpack under Turbopack, and 7 failed to build for other reasons. Three defects the
+suite exposed were fixed, which moved the rate from 93.4% to 94.3% with no regressions.
+
+The suite runs from GitHub Actions in this repository, weekly and on demand, so a
+regression shows up without anyone remembering to look.
+
+## Streaming
+
+A buffering proxy leaves Suspense and partial prerendering apparently working while
+delivering none of the benefit: the page arrives complete, at the end. So streaming is a
+test rather than an assumption. A fixture renders its shell at once and its tail two
+seconds later, and the check fails unless the shell arrives first.
+
+| Where | First byte | Last byte |
+|---|---|---|
+| Local, Next.js 16.3.4 feature app | 27 ms | 2.02 s |
+| CI, on every push and pull request | 96 ms | 2063 ms |
+| A live App Platform app, 2026-09-11 | 230 to 448 ms | 2.2 to 2.4 s |
+
+The live run passed three times out of three, sent chunked through DigitalOcean's
+Cloudflare edge with the cache bypassed.
+
+The check is also known to fail when it should: it was run against a server that buffers,
+one that never answers, and one that drops the connection part way, and it reported each.
+
+## The runtime image
+
+Measured on a production project: Next.js 16.2.9, pnpm, 21 routes, `next/image` in 21
+files.
+
+| | Before | After |
+|---|---|---|
+| Image | 1.13 GB | 591 MB |
+| `node_modules` inside it | 469 MB | 58 MB |
+
+`@next/swc`, 125 MB of compiler that no production server calls, is absent. Of the 591 MB
+that remain, 332 MB is the `node:24-slim` base image, which a node pulls once and shares
+across deployments.
+
+Alpine was measured rather than assumed, and rejected: it saves 97 MB, and `sharp` resizes
+take 91.8 ms on it against 37.1 ms on slim, a median of 15 runs on identical libvips.
+
+## Against a live account
+
+Every day two command was verified against a real DigitalOcean account rather than a
+fixture:
+
+- **Deploy and rollback**, including two rollbacks in opposite directions.
+- **Custom domains:** certificate issued by Google Trust Services, TLS 1.3 negotiated,
+  TLS 1.1 refused, plain HTTP redirected, every route 200.
+- **Image retention:** a prune took the registry from 390.2 MiB to 286.1 MiB, freeing
+  104.2 MiB.
+- **Runtime logs**, both the snapshot and `--follow`.
+- **Destroy**, which refuses unless you name the app.
+
+nextship 0.4.4, installed from npm on a MacBook Pro with an M3 Max, built an app and
+deployed it to App Platform, where the live URL served. That is the only run on macOS and
+on arm64, and it is what the `linux/amd64` build target exists for.
+
+## Supply chain
+
+- Published with **provenance**, so the bytes on npm are linked to this repository and the
+  exact commit that produced them, and anyone can verify it.
+- Every release is **staged and then approved with two factor authentication**, which no
+  workflow can do. A compromised workflow can stage a release; it cannot ship one.
+- **No npm token exists**, in the repository or on a laptop.
+
+## What the CLI can reach
+
+- **One outbound destination:** your own cloud provider's API. There is no nextship
+  server, no telemetry endpoint, no analytics, no update check and no crash reporting.
+- The registry credential is written to a temporary directory at mode `0600` and removed
+  afterwards, rather than passed on a command line where any local process could read it.
+- `shell: true` appears nowhere in the codebase.
+
+This site measures page views without cookies. The CLI sends nothing.
+
+## What has not been proven
+
+- **PPR, Cache Components and middleware are untested.** Not known broken: untested.
+  Nothing is claimed about them.
+- **Multi-instance behaviour is not supported.** One instance is correct; a shared cache
+  is the next major version's work.
+- **No third party penetration test**, and no dependency vulnerability scan in CI.
+- **No external QA.** Every verification above was run by the author, on the author's
+  machines, except the macOS run. If you try it and something breaks, that is the most
+  useful thing anyone can currently contribute.
