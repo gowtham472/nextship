@@ -22,6 +22,14 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Changed
 
+- **The README and the npm page now link to the documentation site.** It existed at
+  nextship.saap.workers.dev and nothing public pointed at it, including the package's own
+  `homepage` field, which pointed back at the GitHub README. (Gowtham)
+- **The status section no longer tells readers not to use it.** "v1.0 is deliberately a
+  personal tool" was accurate about its origin and wrong about who it serves: it runs
+  anyone's Next.js app on DigitalOcean. Every scope limit stays, and the sentence now
+  names the real one, which is a single instance. (Gowtham)
+
 - **Ragul D's contact address in package metadata.** Every package's `contributors` entry
   now carries an email, matching the `author` entry, so the published package names a way
   to reach both copyright holders. (Gowtham)
@@ -40,7 +48,6 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 - **Two links into `docs/private`, which is not published.** `README.md` and the header of
   `docs/design.md` both linked to a research file excluded by `.gitignore`, so both were
   404s for every visitor. (Gowtham)
-
 - **Duplicate section numbers in `docs/design.md` §7.** Two subsections were numbered 7.5
   and two 7.6, so a reference to §7.6 was ambiguous. They now run 7.1 to 7.9, and the two
   references to the base image section point at §7.9. (Gowtham)

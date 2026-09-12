@@ -10,6 +10,8 @@
 [![ci](https://github.com/gowtham472/nextship/actions/workflows/ci.yml/badge.svg)](https://github.com/gowtham472/nextship/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/nextship-cli)](https://www.npmjs.com/package/nextship-cli)
 
+**[Documentation](https://nextship.saap.workers.dev/docs)** and a [quick start](https://nextship.saap.workers.dev/docs/quick-start).
+
 > Vercel's zero-config experience, in your own DigitalOcean account.
 > Your code, your data, your bill, your region.
 
@@ -31,7 +33,7 @@ live, and prints the URL.
 
 ## Status
 
-**Version 1.0.0: trustworthy for personal use on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. AWS follows as v1.1: the driver interface exists, the AWS driver does not.
+**Version 1.0.0, for Next.js on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. AWS follows as v1.1: the driver interface exists, the AWS driver does not.
 
 | Area | State |
 |---|---|
@@ -45,10 +47,11 @@ streaming does not buffer (27 ms to first byte against a 2.02 s total), ISR work
 both time-based and on-demand, Server Actions execute, and `after()` runs. The image
 is 591 MB uncompressed against 1.13 GB before pruning.
 
-**v1.0 is deliberately a personal tool**, good enough that its author deploys his own
-apps with it. Everything that only matters once other people depend on it is recorded
-in [`docs/roadmap.md`](./docs/roadmap.md) under "Beyond v1.0", each with the
-trigger that would justify building it.
+**It was built for its author's own apps, and it works for yours** if you deploy
+Next.js to DigitalOcean and one instance is enough. Everything that only matters once
+many people depend on it, multiple instances above all, is recorded in
+[`docs/roadmap.md`](./docs/roadmap.md) under "Beyond v1.0", each with the trigger that
+would justify building it.
 
 **v1.0 is DigitalOcean only.** That is the target that is built, verified against a live
 app, and actually used. A second cloud is built on the proven one rather than beside it,
