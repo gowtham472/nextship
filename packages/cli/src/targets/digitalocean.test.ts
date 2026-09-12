@@ -73,7 +73,7 @@ test('the image tag is read from the deployment spec, not the resolved service',
         {
           image: {
             registry_type: 'DOCR',
-            registry: 'gowtham-nextship',
+            registry: 'acme-registry',
             repository: 'portfolio',
             tag: 'dpl-2b2c3e535f1e-de39cb34',
           },
@@ -174,13 +174,13 @@ test('the registry App Platform fills in itself is not dropped', () => {
     services: [
       {
         name: 'web',
-        image: { registry_type: 'DOCR', registry: 'gowtham-nextship', repository: 'portfolio', tag: 'dpl-old' },
+        image: { registry_type: 'DOCR', registry: 'acme-registry', repository: 'portfolio', tag: 'dpl-old' },
       },
     ],
   }
 
   const image = (mergeAppSpec(existing, managedSpec).services as any[])[0].image
-  assert.equal(image.registry, 'gowtham-nextship', 'the resolved registry survives')
+  assert.equal(image.registry, 'acme-registry', 'the resolved registry survives')
   assert.equal(image.tag, 'dpl-new')
 })
 

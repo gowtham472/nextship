@@ -33,7 +33,7 @@ function rejects(run: () => unknown, fragment: string): void {
 // ------------------------------------------------------------------ validation
 
 test('a hostname is accepted', () => {
-  validateDomain('preview.doodlebytestudio.in')
+  validateDomain('app.example.com')
   validateDomain('example.com')
 })
 
@@ -43,7 +43,7 @@ test('a pasted URL is rejected by name, because it is the common mistake', () =>
 })
 
 test('a platform domain is refused, whichever target it belongs to', () => {
-  rejects(() => validateDomain('portfolio-vzhrn.ondigitalocean.app'), 'platform domain')
+  rejects(() => validateDomain('acme-web-a1b2c.ondigitalocean.app'), 'platform domain')
   rejects(() => validateDomain('abc123.awsapprunner.com'), 'platform domain')
 })
 

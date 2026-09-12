@@ -1,7 +1,7 @@
 # nextship design spec v0.3
 
-Companion to [`./private/vercel-nextjs-platform-research.md`](./private/vercel-nextjs-platform-research.md),
-which is the source of every technical claim referenced here.
+Technical claims here trace back to the platform research this project started from,
+which is kept outside the repository.
 
 Every section is marked **Implemented** or **Designed**. Designed sections describe
 intent and have no code behind them yet. Nothing in this document may describe
@@ -329,7 +329,7 @@ the CLI treats that exit as a normal stop, not a failure.
 
 ### 7.8 Measured on a real project
 
-`company_portfolio`, Next.js 16.2.9, pnpm, 21 routes, `next/image` in 21 files:
+A production project: Next.js 16.2.9, pnpm, 21 routes, `next/image` in 21 files:
 
 | | Before | After |
 |---|---|---|

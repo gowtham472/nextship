@@ -42,7 +42,7 @@ const TRANSCRIPT: Line[] = [
   { kind: 'output', text: '> Pushing to registry.digitalocean.com' },
   { kind: 'output', text: '> Releasing, then waiting for it to serve' },
   { kind: 'blank' },
-  { kind: 'success', text: 'v Live: https://preview.doodlebytestudio.in' },
+  { kind: 'success', text: 'v Live: https://app.example.com' },
 ]
 
 const KEEPS_WORKING = [

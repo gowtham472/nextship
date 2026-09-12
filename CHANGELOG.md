@@ -31,6 +31,16 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Fixed
 
+- **Published examples named real infrastructure.** The README, the site and two test
+  fixtures carried a personal project path, the registry name, an app id, its generated
+  hostname and a custom domain, and the app behind them has since been destroyed, so the
+  URLs were dead as well as personal. Every published example now uses one consistent
+  example set (`acme-web`, `acme-registry`, `app.example.com`), with the output shape
+  unchanged. (Gowtham)
+- **Two links into `docs/private`, which is not published.** `README.md` and the header of
+  `docs/design.md` both linked to a research file excluded by `.gitignore`, so both were
+  404s for every visitor. (Gowtham)
+
 - **Duplicate section numbers in `docs/design.md` §7.** Two subsections were numbered 7.5
   and two 7.6, so a reference to §7.6 was ambiguous. They now run 7.1 to 7.9, and the two
   references to the base image section point at §7.9. (Gowtham)

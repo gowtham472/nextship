@@ -153,8 +153,8 @@ writes nothing.
 
 ```
 > Inspecting project
-v portfolio is a Next.js 16.2.9 project
-  root          D:\C-Projects\company_portfolio
+v acme-web is a Next.js 16.2.9 project
+  root          C:\Users\you\projects\acme-web
   package mgr   pnpm
   build command pnpm run build
   node          24
@@ -189,7 +189,7 @@ Next.js's own trace output lists, plus a generated launcher equivalent to the on
 standalone mode writes.
 
 ```
-v Image ready: portfolio:dpl-2b2c3e535f1e-4456a8b2
+v Image ready: acme-web:dpl-2b2c3e535f1e-4456a8b2
   platform   linux/amd64
   start it with: nextship run
 ```
@@ -257,9 +257,9 @@ The plan is printed first, every time:
 ```
 > Plan
   target        DigitalOcean, region blr
-  registry      use existing "gowtham-nextship", unchanged
-  repository    gowtham-nextship/portfolio
-  app           UPDATE "portfolio" (7ebdf092), which nextship created
+  registry      use existing "acme-registry", unchanged
+  repository    acme-registry/acme-web
+  app           UPDATE "acme-web" (1a2b3c4d), which nextship created
   instance      apps-s-1vcpu-0.5gb, 1 instance
   untouched     4 existing app(s) in this account
   nothing is ever deleted by this command
@@ -286,7 +286,7 @@ nothing, so it cannot introduce a new fault.
 
 ```
 > Plan
-  app        portfolio (7ebdf092-99d7-48a9-9502-5d8f3e8acfbc)
+  app        acme-web (1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d)
   current    dpl-2b2c3e535f1e-de39cb34  2026-09-08T08:58:51Z  (app spec updated)
   roll back  dpl-2b2c3e535f1e-715c3f77  2026-09-08T08:46:39Z  (initial deployment)
   no build, no push: this reuses an image that already ran
@@ -312,7 +312,7 @@ been replaced reports `SUPERSEDED`, not `ACTIVE`, and both are valid targets;
 Prints what the running container has written.
 
 ```
-> Runtime logs for portfolio
+> Runtime logs for acme-web
 web 2026-09-08T09:08:32.232594675Z Next.js 16.2.9
 web 2026-09-08T09:08:32.233069121Z - Network:       http://0.0.0.0:3000
 web 2026-09-08T09:08:32.233725936Z Ready in 0ms
@@ -338,7 +338,7 @@ Lists the runtime environment variables set on the app. Keys only: App Platform
 stores them encrypted and will not return a secret's value to anyone, including you.
 
 ```
-> Runtime environment for portfolio
+> Runtime environment for acme-web
   No runtime environment variables are set on this app.
   Values inlined at build time, such as NEXT_PUBLIC_*, still work. Anything read
   at request time is undefined. Run `nextship env push` to set them.
@@ -372,7 +372,7 @@ broader scope is kept rather than narrowed.
 
 ```
 > Plan
-  app        portfolio (7ebdf092-99d7-48a9-9502-5d8f3e8acfbc)
+  app        acme-web (1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d)
   source     .env.production
   add        DATABASE_URL, API_TOKEN
   update     none
@@ -415,9 +415,9 @@ Platform will not return its value.
 Lists the domains attached to the app, with the state App Platform reports for each.
 
 ```
-> Domains for portfolio
-  platform   portfolio-vzhrn.ondigitalocean.app  (always works, managed by App Platform)
-  preview.doodlebytestudio.in  primary  being set up; serves once DNS points here and a certificate is issued
+> Domains for acme-web
+  platform   acme-web-a1b2c.ondigitalocean.app  (always works, managed by App Platform)
+  app.example.com  primary  being set up; serves once DNS points here and a certificate is issued
 v 1 custom domain(s).
 ```
 
@@ -434,8 +434,8 @@ Attaches a domain and prints the DNS record you need to create.
 ```
 > Create this DNS record
   type    CNAME
-  name    preview.doodlebytestudio.in
-  value   portfolio-vzhrn.ondigitalocean.app
+  name    app.example.com
+  value   acme-web-a1b2c.ondigitalocean.app
 ```
 
 **nextship does not touch DNS, deliberately.** Editing DNS needs a token scope beyond
@@ -460,7 +460,7 @@ and the command says to remove it yourself.
 Lists the images pushed for this project and what each one is for.
 
 ```
-> Images for gowtham-nextship/portfolio
+> Images for acme-registry/acme-web
   dpl-2b2c3e535f1e-ebc1a38e  2026-09-08T10:10:01Z  deployed now
   dpl-2b2c3e535f1e-de39cb34  2026-09-08T08:58:48Z  kept for rollback
   orphaned   3 image(s) no tag points to, up to 181.9 MiB
@@ -526,10 +526,10 @@ app. Naming it means the mistake has to be made twice and agree with itself.
 
 ```
 > Plan
-  app        DESTROY "portfolio" (7ebdf092-99d7-48a9-9502-5d8f3e8acfbc)
-  address    portfolio-vzhrn.ondigitalocean.app stops serving and is not reissued
-  domain     preview.doodlebytestudio.in stops serving this app
-  images     kept in gowtham-nextship; run `nextship images prune --gc --yes` first if you want them gone
+  app        DESTROY "acme-web" (1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d)
+  address    acme-web-a1b2c.ondigitalocean.app stops serving and is not reissued
+  domain     app.example.com stops serving this app
+  images     kept in acme-registry; run `nextship images prune --gc --yes` first if you want them gone
   registry   kept, it is shared by every project on this account
   DNS        untouched, nextship did not create your records
   untouched  3 other app(s) in this account
@@ -606,9 +606,9 @@ Written by `deploy`, committed to your repository, and holding no secrets:
   "version": 1,
   "target": "digitalocean",
   "region": "blr",
-  "name": "portfolio",
-  "registry": "gowtham-nextship",
-  "appId": "7ebdf092-99d7-48a9-9502-5d8f3e8acfbc"
+  "name": "acme-web",
+  "registry": "acme-registry",
+  "appId": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
 }
 ```
 
@@ -735,8 +735,6 @@ Next.js 16.2 shipped a stable, public Deployment Adapter API, co-designed with
 OpenNext, Netlify, Cloudflare, AWS and Google. Vercel's own adapter uses it with no
 private hooks, and the official compatibility test suite is available to any adapter
 author. The years of reverse engineering undocumented build output are over.
-
-Full background: [`vercel-nextjs-platform-research.md`](./docs/private/vercel-nextjs-platform-research.md).
 
 ### Two findings from building this
 
