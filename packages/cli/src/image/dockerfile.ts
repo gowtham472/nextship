@@ -115,9 +115,13 @@ export function renderDockerfile(project: ProjectInfo): string {
     // in-flight requests and after() callbacks finish on shutdown. jemalloc is
     // the allocator Next.js documents for sharp on glibc, where the default one
     // grows without bound under sustained image optimization. npm and corepack
-    // are removed because nothing in the runtime uses them.
+    // are removed because nothing in the runtime uses them. Debian installs jemalloc
+    // under the architecture's own directory, so it is linked to one fixed path: a
+    // preload naming the x86_64 directory would fail on an arm64 image, and the
+    // loader reports a missing preload as a warning, not an error.
     'RUN apt-get update' +
       ' && apt-get install -y --no-install-recommends tini libjemalloc2' +
+      ' && ln -s "/usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2" /usr/lib/libjemalloc.so.2' +
       ' && rm -rf /var/lib/apt/lists/*' +
       ' && rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack',
     // Created before the copy so ownership is set by COPY itself. A chown -R
@@ -128,7 +132,7 @@ export function renderDockerfile(project: ProjectInfo): string {
     'RUN mkdir -p .next/cache && chown app:app .next/cache',
     'USER app',
     `ENV NODE_ENV=production PORT=${CONTAINER_PORT} HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1` +
-      ' LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2',
+      ' LD_PRELOAD=/usr/lib/libjemalloc.so.2',
     `EXPOSE ${CONTAINER_PORT}`,
     // A HEAD request, so the check costs no response body. Anything below 500
     // means the server is up; a 404 at / is still a healthy server.

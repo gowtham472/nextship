@@ -91,6 +91,12 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Fixed
 
+- **The runtime image preloaded jemalloc from an x86_64-only path.** Harmless while images
+  are built for `linux/amd64`, but an arm64 image would have lost the allocator silently,
+  since the loader only warns about a missing preload. It is now linked from the
+  architecture's own directory to one fixed path. Verified in an amd64 image: the preload
+  resolves, the running processes map jemalloc, and the loader logs no warning. Found by
+  the first outside test. (Gowtham)
 - **The Server Actions encryption key file was readable by every account on the machine.**
   `.nextship/secrets.local.json` was written with the default mode, 0644 on macOS and
   Linux. It is now created readable by its owner only, and a file an earlier version wrote

@@ -54,6 +54,10 @@ test('standalone project renders a three-stage build', () => {
   assert.match(dockerfile, /COPY --from=builder \/src\/\.nextship\/output\/manifest\.json \/manifest\.json/)
 
   assert.match(dockerfile, /tini libjemalloc2/)
+  // One path for every architecture, linked from the directory Debian installs into.
+  assert.match(dockerfile, /ln -s "\/usr\/lib\/\$\(uname -m\)-linux-gnu\/libjemalloc\.so\.2" \/usr\/lib\/libjemalloc\.so\.2/)
+  assert.match(dockerfile, /LD_PRELOAD=\/usr\/lib\/libjemalloc\.so\.2/)
+  assert.doesNotMatch(dockerfile, /x86_64-linux-gnu\/libjemalloc/)
   assert.match(dockerfile, /rm -rf \/usr\/local\/lib\/node_modules/, 'npm and corepack leave the runtime image')
   assert.match(dockerfile, /RUN groupadd --system app && useradd --system --gid app app\nCOPY --from=builder --chown=app:app \/out \/src/)
   assert.match(dockerfile, /RUN mkdir -p \.next\/cache && chown app:app \.next\/cache/)
