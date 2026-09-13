@@ -6,9 +6,10 @@
 # and then runs thirty-two parallel Playwright groups. Sixteen left the slowest
 # group at 69 minutes against a 90 minute cap, which the suite would outgrow.
 #
-# Two ways to run it. With no `tests` input it runs everything and the summary job
-# scores the run. With `tests` it runs only those files in one job, which is how a
-# fix is checked against the suites it targets in minutes rather than an hour.
+# Two ways to run it. With no `tests` input it runs everything. With `tests` it
+# runs only those files, about ten to a job, which is how a fix is checked against
+# the suites it targets in minutes rather than an hour. The summary job scores
+# either.
 #
 # Contract: nextjs.org/docs/app/api-reference/adapters/testing-adapters
 # Author: Gowtham
@@ -45,11 +46,11 @@ jobs:
         env:
           SELECTED_TESTS: ${{ inputs.tests }}
         run: |
-          if [ -n "$SELECTED_TESTS" ]; then
-            echo 'list=["selected"]' >> "$GITHUB_OUTPUT"
-          else
-            echo "list=$(node -e 'console.log(JSON.stringify(Array.from({ length: 32 }, (_, i) => (i + 1) + "/32")))')" >> "$GITHUB_OUTPUT"
-          fi
+          node -e '
+            const selected = (process.env.SELECTED_TESTS || "").split(/\s+/).filter(Boolean).length
+            const total = selected ? Math.min(32, Math.ceil(selected / 10)) : 32
+            console.log("list=" + JSON.stringify(Array.from({ length: total }, (_, i) => `${i + 1}/${total}`)))
+          ' >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
         with: { path: adapter }
@@ -149,7 +150,10 @@ jobs:
         env:
           NEXT_TEST_MODE: deploy
           NEXT_E2E_TEST_TIMEOUT: 240000
-          NEXT_EXTERNAL_TESTS_FILTERS: test/deploy-tests-manifest.json
+          # Next.js's own list, then ours: tests that assert what Vercel's CDN or
+          # proxy does rather than what Next.js does, each with its reason in the
+          # file. Bun's adapter keeps a list of its own the same way.
+          NEXT_EXTERNAL_TESTS_FILTERS: test/deploy-tests-manifest.json,${{ github.workspace }}/adapter/conformance/deploy-tests-manifest.nextship.json
           ADAPTER_DIR: ${{ github.workspace }}/adapter
           IS_TURBOPACK_TEST: 1
           # Also what makes the runner write a results file for every suite.
@@ -166,13 +170,19 @@ jobs:
           SELECTED_TESTS: ${{ inputs.tests }}
           GROUP: ${{ matrix.group }}
         run: |
-          if [ "$GROUP" = "selected" ]; then
+          if [ -n "$SELECTED_TESTS" ]; then
             # Word splitting is the point: each file is its own argument.
             # shellcheck disable=SC2086
-            node run-tests.js -c 2 --type e2e $SELECTED_TESTS
+            node run-tests.js -g "$GROUP" -c 2 --type e2e $SELECTED_TESTS
           else
             node run-tests.js --timings -g "$GROUP" -c 2 --type e2e
           fi
+
+      # Every harness app builds with a Next.js cache of its own, and a runner that
+      # runs out of disk fails tests for reasons that have nothing to do with them.
+      - name: Docker disk usage
+        if: always()
+        run: docker system df
 
       - name: Keep the results
         if: always()

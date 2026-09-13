@@ -6,6 +6,9 @@
 # and expects exactly one thing on stdout: the URL the app is reachable at.
 # Everything else must go to stderr, or the harness cannot parse the result.
 #
+# Runs on Linux: prepare-app.mjs reads /proc, and the container shares the
+# host's network.
+#
 # Contract: nextjs.org/docs/app/api-reference/adapters/testing-adapters
 # Author: Gowtham
 set -euo pipefail
@@ -66,17 +69,13 @@ on_failure() {
 }
 trap on_failure EXIT
 
-# The harness runs tests concurrently, so a fixed port would collide. Ask the
-# kernel for a free one rather than guessing.
-PORT="$(node -e "
-const net = require('node:net')
-const server = net.createServer()
-server.listen(0, '127.0.0.1', () => { process.stdout.write(String(server.address().port)); server.close() })
-")"
-
 # One key for the whole run. The harness builds many apps, and Server Actions
 # must stay decryptable across them.
 export NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:-$(head -c 32 /dev/urandom | base64)}"
+
+install_dependencies() {
+  npm install --no-audit --no-fund --loglevel=error >> "${LOGDIR}/install.log" 2>&1
+}
 
 # The harness stages the app with `skipInstall: true` and rewrites every
 # dependency to a `file:` path under next-test-packages, so the deploy target is
@@ -86,11 +85,30 @@ export NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:
 # deliberately, so it needs those dependencies present before it will plan
 # anything. Installing here is the adapter holding up its side of that contract.
 if [ ! -d node_modules/next ]; then
+  # Some fixtures commit packages under node_modules that no package.json lists,
+  # and npm deletes them as extraneous. They are saved first, restored here for
+  # the host, and restored in the image after its own install (prepare-app.mjs).
+  if [ -d node_modules ]; then
+    mkdir -p .nextship-e2e
+    tar -cf .nextship-e2e/vendored.tar -C node_modules .
+  fi
+
   log "installing dependencies, which the harness leaves to the deploy target"
-  npm install --no-audit --no-fund --loglevel=error >> "${LOGDIR}/install.log" 2>&1 || {
-    log "install failed"
-    exit 1
-  }
+  if ! install_dependencies; then
+    # A package published from the Next.js repo can declare a peer range on next
+    # that the tested canary does not satisfy, because a prerelease only matches a
+    # range that names one. The harness notes the same problem for its own
+    # workspace packages. A project in that position sets legacy-peer-deps, and
+    # nextship mounts .npmrc into the image's install too.
+    grep -q ERESOLVE "${LOGDIR}/install.log" || { log "install failed"; exit 1; }
+    log "retrying the install with legacy-peer-deps after a peer dependency conflict"
+    printf '\nlegacy-peer-deps=true\n' >> .npmrc
+    install_dependencies || { log "install failed"; exit 1; }
+  fi
+
+  if [ -f .nextship-e2e/vendored.tar ]; then
+    tar -xf .nextship-e2e/vendored.tar -C node_modules
+  fi
   log "installed next $(node -p "require('./node_modules/next/package.json').version" 2>/dev/null || echo unknown)"
 fi
 
@@ -136,6 +154,14 @@ cat >> .dockerignore <<'IGNORE'
 **/*.results.json
 IGNORE
 
+# The test's variables and the harness's flags, for the build and the container.
+# $$ is this script and $PPID the harness process that started it.
+node "${ADAPTER_DIR}/conformance/prepare-app.mjs" "$$" "${PPID}" > "${LOGDIR}/container.env"
+CONTAINER_ENV=()
+while IFS= read -r -d '' variable; do
+  CONTAINER_ENV+=(-e "${variable}")
+done < "${LOGDIR}/container.env"
+
 log "packaging $(pwd)"
 # The tag is read from what packaging reported, not from the newest image on the
 # daemon, which under concurrency could belong to another test.
@@ -144,9 +170,6 @@ cat "${LOGDIR}/package.log" >&2
 
 TAG="$(sed -n 's/.*Image ready: \([^ ]*\).*/\1/p' "${LOGDIR}/package.log" | tail -1)"
 [ -n "${TAG}" ] || { log "packaging reported no image tag"; exit 1; }
-
-log "starting ${TAG} as ${CONTAINER}"
-docker run -d --name "${CONTAINER}" --platform linux/amd64 -p "${PORT}:3000" "${TAG}" >&2
 
 # The build runs inside Docker, so .next never exists out here. The real
 # BUILD_ID is printed by the post-build script the harness injects into the
@@ -158,8 +181,9 @@ docker run -d --name "${CONTAINER}" --platform linux/amd64 -p "${PORT}:3000" "${
 BUILD_ID="$(sed -n 's/^#[0-9]\{1,\} [0-9.]\{1,\} BUILD_ID: \(.\{1,\}\)$/\1/p' "${LOGDIR}/package.log" | tail -1)"
 [ -n "${BUILD_ID}" ] || { log "the build printed no BUILD_ID marker"; exit 1; }
 
-# Persisted because the logs script runs as a separate process and cannot see
-# these variables.
+# Persisted because the logs and cleanup scripts run as separate processes and
+# cannot see these variables. Written before the container starts, so cleanup
+# can find a container that never became ready.
 {
   echo "BUILD_ID: ${BUILD_ID}"
   echo "DEPLOYMENT_ID: $(node -e "process.stdout.write(require('./.nextship/output/manifest.json').deploymentId)" 2>/dev/null || echo unknown)"
@@ -169,18 +193,47 @@ BUILD_ID="$(sed -n 's/^#[0-9]\{1,\} [0-9.]\{1,\} BUILD_ID: \(.\{1,\}\)$/\1/p' "$
   echo "TAG: ${TAG}"
 } > "${LOGDIR}/build.log"
 
-# The harness fails the test rather than waiting, so readiness is confirmed here.
-for _ in $(seq 1 60); do
-  if curl -sf -o /dev/null "http://127.0.0.1:${PORT}/" 2>/dev/null; then break; fi
-  if [ "$(docker inspect -f '{{.State.Status}}' "${CONTAINER}" 2>/dev/null)" != "running" ]; then
-    log "container exited before serving"
-    docker logs "${CONTAINER}" >&2 2>&1 || true
-    exit 1
+# The harness runs tests concurrently, so a fixed port would collide. The kernel
+# picks a free one, asked for as late as possible so nothing else takes it first.
+PORT="$(node -e "
+const server = require('node:net').createServer()
+server.listen(0, '127.0.0.1', () => { process.stdout.write(String(server.address().port)); server.close() })
+")"
+
+# The server listens on the port the harness is given, on the host's network.
+#
+# Published on port 3000 behind a remapped host port, the server's idea of its
+# own address was not the harness's. An app that fetches itself through the Host
+# header reached a port nothing listened on inside the container, and a route
+# handler that redirects to `request.nextUrl.origin` sent the browser to
+# http://0.0.0.0:3000. Next.js builds that origin from the address it listens on,
+# and rewrites 127.0.0.1 to localhost, which the browser can reach.
+#
+# No health check: its request to / every 30 seconds is traffic no test sent,
+# which can revalidate a page mid-test and adds lines to the server log that
+# tests read.
+log "starting ${TAG} as ${CONTAINER} on port ${PORT}"
+docker run -d --name "${CONTAINER}" --platform linux/amd64 --network host --no-healthcheck \
+  -e PORT="${PORT}" -e HOSTNAME=127.0.0.1 "${CONTAINER_ENV[@]}" "${TAG}" >&2
+
+# Ready when the server accepts a connection. The request to / this used to send
+# ran middleware and rendered a page before any test had, and it waited out the
+# whole minute for any app whose / answered with an error status, 404 included.
+# With the host's network nothing accepts on the port until the server does.
+ready=0
+for _ in $(seq 1 300); do
+  if (exec 3<>"/dev/tcp/127.0.0.1/${PORT}") 2>/dev/null; then
+    ready=1
+    break
   fi
-  sleep 1
+  if [ "$(docker inspect -f '{{.State.Status}}' "${CONTAINER}" 2>/dev/null)" != "running" ]; then
+    break
+  fi
+  sleep 0.2
 done
 
 docker logs "${CONTAINER}" > "${LOGDIR}/server.log" 2>&1 || true
+[ "${ready}" -eq 1 ] || { log "the server never accepted a connection"; exit 1; }
 
 # The only line on stdout.
 echo "http://127.0.0.1:${PORT}"

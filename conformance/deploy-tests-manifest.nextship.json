@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "suites": {
+    "test/e2e/prerender.test.ts": {
+      "reason": "In deploy mode these expect the header Vercel's CDN sends browsers, public, max-age=0, must-revalidate. nextship returns what Next.js sets, s-maxage and stale-while-revalidate, which is what these tests expect of next start.",
+      "failed": [
+        "Prerender should use correct caching headers for a revalidate page",
+        "Prerender should use correct caching headers for a fallback-true page (prerendered)",
+        "Prerender should use correct caching headers for a fallback-true page (lazy)",
+        "Prerender should use correct caching headers for a no-revalidate page"
+      ]
+    },
+    "test/e2e/app-dir/expire-time/expire-time.test.ts": {
+      "reason": "Wrapped in it.failing when deployed, because Vercel's proxy does not yet honour expireTime: past it, the proxy serves stale and revalidates in the background. nextship does the blocking revalidation the test describes, so the test passes and it.failing reports that as an error.",
+      "failed": ["expire-time should do a blocking revalidation when the cache entry has expired"]
+    },
+    "test/e2e/app-dir/non-ascii-cache-item-name/non-ascii-cache-item-name.test.ts": {
+      "reason": "Unless VERCEL is set, the fixture configures a probe cache handler whose get always returns null and turns off the in-memory cache, so nothing can be cached, while the deploy-mode assertion requires a cached value. nextship keeps the cache handler an app configures.",
+      "failed": ["non-ASCII cache item name keeps caching a request with a non-ASCII query parameter"]
+    },
+    "test/e2e/middleware-rewrites/test/index.test.ts": {
+      "reason": "In deploy mode this expects the rewrite's added query values in the URL a Pages API route receives, which the test attributes to deployed proxies. nextship gives the route the requested URL and the added values in req.query, as next start does.",
+      "failed": ["Middleware Rewrite should preserve rewrite query and dynamic params in Pages API routes"]
+    },
+    "test/e2e/app-dir/not-found-non-document/not-found-non-document.test.ts": {
+      "reason": "In deploy mode these expect an HTML 404, served by Vercel's routing layer without invoking Next.js. nextship returns Next.js's plain text 404, which is what these tests expect of next start.",
+      "failed": [
+        "not-found-non-document returns a plain text 404 for subresource requests to unknown paths",
+        "not-found-non-document returns a plain text 404 for font and manifest requests to unknown paths"
+      ]
+    }
+  },
+  "rules": {
+    "include": [],
+    "exclude": []
+  }
+}
