@@ -10,7 +10,7 @@
 [![ci](https://github.com/gowtham472/nextship/actions/workflows/ci.yml/badge.svg)](https://github.com/gowtham472/nextship/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/nextship-cli)](https://www.npmjs.com/package/nextship-cli)
 
-**[Documentation](https://nextship.saap.workers.dev/docs)** and a [quick start](https://nextship.saap.workers.dev/docs/quick-start).
+**[Documentation](https://nextship.doodlebytestudio.in/docs)** and a [quick start](https://nextship.doodlebytestudio.in/docs/quick-start).
 
 > Vercel's zero-config experience, in your own DigitalOcean account.
 > Your code, your data, your bill, your region.
@@ -775,7 +775,7 @@ site/                  the marketing site and documentation, exported as static 
 ## How correctness is proven
 
 Every measured result, and what each one was measured on, is collected on one page:
-[Evidence](https://nextship.saap.workers.dev/docs/evidence). It ends with what has not been proven.
+[Evidence](https://nextship.doodlebytestudio.in/docs/evidence). It ends with what has not been proven.
 
 ```bash
 pnpm build                                  # compile both packages

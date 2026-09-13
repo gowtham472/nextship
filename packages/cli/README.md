@@ -83,7 +83,7 @@ attributed in the
 
 ## Links
 
-- [Documentation](https://nextship.saap.workers.dev/docs)
+- [Documentation](https://nextship.doodlebytestudio.in/docs)
 - [Source](https://github.com/gowtham472/nextship)
 - [Security and credential handling](https://github.com/gowtham472/nextship/blob/main/SECURITY.md)
 - [Changelog](https://github.com/gowtham472/nextship/blob/main/CHANGELOG.md)

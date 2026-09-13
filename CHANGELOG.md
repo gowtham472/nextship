@@ -36,6 +36,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Changed
 
+- **The site moved to nextship.doodlebytestudio.in.** Canonical links, the sitemap, share
+  images, the README, the npm `homepage` and the repository homepage all use the new
+  address. The workers.dev address still serves, and its canonical links now point at the
+  new one. (Gowtham)
+
 - **The site's address is a constant, not a build variable.** `NEXT_PUBLIC_SITE_URL`
   defaulted to localhost, so a build that forgot it shipped cards nobody could open, and
   one wrong value already did. It now lives in `site/lib/site.ts`. (Gowtham)
@@ -57,6 +62,9 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Fixed
 
+- **The evidence page claimed site analytics that do not exist.** It said the site
+  measures page views without cookies, written ahead of the analytics being enabled, and
+  no analytics are running. The sentence is removed until they are. (Gowtham)
 - **Published examples named real infrastructure.** The README, the site and two test
   fixtures carried a personal project path, the registry name, an app id, its generated
   hostname and a custom domain, and the app behind them has since been destroyed, so the

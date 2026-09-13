@@ -10,4 +10,4 @@
  *
  * Author: Gowtham
  */
-export const SITE_URL = 'https://nextship.saap.workers.dev'
+export const SITE_URL = 'https://nextship.doodlebytestudio.in'

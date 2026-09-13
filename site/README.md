@@ -2,10 +2,10 @@
 
 The marketing page and documentation, exported as static files and served by Cloudflare.
 
-Live at https://nextship.saap.workers.dev, which is also `SITE_URL` in
-[`lib/site.ts`](./lib/site.ts). Open Graph images, canonical links and the sitemap are all
-absolute, so they are built from that one constant. Moving the site is a change to that
-line.
+Live at https://nextship.doodlebytestudio.in, a custom domain on the Worker, which is also
+`SITE_URL` in [`lib/site.ts`](./lib/site.ts). Open Graph images, canonical links and the
+sitemap are all absolute, so they are built from that one constant. Moving the site is a
+change to that line.
 
 ```bash
 cd site
