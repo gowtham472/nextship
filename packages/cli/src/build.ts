@@ -16,7 +16,7 @@ import path from 'node:path'
 import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
 import { assertDockerAvailable, dockerBuild } from './docker.js'
-import { computeDigest, resolveDeploymentId, type BuildIdentity } from './identity.js'
+import { installerDigest, computeDigest, resolveDeploymentId, type BuildIdentity } from './identity.js'
 import { OUTPUT_DIR } from './image/dockerfile.js'
 import { prepareContext, type PreparedContext } from './image/prepare.js'
 import { detail, step, warn } from './util/log.js'
@@ -51,7 +51,12 @@ export async function buildProject(project: ProjectInfo): Promise<BuildResult> {
   const encryptionKey = await resolveEncryptionKey(project.root)
   const digest = await computeDigest(project, context, encryptionKey)
   const { deploymentId, ephemeral } = await resolveDeploymentId(project.root, digest)
-  const identity: BuildIdentity = { deploymentId, encryptionKey, ephemeral }
+  const identity: BuildIdentity = {
+    deploymentId,
+    encryptionKey,
+    ephemeral,
+    installerDigest: await installerDigest(project),
+  }
 
   step(`Building ${project.name} in Docker`)
   detail(`deployment ${deploymentId}`)

@@ -14,7 +14,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { computeDigest, resolveDeploymentId } from './identity.js'
+import { computeDigest, installerDigest, resolveDeploymentId } from './identity.js'
 import type { ProjectInfo } from './detect.js'
 
 const project = (root: string, envFiles: string[] = []): ProjectInfo => ({
@@ -30,6 +30,7 @@ const project = (root: string, envFiles: string[] = []): ProjectInfo => ({
   sharpVersion: null,
   envFiles,
   installerConfigs: [],
+  installerSecrets: [],
   userDockerignore: null,
   localDependencies: [],
 })
@@ -135,6 +136,21 @@ test('outside git the id is unique per build and marked ephemeral', async () => 
     assert.match(a.deploymentId, /^dpl-local-[0-9a-f]{8}$/)
     assert.equal(a.ephemeral, true)
     assert.notEqual(a.deploymentId, b.deploymentId, 'a non-reproducible source must never reuse an id')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('changing .npmrc changes the digest, since its contents reach the build only as a secret', async () => {
+  const root = await fixture({ '.npmrc': 'registry=https://one.example/\n' })
+  try {
+    const p = { ...project(root), installerSecrets: ['.npmrc'] }
+    const before = await computeDigest(p, ctx('FROM node'), 'key')
+    const beforeInstaller = await installerDigest(p)
+    await writeFile(path.join(root, '.npmrc'), 'registry=https://two.example/\n')
+    assert.notEqual(await computeDigest(p, ctx('FROM node'), 'key'), before)
+    assert.notEqual(await installerDigest(p), beforeInstaller)
+    assert.equal(await installerDigest(project(root)), null, 'a project without installer secrets has no digest')
   } finally {
     await rm(root, { recursive: true, force: true })
   }

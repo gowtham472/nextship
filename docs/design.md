@@ -204,6 +204,13 @@ file, so there is one source of truth. One Dockerfile, three stages.
   order Next.js loads them in) is mounted at its own path. Neither enters an image
   layer. Next.js reads the env files from disk exactly as it would on the
   developer's machine, so `NEXT_PUBLIC_*` values are inlined the same way.
+- **Mounts installer configuration that can hold a registry token.** `.npmrc` and
+  `.yarnrc.yml` are secret mounts for the install and the build, and excluded from the
+  context. They used to be copied, which left a registry token in a builder layer and
+  the local build cache. A secret's contents are not part of BuildKit's cache key, so a
+  digest of the files is passed as `NEXTSHIP_INSTALLER_DIGEST` above the install and
+  folded into the image digest: a changed registry setting re-runs the install and
+  produces a new tag.
 - **Excludes the rest of the context** through a generated
   `.nextship/Dockerfile.dockerignore`. BuildKit reads ignore rules from a file named
   after the Dockerfile, so the project's own `.dockerignore` is left untouched. The

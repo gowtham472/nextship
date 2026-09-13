@@ -14,7 +14,7 @@ import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
 import type { BuildIdentity } from './identity.js'
 import type { PreparedContext } from './image/prepare.js'
-import { KEY_SECRET_ID, TARGET_PLATFORM, envSecretId, type BuildTarget } from './image/dockerfile.js'
+import { KEY_SECRET_ID, TARGET_PLATFORM, envSecretId, installerSecretId, type BuildTarget } from './image/dockerfile.js'
 import { capture, run } from './util/exec.js'
 
 export interface DockerBuildOptions {
@@ -61,6 +61,13 @@ export function buildArguments(
 
   for (const [index, file] of project.envFiles.entries()) {
     args.push('--secret', `id=${envSecretId(index)},src=${path.join(project.root, file)}`)
+  }
+
+  for (const [index, file] of project.installerSecrets.entries()) {
+    args.push('--secret', `id=${installerSecretId(index)},src=${path.join(project.contextRoot, file)}`)
+  }
+  if (identity.installerDigest) {
+    args.push('--build-arg', `NEXTSHIP_INSTALLER_DIGEST=${identity.installerDigest}`)
   }
 
   if (options.tag) args.push('--tag', options.tag)

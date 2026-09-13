@@ -23,6 +23,7 @@ const base: ProjectInfo = {
   sharpVersion: null,
   envFiles: [],
   installerConfigs: [],
+  installerSecrets: [],
   userDockerignore: null,
   localDependencies: [],
 }
@@ -93,9 +94,27 @@ test('workspace package builds from the workspace root and keeps its path', () =
 test('installer configuration is copied before the install that reads it', () => {
   // pnpm 10 keeps allowed build scripts in pnpm-workspace.yaml even for a single
   // package, and a frozen install fails with ERR_PNPM_IGNORED_BUILDS without it.
-  const dockerfile = renderDockerfile({ ...base, installerConfigs: ['pnpm-workspace.yaml', '.npmrc'] })
-  assert.match(dockerfile, /COPY --parents package\.json pnpm-lock\.yaml pnpm-workspace\.yaml \.npmrc \.\//)
-  assert.ok(dockerfile.indexOf('.npmrc') < dockerfile.indexOf('pnpm install'))
+  const dockerfile = renderDockerfile({ ...base, installerConfigs: ['pnpm-workspace.yaml'] })
+  assert.match(dockerfile, /COPY --parents package\.json pnpm-lock\.yaml pnpm-workspace\.yaml \.\//)
+  assert.ok(dockerfile.indexOf('pnpm-workspace.yaml') < dockerfile.indexOf('pnpm install'))
+})
+
+test('a registry token in .npmrc is mounted for the install and the build, never copied', () => {
+  const dockerfile = renderDockerfile({ ...base, installerSecrets: ['.npmrc'] })
+  const install = dockerfile.split('\n').find((line) => line.includes('pnpm install'))
+  const build = dockerfile.split('\n').find((line) => line.includes('pnpm run build'))
+  assert.match(install ?? '', /--mount=type=secret,id=nextship_installer_0,target=\/src\/\.npmrc/)
+  assert.match(build ?? '', /--mount=type=secret,id=nextship_installer_0,target=\/src\/\.npmrc/)
+  assert.ok(!/COPY[^\n]*\.npmrc/.test(dockerfile), 'no COPY instruction names it')
+  assert.ok(renderDockerignore(base).split('\n').includes('**/.npmrc'), 'and COPY . . cannot bring it in')
+  // Declared above the install, so a changed .npmrc re-runs it.
+  assert.ok(dockerfile.indexOf('ARG NEXTSHIP_INSTALLER_DIGEST') < dockerfile.indexOf('pnpm install'))
+})
+
+test('without installer configuration there is no installer argument or mount', () => {
+  const dockerfile = renderDockerfile(base)
+  assert.ok(!dockerfile.includes('NEXTSHIP_INSTALLER_DIGEST'))
+  assert.ok(!dockerfile.includes('nextship_installer_'))
 })
 
 test('install command follows the package manager and the presence of a lockfile', () => {

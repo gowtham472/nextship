@@ -30,6 +30,7 @@ export const TARGET_PLATFORM = 'linux/amd64'
 /** Secret ids, shared between the Dockerfile and the `docker build` arguments. */
 export const KEY_SECRET_ID = 'nextship_key'
 export const envSecretId = (index: number): string => `nextship_env_${index}`
+export const installerSecretId = (index: number): string => `nextship_installer_${index}`
 
 /** Where the CLI writes the files the build needs, relative to the app root. */
 export const BUILD_DIR = '.nextship/build'
@@ -48,6 +49,11 @@ export function renderDockerfile(project: ProjectInfo): string {
   const envMounts = project.envFiles.map(
     (file, index) => `--mount=type=secret,id=${envSecretId(index)},target=${appPath}/${file}`
   )
+  // Installer configuration lives at the context root, which is /src in the builder.
+  const installerMounts = project.installerSecrets.map(
+    (file, index) => `--mount=type=secret,id=${installerSecretId(index)},target=/src/${file}`
+  )
+  const installerDigestArg = project.installerSecrets.length > 0 ? ['ARG NEXTSHIP_INSTALLER_DIGEST'] : []
 
   return [
     // Enables secret and cache mounts. Docker pulls the frontend on first use.
@@ -77,7 +83,15 @@ export function renderDockerfile(project: ProjectInfo): string {
     `COPY --parents ${manifestSources(project).join(' ')} ./`,
     // Every dependency, including devDependencies, because the build needs them.
     // The store is a cache mount, so repeat builds only download what changed.
-    `RUN --mount=type=cache,id=nextship-${project.packageManager},target=${cache.dir} ${installCommand(project)}`,
+    // A secret's contents are not part of BuildKit's cache key, so a changed .npmrc
+    // would otherwise reuse an install made with the old registry settings. The
+    // digest of the mounted files is declared here, above the install, so it does not.
+    ...installerDigestArg,
+    [
+      `RUN --mount=type=cache,id=nextship-${project.packageManager},target=${cache.dir}`,
+      ...installerMounts,
+      installCommand(project),
+    ].join(' '),
     // The application, on top of the installed dependencies. node_modules is
     // excluded from the context, so this cannot overwrite what the install produced.
     'COPY . .',
@@ -101,6 +115,8 @@ export function renderDockerfile(project: ProjectInfo): string {
       // prune step runs in a later RUN where the mount no longer exists.
       `--mount=type=cache,id=nextship-next-${project.name},target=${appPath}/.next/cache`,
       ...envMounts,
+      // Present for the build too: `yarn run` and `pnpm run` read their configuration.
+      ...installerMounts,
       `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="$(cat /run/secrets/${KEY_SECRET_ID})"`,
       project.buildCommand.join(' '),
     ].join(' '),
@@ -175,7 +191,9 @@ export function renderDockerignore(project: ProjectInfo): string {
     `!${prefix}${BUILD_DIR}`,
     // Mounted as build secrets instead, so they never enter a layer.
     '**/.env',
-    '**/.env.*'
+    '**/.env.*',
+    '**/.npmrc',
+    '**/.yarnrc.yml'
   )
 
   return lines.join('\n') + '\n'

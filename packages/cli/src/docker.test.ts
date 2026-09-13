@@ -27,6 +27,7 @@ const project: ProjectInfo = {
   sharpVersion: null,
   envFiles: [],
   installerConfigs: [],
+  installerSecrets: [],
   userDockerignore: null,
   localDependencies: [],
 }
@@ -42,6 +43,7 @@ const identity: BuildIdentity = {
   deploymentId: 'dpl-abc-1234',
   encryptionKey: 'S3CRET-KEY-MATERIAL-DO-NOT-LEAK',
   ephemeral: false,
+  installerDigest: null,
 }
 
 /** Reads the value that follows a flag, so order changes do not break the tests. */
@@ -92,4 +94,23 @@ test('the build context is the last argument, and is the workspace root', () => 
   const workspace = { ...project, root: '/home/dev/mono/apps/web', contextRoot: '/home/dev/mono', appDir: 'apps/web' }
   const args = buildArguments(workspace, context, identity, { target: 'runtime', tag: 'demo:x' })
   assert.equal(args.at(-1), '/home/dev/mono')
+})
+
+test('installer configuration is mounted from the context root and its digest passed above the install', () => {
+  const args = buildArguments(
+    { ...project, installerSecrets: ['.npmrc', '.yarnrc.yml'] },
+    context,
+    { ...identity, installerDigest: 'abc123' },
+    { target: 'runtime', tag: 'demo:x' }
+  )
+  const secrets = args.filter((_, index) => args[index - 1] === '--secret')
+  assert.ok(secrets.includes(`id=nextship_installer_0,src=${path.join(project.contextRoot, '.npmrc')}`))
+  assert.ok(secrets.includes(`id=nextship_installer_1,src=${path.join(project.contextRoot, '.yarnrc.yml')}`))
+  const buildArgs = args.filter((_, index) => args[index - 1] === '--build-arg')
+  assert.ok(buildArgs.includes('NEXTSHIP_INSTALLER_DIGEST=abc123'))
+})
+
+test('a project without installer configuration passes no installer digest', () => {
+  const args = buildArguments(project, context, identity, { target: 'runtime', tag: 'demo:x' })
+  assert.ok(!args.some((arg) => arg.startsWith('NEXTSHIP_INSTALLER_DIGEST')))
 })

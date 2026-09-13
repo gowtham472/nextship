@@ -28,6 +28,7 @@ const projectFor = (root: string, overrides: Partial<ProjectInfo> = {}): Project
   sharpVersion: null,
   envFiles: [],
   installerConfigs: [],
+  installerSecrets: [],
   userDockerignore: null,
   localDependencies: [],
   ...overrides,

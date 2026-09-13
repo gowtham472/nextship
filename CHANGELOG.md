@@ -91,6 +91,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Fixed
 
+- **A registry token in `.npmrc` or `.yarnrc.yml` was copied into the build.** Both files
+  were copied before the install, so a token sat in a builder layer and the local build
+  cache. It never reached the runtime image or the registry. They are now secret mounts for
+  the install and the build, and excluded from the context. Because BuildKit leaves a
+  secret's contents out of its cache key, a digest of the files is passed above the install
+  and folded into the image digest, so a changed registry setting still re-runs the install
+  and produces a new tag. Found by the first outside test. (Gowtham)
 - **On-demand revalidation does not reach visitors of fully static pages on App Platform,
   and nothing said so.** Next.js marks a page with no revalidate time cacheable for a
   year, confirmed in a nextship image, and App Platform's Cloudflare edge honours it: the

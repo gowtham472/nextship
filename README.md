@@ -606,8 +606,9 @@ structural rather than advisory:
 - **Waiting has a deadline.** `deploy` stops waiting after 15 minutes and `rollback`
   after 10, saying the deployment may still succeed. Nothing is cancelled, rolled back
   or deleted when it stops waiting.
-- **Secrets never enter an image layer.** Env files and the Server Actions key are
-  BuildKit secret mounts, which BuildKit deliberately excludes from cache keys.
+- **Secrets never enter an image layer.** Env files, the Server Actions key, and
+  `.npmrc` and `.yarnrc.yml`, which can hold a registry token, are BuildKit secret mounts,
+  which BuildKit deliberately excludes from cache keys.
 - **The registry token never reaches a command line.** It is written to a temporary
   Docker config directory with `0600` permissions instead of being passed as an
   argument, where any other process on the machine could read it.
@@ -680,7 +681,7 @@ Things you would otherwise configure by hand, all inferred or applied automatica
 - Injects the adapter without touching `next.config.js`
 - Sets `deploymentId`, so clients on an old build hard-navigate instead of breaking after a deploy
 - Keeps one Server Actions encryption key per project, and refuses to rotate it silently
-- Mounts your env files and that key as build secrets, so neither enters an image layer
+- Mounts your env files, that key, and any `.npmrc` or `.yarnrc.yml` as build secrets, so none enters an image layer
 - Installs dependencies inside the image, so `next`, `sharp` and every native module are built for Linux
 - Copies only traced files, and never a dependency source map or development runtime: `node_modules` went from 469 MB to 58 MB on a real project
 - Generates the same launcher standalone mode would, so `@next/swc` (125 MB) stays out and boot is instant

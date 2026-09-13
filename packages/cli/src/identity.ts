@@ -31,6 +31,8 @@ const DIGEST_LENGTH = 8
 export interface BuildIdentity {
   deploymentId: string
   encryptionKey: string
+  /** A digest of the mounted installer configuration, or null when the project has none. */
+  installerDigest: string | null
   /** True when the id could not be derived from content, so it is unique per build. */
   ephemeral: boolean
 }
@@ -60,6 +62,31 @@ export async function computeDigest(
     parts.push(file, contents)
   }
 
+  const installer = await installerDigest(project)
+  if (installer) parts.push('installer', installer)
+
+  return hashParts(parts)
+}
+
+/**
+ * The installer configuration that is mounted rather than copied, reduced to one
+ * digest. It is passed to the build above the install, and it is part of the image
+ * digest, so a changed registry setting invalidates both the install and the tag.
+ */
+export async function installerDigest(project: ProjectInfo): Promise<string | null> {
+  if (project.installerSecrets.length === 0) return null
+
+  const parts: string[] = []
+  for (const file of project.installerSecrets) {
+    try {
+      parts.push(file, await readFile(path.join(project.contextRoot, file), 'utf8'))
+    } catch {
+      throw new NextshipError(
+        `${file} was found during detection but cannot be read now.`,
+        'Something changed it mid-build. Run the command again.'
+      )
+    }
+  }
   return hashParts(parts)
 }
 

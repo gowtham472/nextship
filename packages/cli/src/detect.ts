@@ -54,6 +54,13 @@ export interface ProjectInfo {
    * package, and a frozen install fails without them.
    */
   installerConfigs: string[]
+  /**
+   * Installer configuration at the context root that can carry a registry token:
+   * `.npmrc` and `.yarnrc.yml`. Mounted as secrets for the install and the build
+   * rather than copied, so a token never sits in a builder layer or the local build
+   * cache. Copying them put them in both, as the first outside test found.
+   */
+  installerSecrets: string[]
   /** The project's own .dockerignore, merged into the generated one so its rules still apply. */
   userDockerignore: string | null
   /**
@@ -69,7 +76,10 @@ export interface ProjectInfo {
 }
 
 /** Files that configure the install itself, as opposed to the application. */
-const INSTALLER_CONFIGS = ['pnpm-workspace.yaml', '.npmrc', '.yarnrc.yml']
+const INSTALLER_CONFIGS = ['pnpm-workspace.yaml']
+
+/** Installer files that can hold registry credentials, so they are mounted rather than copied. */
+const INSTALLER_SECRETS = ['.npmrc', '.yarnrc.yml']
 
 /** Next.js precedence for NODE_ENV=production, highest first. */
 const ENV_FILES = ['.env.production.local', '.env.local', '.env.production', '.env']
@@ -108,6 +118,7 @@ export async function detectProject(cwd: string): Promise<ProjectInfo> {
     sharpVersion: await readInstalledVersion(searchRoots, 'sharp'),
     envFiles: await presentFiles(root, ENV_FILES),
     installerConfigs: await presentFiles(contextRoot, INSTALLER_CONFIGS),
+    installerSecrets: await presentFiles(contextRoot, INSTALLER_SECRETS),
     userDockerignore: await readTextIfPresent(path.join(contextRoot, '.dockerignore')),
     localDependencies: localDependencyPaths(pkg, root, contextRoot),
   }
