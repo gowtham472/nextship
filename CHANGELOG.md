@@ -58,6 +58,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Changed
 
+- **The first outside test is recorded, including where it failed.** A developer outside
+  the project deployed an app built to exercise every claimed feature, from macOS with
+  0.4.4, and checked it against the live URL. The evidence page now has their results,
+  labelled as theirs, and says plainly that the first deploy failed on the health check
+  path bug fixed for the next release. The Apple Silicon statements in the design document, the
+  requirements page, the roadmap and the README said only that the app deployed and
+  served; they now say it took a second attempt. (Gowtham)
 - **The site's hero no longer shows a hand-written transcript.** It printed lines nextship
   never prints, such as "standalone off, adapter injected" and "v Live:". The recording
   replaces it, and the transcript component and its typing animation are removed.

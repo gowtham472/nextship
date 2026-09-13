@@ -22,8 +22,8 @@ installed for the platform the app will run on rather than the platform you deve
 
 It also means an Apple Silicon machine cannot produce an image your cloud target refuses
 to run: the build always targets `linux/amd64`. That has been verified from a MacBook Pro
-with an M3 Max, where nextship 0.4.4 from npm built a Next.js app and deployed it to App
-Platform, and the live URL served.
+with an M3 Max, where nextship 0.4.4 from npm built a Next.js app whose image carried the
+Linux build of `sharp` and served on App Platform.
 
 ## Why the floor is Next.js 16.2
 

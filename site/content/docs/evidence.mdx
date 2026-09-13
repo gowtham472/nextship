@@ -85,9 +85,31 @@ fixture:
 - **Runtime logs**, both the snapshot and `--follow`.
 - **Destroy**, which refuses unless you name the app.
 
-nextship 0.4.4, installed from npm on a MacBook Pro with an M3 Max, built an app and
-deployed it to App Platform, where the live URL served. That is the only run on macOS and
-on arm64, and it is what the `linux/amd64` build target exists for.
+## The first outside test
+
+On 2026-09-11 a developer outside the project installed nextship 0.4.4 from npm on a
+MacBook Pro with an M3 Max, deployed a Next.js 16.3.4 app to App Platform, and measured it
+against the live URL. The app was built to be awkward: a streaming Suspense boundary, an
+ISR route, a Server Action, `next/image` on a raster source, a route reading a runtime
+environment variable, and a dynamic homepage. The figures below are theirs.
+
+| Checked live | Result |
+|---|---|
+| Streaming | First byte 21 ms against a 1.52 s page |
+| Server Actions | A form POST changed server state, and the response carried it |
+| ISR | `s-maxage=30` with a correct stale-while-revalidate cycle |
+| Image optimization | PNG to WebP at 640x480, 8593 bytes to 626, then `X-Nextjs-Cache: HIT` |
+| Runtime environment | `env push` stored the value as a runtime secret, read at request time |
+| Cross-architecture build | Built on darwin-arm64; the image carries `@img/sharp-linux-x64` |
+| Secrets | No env file in the final image |
+| TLS | HTTP/2, a valid certificate, correct 404 handling |
+| Image size | 2181 traced files, a 107 MB runtime image |
+
+**The first deploy failed.** Its dynamic homepage made nextship choose `/_global-error` as
+the health check path, which answers 500, and the deployment never went live. The fix
+ships in the next release; the second and third deploys went live. The test found eight things in all, and
+every one is fixed, pinned by a test, or documented for the next release, as the
+changelog records.
 
 ## Supply chain
 
@@ -115,6 +137,6 @@ sends nothing.
 - **Multi-instance behaviour is not supported.** One instance is correct; a shared cache
   is the next major version's work.
 - **No third party penetration test**, and no dependency vulnerability scan in CI.
-- **No external QA.** Every verification above was run by the author, on the author's
-  machines, except the macOS run. If you try it and something breaks, that is the most
+- **One outside test so far.** Everything else above was run by the people who wrote
+  nextship, on their own machines. If you try it and something breaks, that is the most
   useful thing anyone can currently contribute.
