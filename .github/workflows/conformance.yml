@@ -179,12 +179,6 @@ jobs:
             node run-tests.js --timings -g "$GROUP" -c 2 --type e2e
           fi
 
-      # Every harness app builds with a Next.js cache of its own, and a runner that
-      # runs out of disk fails tests for reasons that have nothing to do with them.
-      - name: Docker disk usage
-        if: always()
-        run: docker system df
-
       - name: Keep the results
         if: always()
         uses: actions/upload-artifact@v4
