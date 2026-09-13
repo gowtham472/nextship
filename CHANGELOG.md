@@ -4,6 +4,14 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-09-13
+
+A route handler that redirects to `request.url` now sends visitors to the app's own
+address instead of `0.0.0.0`, and a Pages Router page in an ESM app no longer answers 500
+when it uses `next/head`. Both were checked on a live App Platform app. The adapter
+compatibility suite passes in full: 1123 of 1123 suites on 16.4.0-canary.22, and 1108 of
+1108 on 16.3.5, the latest stable Next.js.
+
 ### Fixed
 
 - **A route handler that redirected to `request.url` sent visitors to `0.0.0.0`.** Next.js
@@ -15,8 +23,10 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   on the server's port are rewritten and no request header takes part, so a client cannot
   steer it. Measured in a nextship image with requests shaped like App Platform's router,
   carrying a public `Host` and `x-forwarded-proto: https`: before, the Location above;
-  after, `/target`, with middleware rewrites and pages unchanged. Not yet observed on a
-  live app. `request.url` itself still names the container, which the README's
+  after, `/target`, with middleware rewrites and pages unchanged. Then on a live App
+  Platform app: the route answered 307 with `location: /target`, and following it ended at
+  the app's public `/target` with a 200. `request.url` itself still names the container
+  (the same app reported `https://0.0.0.0:3000/echo`), which the README's
   limitations describe. Next.js's `trustHostHeader`, which Vercel sets, was tried first
   and is not a fix outside Vercel: request URLs changed in the routing layer only, and
   every middleware rewrite became a proxy request that failed with a 500. (Gowtham)
@@ -28,7 +38,9 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   adapter is configured, so the image left them out and the page failed with `Cannot
   find module 'next/dist/server/route-modules/pages/vendored/contexts/html-context'`. The
   prune step now traces them, and the `module.compiled` they require, as Next.js does.
-  Found by Next.js's app-esm-js suite, and reproduced both ways. (Gowtham)
+  Found by Next.js's app-esm-js suite, and reproduced both ways. On a live App Platform
+  app with `"type": "module"`, a server-rendered page using `next/head` answered 200 with
+  its head tags. (Gowtham)
 - **Projects with the same package name, or none, shared one Next.js build cache.** The
   cache id was the package name, so every unnamed project used `app`, and two building at
   once wrote the same Turbopack database concurrently. The compatibility suite, which

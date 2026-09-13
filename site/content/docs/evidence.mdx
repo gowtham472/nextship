@@ -21,6 +21,7 @@ builds a real container per test file and deploys it.
 | Next.js version | 16.4.0-canary.22 |
 | Mode | `deploy`, a real container per test file |
 | Reproduced | Two runs, the second on a later commit, matching suite by suite in passed, failed and skipped tests |
+| Stable Next.js | On 16.3.5, 1108 of 1108 suites and 3489 of 3489 assertions, against that release's own, smaller test corpus |
 
 1.0.1's run passed 1051 of 1115 suites. Researching all 64 failures found most in our test
 harness rather than in nextship: the Docker build never received the variables a test sets

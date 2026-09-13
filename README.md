@@ -43,7 +43,7 @@ destroyed afterwards, so its URL no longer serves.
 
 ## Status
 
-**Version 1.0.1, for Next.js on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. AWS follows as v1.1: the driver interface exists, the AWS driver does not.
+**Version 1.0.2, for Next.js on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. AWS follows as v1.1: the driver interface exists, the AWS driver does not.
 
 | Area | State |
 |---|---|
@@ -857,6 +857,7 @@ file. Run against `16.4.0-canary.22` in
 | **Retries** | None. Every suite passed on its first attempt |
 | **Skipped by our list** | 9 tests that assert what Vercel's CDN or proxy does, listed below |
 | **Reproducible** | A second run, [34757301752](https://github.com/gowtham472/nextship/actions/runs/34757301752), matched suite by suite |
+| **Stable release** | On `v16.3.5`, the latest stable Next.js, [run 34761218201](https://github.com/gowtham472/nextship/actions/runs/34761218201) passed 1108 of 1108 suites and 3489 of 3489 assertions. That release has fewer suites than the canary |
 
 The counts come from the results file Next.js's test runner writes for every suite. The
 1033 tests it reports as pending are the ones deploy mode skips: those in Next.js's own
