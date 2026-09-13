@@ -4,6 +4,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-13
+
+Fixes from our own end-to-end test on an Apple Silicon Mac, which deployed an app built to
+exercise every claimed feature and checked it against the live URL. An app with a dynamic
+homepage now deploys on the first attempt, `doctor` no longer reports a false blocker on
+every Next.js 16.3.4 project, and registry tokens in `.npmrc` stay out of the build.
+
 ### Added
 
 - **Scrollbars in the site's palette.** A thin rounded thumb over no track, for the page and
@@ -66,7 +73,7 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 - **Our macOS end-to-end test is recorded, including where it failed.** We deployed an app
   built to exercise every claimed feature, from an Apple Silicon Mac with 0.4.4, and checked
   it against the live URL. The evidence page now has the results and says plainly that the
-  first deploy failed on the health check path bug fixed for the next release. The Apple
+  first deploy failed on the health check path bug fixed in 1.0.1. The Apple
   Silicon statements in the design document, the requirements page, the roadmap and the
   README said only that the app deployed and served; they now say it took a second
   attempt. (Gowtham)

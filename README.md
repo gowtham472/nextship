@@ -43,7 +43,7 @@ destroyed afterwards, so its URL no longer serves.
 
 ## Status
 
-**Version 1.0.0, for Next.js on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. AWS follows as v1.1: the driver interface exists, the AWS driver does not.
+**Version 1.0.1, for Next.js on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. AWS follows as v1.1: the driver interface exists, the AWS driver does not.
 
 | Area | State |
 |---|---|
