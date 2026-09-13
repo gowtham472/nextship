@@ -91,6 +91,15 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Fixed
 
+- **On-demand revalidation does not reach visitors of fully static pages on App Platform,
+  and nothing said so.** Next.js marks a page with no revalidate time cacheable for a
+  year, confirmed in a nextship image, and App Platform's Cloudflare edge honours it: the
+  first outside test measured a `revalidatePath` that changed the container while the edge
+  kept serving the old page. It is now a known limitation with the mitigation that test
+  verified, `export const revalidate`, in the README, the design document and the
+  deploying guide, and `nextship doctor` warns any project whose source revalidates on
+  demand. The landing page said on-demand ISR was verified against a live deployment; it
+  was verified in containers, and the page now states the mitigation instead. (Gowtham)
 - **A rollback plan could show the same image as current and target.** After `env push` or
   `domain add` redeploys the running image with a changed spec, both deployments run one
   image, and the plan gave no sign anything would change. It now says the rollback returns

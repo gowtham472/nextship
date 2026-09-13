@@ -168,9 +168,17 @@ async function vercelConfigFindings(root: string): Promise<Finding[]> {
   return findings
 }
 
+/**
+ * The calls that revalidate on demand. App Platform's CDN keeps fully static pages
+ * for as long as Next.js allows, which is a year, so these only reach visitors of a
+ * page that also sets a revalidate time. Measured live by the first outside test.
+ */
+const ON_DEMAND_REVALIDATION = ['revalidatePath', 'revalidateTag', 'updateTag']
+
 async function sourceFindings(root: string): Promise<Finding[]> {
   const findings: Finding[] = []
   const usedEnvVars = new Set<string>()
+  const revalidatesOnDemand = new Set<string>()
   let scanned = 0
 
   for await (const file of sourceFiles(root)) {
@@ -178,6 +186,9 @@ async function sourceFindings(root: string): Promise<Finding[]> {
     scanned += 1
 
     const contents = await readFile(file, 'utf8').catch(() => '')
+    for (const call of ON_DEMAND_REVALIDATION) {
+      if (contents.includes(`${call}(`)) revalidatesOnDemand.add(call)
+    }
     for (const name of VERCEL_ENV_VARS) {
       // Matches both process.env.NAME and process.env['NAME'].
       if (contents.includes(`env.${name}`) || contents.includes(`env['${name}']`)) {
@@ -193,6 +204,17 @@ async function sourceFindings(root: string): Promise<Finding[]> {
       consequence:
         'They are undefined off Vercel, so any branch depending on them silently takes its other path.',
       action: 'Replace them with your own variables, and set those in the deployment environment.',
+    })
+  }
+
+  if (revalidatesOnDemand.size > 0) {
+    findings.push({
+      level: 'warning',
+      title: `On-demand revalidation is used: ${[...revalidatesOnDemand].sort().join(', ')}`,
+      consequence:
+        'App Platform serves through a CDN that honours Next.js\'s caching, and a page with no revalidate time is marked cacheable for a year. ' +
+        'Revalidating it updates the container, while visitors can keep the copy the CDN holds.',
+      action: `Give every page you revalidate on demand an \`export const revalidate\` in seconds. See ${docsUrl('design.md', '12-known-limitations')}.`,
     })
   }
 

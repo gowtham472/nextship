@@ -140,7 +140,7 @@ const FEATURES = [
 
 const LEAVING = [
   { area: 'Streaming and Suspense', state: 'Works. 27 ms to first byte against a 2.02 s total, measured on a real container.' },
-  { area: 'ISR, time based and on demand', state: 'Works. Verified against a live deployment.' },
+  { area: 'ISR, time based and on demand', state: "Works. On demand, give the page a revalidate time, or App Platform's CDN keeps it." },
   { area: 'Server Actions', state: 'Works. One encryption key is pinned across builds so actions stay decryptable.' },
   { area: 'Image optimization', state: 'Works, producing WebP. sharp is installed for the container platform, not yours.' },
   { area: 'Edge runtime', state: 'Works, in your region rather than at the edge. Next.js runs it inside its own server.' },

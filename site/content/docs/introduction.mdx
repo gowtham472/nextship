@@ -61,7 +61,9 @@ what has not been proven.
 Verified on real containers: every route serves, image optimization produces WebP,
 streaming does not buffer (27 ms to first byte against a 2.02 s total), ISR works both
 time based and on demand, Server Actions execute, and `after()` runs. The runtime image is
-591 MB uncompressed, against 1.13 GB before pruning.
+591 MB uncompressed, against 1.13 GB before pruning. On App Platform, on-demand revalidation
+also needs a revalidate time on the page, because its CDN
+[keeps fully static pages](/docs/deploying#pages-the-cdn-keeps).
 
 **v1.0 targets DigitalOcean only.** That is the target that is built, verified and
 actually used. A second cloud is built on the proven one rather than beside it: the driver

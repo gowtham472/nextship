@@ -64,6 +64,25 @@ The URL it prints is the platform host, not the field the API calls `live_url`. 
 becomes your primary custom domain the moment you attach one, which means it points at a
 name that does not resolve until you have created the DNS record.
 
+## Pages the CDN keeps
+
+App Platform serves your app through Cloudflare, and Cloudflare honours the caching Next.js
+asks for. For a page with no revalidate time, Next.js sends `Cache-Control:
+s-maxage=31536000`, a year. So when a Server Action calls `revalidatePath` or
+`revalidateTag`, the container renders the new page, but visitors can keep getting the copy
+the edge already holds. It works in local testing, because nothing sits in front of the
+container there.
+
+Give every page you revalidate on demand a revalidate time:
+
+```tsx title="app/posts/page.tsx"
+export const revalidate = 30
+```
+
+The page then sends `s-maxage=30`, and the edge keeps it at most that long. The first
+outside test of nextship measured the change reaching visitors in about 30 seconds this
+way. `nextship doctor` warns when your source revalidates on demand.
+
 ## What it will not do
 
 It only ever touches the app recorded in `nextship.json`. It creates nothing else, and it

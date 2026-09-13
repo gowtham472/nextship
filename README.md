@@ -55,7 +55,8 @@ destroyed afterwards, so its URL no longer serves.
 Verified on real containers: every route serves, image optimization produces WebP,
 streaming does not buffer (27 ms to first byte against a 2.02 s total), ISR works
 both time-based and on-demand, Server Actions execute, `after()` runs, and Edge runtime
-routes run in Next.js's Edge runtime inside the server. The image
+routes run in Next.js's Edge runtime inside the server. Through App Platform's CDN,
+on-demand revalidation needs a revalidate time on the page, as the limitations below say. The image
 is 591 MB uncompressed against 1.13 GB before pruning.
 
 **It was built for its author's own apps, and it works for yours** if you deploy
@@ -712,6 +713,12 @@ deploy:
   every restart, redeploy and rescheduling starts cold. Optimized images share that
   directory and are re-generated too. Single-instance ISR is correct per process,
   which is not the same as durable.
+- **App Platform's CDN keeps fully static pages.** Next.js marks a page with no
+  revalidate time cacheable for a year, and App Platform's Cloudflare edge honours it, so
+  `revalidatePath` and `revalidateTag` update the container while visitors keep the old
+  page. Give any page you revalidate on demand an `export const revalidate`; the edge then
+  keeps it at most that many seconds. `nextship doctor` warns when your source revalidates
+  on demand.
 - **Logs are not history.** `--follow` streams live output, but a replaced deployment
   still takes its past output with it. Retaining it needs forwarding to an external
   service, which is not built.
@@ -722,8 +729,9 @@ deploy:
 - **`public/` ships inside the image**, 78 MB of it on the real project. The container
   serves it correctly; moving it to a CDN is a performance change, deferred to v5.
 - **An app that prerenders nothing is health checked on a rendered route.** The path is
-  chosen from the build's prerendered routes, so most apps are probed on a static file.
-  With no static route at all there is nothing cheap to poll.
+  chosen from the build's prerendered pages, never Next.js's internal ones, so most apps
+  are probed on a page served from disk. With nothing prerendered, `/` is polled and
+  renders every time.
 - **Nothing is claimed about PPR, Cache Components, middleware or multi-instance
   behaviour.** They are untested, not known broken.
 

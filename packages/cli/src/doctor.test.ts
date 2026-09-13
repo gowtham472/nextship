@@ -196,3 +196,30 @@ test('a package neither declared nor in the lockfile is still a blocker', async 
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test('on-demand revalidation in the source is warned about, since the CDN keeps static pages', async () => {
+  const root = await fixture({
+    'package.json': JSON.stringify({ name: 'demo', dependencies: { next: '16.3.4' } }),
+    'app/actions.ts': "'use server'\nimport { revalidatePath } from 'next/cache'\nexport async function add() { revalidatePath('/posts') }",
+  })
+  try {
+    const finding = titled(await diagnose(projectFor(root)), 'On-demand revalidation')
+    assert.equal(finding?.level, 'warning')
+    assert.ok(finding?.title.includes('revalidatePath'))
+    assert.match(finding?.action ?? '', /export const revalidate/)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('a project that never revalidates on demand gets no such warning', async () => {
+  const root = await fixture({
+    'package.json': JSON.stringify({ name: 'demo', dependencies: { next: '16.3.4' } }),
+    'app/page.tsx': 'export const revalidate = 60\nexport default function P() { return null }',
+  })
+  try {
+    assert.equal(titled(await diagnose(projectFor(root)), 'On-demand revalidation'), undefined)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
