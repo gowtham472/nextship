@@ -6,6 +6,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Added
 
+- **A test that a failing command exits 1.** CI decides whether a deploy succeeded from the
+  exit code alone. The first outside test reported a failed deployment exiting 0; it did
+  not reproduce on 0.4.4 or 1.0.0, where nextship exits 1, and a pipe such as `| tee`
+  reports the pipe's status instead, which is the likely cause. The behaviour is now
+  pinned through the real entry point. (Gowtham)
 - **A first deploy report.** A short issue form for anyone who tried nextship, whether the
   deploy worked, broke, or never started: how far they got, how long it took and where
   they got stuck. The existing forms only fit a bug or a feature request, so a working
