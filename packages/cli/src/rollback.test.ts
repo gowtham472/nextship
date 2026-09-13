@@ -11,7 +11,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { rollbackCandidates } from './rollback.js'
+import { rollbackCandidates, sameImage } from './rollback.js'
 import type { DeploymentRecord } from './targets/target.js'
 
 /**
@@ -65,4 +65,13 @@ test('order is preserved, so the newest previous deployment is the default', () 
 
 test('an app with a single deployment offers nothing', () => {
   assert.deepEqual(rollbackCandidates([deployment('only', 'ACTIVE')], 'only'), [])
+})
+
+test('a rollback between two deployments of one image is recognised as configuration only', () => {
+  const specOnly = { ...deployment('b', 'ACTIVE'), imageTag: 'dpl-same' }
+  const earlier = { ...deployment('a', 'SUPERSEDED'), imageTag: 'dpl-same' }
+  assert.equal(sameImage(specOnly, earlier), true)
+  assert.equal(sameImage(specOnly, { ...earlier, imageTag: 'dpl-older' }), false)
+  assert.equal(sameImage(undefined, earlier), false, 'nothing live means nothing to compare')
+  assert.equal(sameImage({ ...specOnly, imageTag: null }, { ...earlier, imageTag: null }), false, 'unknown images are not the same image')
 })

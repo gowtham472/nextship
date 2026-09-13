@@ -54,6 +54,9 @@ export async function rollback(project: ProjectInfo, options: RollbackOptions): 
   detail(`app        ${app.name} (${app.appId})`)
   detail(`current    ${describe(live)}`)
   detail(`roll back  ${describe(target)}`)
+  if (sameImage(live, target)) {
+    detail("same image on both: this returns the app's configuration, such as environment variables, not its code")
+  }
   detail('no build, no push: this reuses an image that already ran')
   detail('nothing is deleted; the current deployment stays in the history')
 
@@ -92,6 +95,17 @@ export function rollbackCandidates(
   liveId: string | undefined
 ): DeploymentRecord[] {
   return deployments.filter((entry) => entry.served && entry.id !== liveId)
+}
+
+/**
+ * True when both deployments run one image, so only the app's configuration differs.
+ *
+ * `env push` and `domain add` redeploy the running image with a changed spec, and the
+ * plan used to list the same tag as current and target with nothing to show that
+ * anything would change.
+ */
+export function sameImage(live: DeploymentRecord | undefined, target: DeploymentRecord): boolean {
+  return live?.imageTag !== undefined && live.imageTag !== null && live.imageTag === target.imageTag
 }
 
 const describe = (deployment: DeploymentRecord | undefined): string =>

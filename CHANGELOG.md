@@ -91,6 +91,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Fixed
 
+- **A rollback plan could show the same image as current and target.** After `env push` or
+  `domain add` redeploys the running image with a changed spec, both deployments run one
+  image, and the plan gave no sign anything would change. It now says the rollback returns
+  the app's configuration, such as environment variables, not its code. Found by the first
+  outside test. (Gowtham)
 - **The runtime image preloaded jemalloc from an x86_64-only path.** Harmless while images
   are built for `linux/amd64`, but an arm64 image would have lost the allocator silently,
   since the loader only warns about a missing preload. It is now linked from the
