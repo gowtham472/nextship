@@ -88,6 +88,15 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 One fixed key is required because the suite builds many apps and Server Actions must stay
 decryptable across all of them.
 
+What the harness hands each build and container is decided in
+`conformance/prepare-app.mjs`, and CI tests those decisions on every push. Run the tests
+before changing it, since a mistake there shows up only as suites failing for reasons that
+have nothing to do with nextship:
+
+```bash
+node --test conformance/*.test.mjs
+```
+
 Every run ends with a **Score the run** job whose summary gives two numbers: suites passed,
 where one failing assertion fails the whole suite, and assertions passed, the measure
 Next.js's adapters support page uses. It lists every failing suite with its failing

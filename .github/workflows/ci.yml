@@ -58,6 +58,11 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
 
+      # What the compatibility harness hands each build. Outside the workspace, so
+      # pnpm test does not reach it.
+      - name: Harness tests
+        run: node --test conformance/*.test.mjs
+
       - name: Verify the packed tarball installs and runs
         working-directory: packages/cli
         run: node scripts/verify-pack.mjs
