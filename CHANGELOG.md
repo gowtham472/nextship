@@ -6,6 +6,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Added
 
+- **Scrollbars in the site's palette.** A thin rounded thumb over no track, for the page and
+  for code blocks, that turns brand blue under the pointer. The colours come from the
+  theme tokens, so it follows light and dark with nothing of its own. Chromium and Safari
+  use the rounded style; Firefox, which lacks it, gets the thin scrollbar in the same
+  colours. (Gowtham)
 - **A test that a failing command exits 1.** CI decides whether a deploy succeeded from the
   exit code alone. The first outside test reported a failed deployment exiting 0; it did
   not reproduce on 0.4.4 or 1.0.0, where nextship exits 1, and a pipe such as `| tee`

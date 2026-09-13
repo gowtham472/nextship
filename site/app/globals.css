@@ -204,6 +204,49 @@ html:not([data-theme='dark']) [data-rehype-pretty-code-figure] code span {
 }
 
 /*
+ * Scrollbars in the palette: a thin rounded thumb that turns brand blue under the
+ * pointer, over no track at all, for the page and for code blocks alike.
+ *
+ * Chromium ignores the ::-webkit-scrollbar rules wherever scrollbar-color is set,
+ * and those rules are the only way to round the thumb and inset it, so the standard
+ * properties apply only in browsers without them, which today means Firefox. Both
+ * take their colours from the tokens, so the dark theme needs nothing of its own.
+ */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* The transparent border insets the thumb, and background-clip keeps the colour
+   inside it, so the visible thumb is 6px wide on a 12px hit area. */
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--accent);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--accent-text);
+}
+
+/*
  * Motion. The entrance animations are CSS, so they run from the first paint
  * rather than waiting for JavaScript, and the page reads the same with them off.
  * Every one stops for visitors who ask their system for reduced motion.
