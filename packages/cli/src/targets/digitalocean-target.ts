@@ -157,9 +157,12 @@ export class DigitalOceanTarget implements Target {
     return { appId, deploymentId: updated.deploymentId }
   }
 
-  async awaitRelease(appId: string, deploymentId: string, onPhase: PhaseReporter): Promise<void> {
+  async awaitRelease(appId: string, deploymentId: string, onPhase: PhaseReporter, replacing: boolean): Promise<void> {
+    const logs = 'Check the build and runtime logs in the DigitalOcean control panel.'
     await this.poll(appId, deploymentId, onPhase, DEPLOY_TIMEOUT_MS, {
-      failed: 'The previous revision keeps serving. Check the build and runtime logs in the DigitalOcean control panel.',
+      failed: replacing
+        ? `The previous revision keeps serving. ${logs}`
+        : `This was the app's first deployment, so nothing is serving yet. ${logs}`,
       timedOut: 'It may still succeed. Nothing was rolled back or deleted. Check the control panel.',
     })
   }

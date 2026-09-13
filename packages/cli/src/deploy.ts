@@ -124,8 +124,12 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
   detail(
     build.manifest.healthPath
       ? `health     ${build.manifest.healthPath}, which this build prerenders`
-      : 'health     /, which this build renders on every probe because nothing is prerendered'
+      : 'health     /, which this build renders on every probe because it prerenders no page to probe'
   )
+
+  // Asked before the release, while the live flag still describes what serves now.
+  // An app can exist without ever having served, when its first deployment failed.
+  const serving = owned ? (await client.deployments(owned.id)).some((deployment) => deployment.live) : false
 
   step(owned ? `Updating app "${name}"` : `Creating app "${name}"`)
   const released = await client.release(owned?.id ?? null, {
@@ -158,7 +162,7 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
   }
 
   step('Waiting for the deployment to go live')
-  await client.awaitRelease(appId, released.deploymentId, detail)
+  await client.awaitRelease(appId, released.deploymentId, detail, serving)
 
   await reportUrls(client, appId)
 }

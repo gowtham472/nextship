@@ -120,7 +120,12 @@ becomes the path the platform's health check polls (§10.7).
 `healthPath` is chosen from `.next/prerender-manifest.json` so the check is served
 from disk rather than rendered every few seconds for the life of the app: `/` when it
 is prerendered, because that is the path users take, otherwise the first prerendered
-route in sorted order, so the same build always picks the same route. It is `null`
+page in sorted order, so the same build always picks the same route. Routes with a
+path segment starting with an underscore are never chosen: those are Next.js's own
+internal pages, and `/_global-error`, which sorts first and answers 500 by design,
+used to be picked for every app with a dynamic homepage, failing its first deploy.
+The manifest records no status for that page, so the underscore is the reliable
+signal. Routes recorded with a non-2xx status are skipped as well. It is `null`
 when nothing is prerendered, and `deploy` then falls back to `/` and says the probe
 renders on every request. The CLI reads the field as optional, so a manifest from an
 adapter that predates it still reads.

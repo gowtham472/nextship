@@ -86,6 +86,16 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Fixed
 
+- **Any app with a dynamic homepage failed its first deploy.** When `/` was not prerendered,
+  the health check path was the first prerendered route in sorted order, which was
+  `/_global-error`: an underscore sorts before letters, and that page answers 500 by
+  design, so App Platform failed the health checks every time. Found by the first outside
+  test, on macOS with 0.4.4, and reproduced on 1.0.0 from the manifest Next.js 16.3.4
+  writes. Internal routes, those with a segment starting with an underscore, and routes
+  recorded with a non-2xx status are no longer chosen, and pages come before files such
+  as `/favicon.ico`. Verified in an image: the same app now probes `/isr`, which answers
+  200. The adapter gains its first tests. A failed first deploy also no longer says
+  "The previous revision keeps serving" when nothing ever served. (Gowtham)
 - **The landing page said Edge runtime code "runs on Node instead".** It had never been
   checked, and it was wrong. A route handler and a page declaring `runtime = 'edge'`
   served from a nextship image, and the code saw the `EdgeRuntime` global and no Node.js

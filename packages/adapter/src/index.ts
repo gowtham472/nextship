@@ -97,20 +97,52 @@ export async function onBuildComplete(context: BuildCompleteContext): Promise<vo
  * so this depends only on a file Next.js has always written.
  */
 async function resolveHealthPath(projectDir: string): Promise<string | null> {
-  let routes: string[]
+  let routes: Record<string, PrerenderedRoute>
   try {
     const contents = await readFile(path.join(projectDir, '.next', 'prerender-manifest.json'), 'utf8')
-    routes = Object.keys((JSON.parse(contents) as { routes?: Record<string, unknown> }).routes ?? {})
+    routes = (JSON.parse(contents) as { routes?: Record<string, PrerenderedRoute> }).routes ?? {}
   } catch {
     // No manifest, or unreadable: not worth failing a build over, and the CLI
     // handles the absence.
     return null
   }
 
-  if (routes.includes('/')) return '/'
-  // Sorted so the same build always chooses the same route, which keeps the
-  // deployed spec stable across rebuilds.
-  return routes.sort()[0] ?? null
+  return chooseHealthPath(routes)
+}
+
+/** A prerendered route as the manifest records it, reduced to what the choice reads. */
+export interface PrerenderedRoute {
+  initialStatus?: number
+  dataRoute?: string | null
+}
+
+/**
+ * Picks the prerendered route a health check can poll and expect a 2xx from.
+ *
+ * Next.js prerenders its own internal pages alongside the app's. Taking the first
+ * route in sorted order chose `/_global-error` for any app whose `/` is dynamic,
+ * because an underscore sorts before letters, and that page answers 500 by design,
+ * so every deploy of such an app failed its health checks. The manifest does not
+ * record that route's status, so status alone cannot exclude it: any path segment
+ * starting with an underscore is internal, since App Router treats those folders as
+ * private and never routes to them.
+ *
+ * Pages come before other prerendered outputs such as `/favicon.ico`, because a page
+ * is what visitors request. Each group is sorted so the same build always chooses
+ * the same route, which keeps the deployed spec stable across rebuilds.
+ */
+export function chooseHealthPath(routes: Record<string, PrerenderedRoute>): string | null {
+  const healthy = Object.entries(routes).filter(
+    ([route, entry]) =>
+      !route.split('/').some((segment) => segment.startsWith('_')) &&
+      (entry.initialStatus === undefined || (entry.initialStatus >= 200 && entry.initialStatus < 300))
+  )
+
+  if (healthy.some(([route]) => route === '/')) return '/'
+
+  const pages = healthy.filter(([, entry]) => entry.dataRoute).map(([route]) => route)
+  const others = healthy.filter(([, entry]) => !entry.dataRoute).map(([route]) => route)
+  return pages.sort()[0] ?? others.sort()[0] ?? null
 }
 
 export default { name: 'nextship', modifyConfig, onBuildComplete }

@@ -176,8 +176,13 @@ export interface Target {
    */
   release(appId: string | null, request: ReleaseRequest): Promise<{ appId: string; deploymentId: string | null }>
 
-  /** Waits for a deployment to finish, reporting each phase change as it goes. */
-  awaitRelease(appId: string, deploymentId: string, onPhase: PhaseReporter): Promise<void>
+  /**
+   * Waits for a deployment to finish, reporting each phase change as it goes.
+   *
+   * `replacing` says whether a deployment of this app is serving now, so a failure can
+   * say truthfully whether anything still is.
+   */
+  awaitRelease(appId: string, deploymentId: string, onPhase: PhaseReporter, replacing: boolean): Promise<void>
 
   /**
    * Refuses when the app has a deployment the platform has not finished, since a
