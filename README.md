@@ -29,6 +29,16 @@ That command builds your app inside Docker, prunes the result to the files Next.
 says it needs, pushes the image to your registry, releases it, waits for it to go
 live, and prints the URL.
 
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="site/public/media/deploy-final.svg">
+  <img src="site/public/media/deploy.svg" alt="A recording of nextship detect, then nextship deploy --yes: the plan, the build, the push to the registry, App Platform bringing the app live, and the URL it serves on." width="760">
+</picture>
+
+One uncut recording of a real deployment, 98 seconds shown in 43. Pauses over two seconds
+are shortened and nothing else is edited;
+[`deploy.cast`](./site/public/media/deploy.cast) keeps the real timings. The app was
+destroyed afterwards, so its URL no longer serves.
+
 ---
 
 ## Status

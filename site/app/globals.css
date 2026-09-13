@@ -245,18 +245,6 @@ html:not([data-theme='dark']) [data-rehype-pretty-code-figure] code span {
   }
 }
 
-@keyframes type {
-  from {
-    width: 0;
-  }
-}
-
-@keyframes caret {
-  50% {
-    opacity: 0;
-  }
-}
-
 @keyframes sheen {
   0%,
   55% {
@@ -284,26 +272,6 @@ html:not([data-theme='dark']) [data-rehype-pretty-code-figure] code span {
 .fade-up {
   animation: fade-up 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   animation-delay: var(--delay);
-}
-
-/* A terminal line appears at --delay; a typed one grows to --chars characters. */
-.term-line {
-  animation: fade-up 0.35s ease-out both;
-  animation-delay: var(--delay);
-}
-
-.term-type {
-  display: inline-block;
-  vertical-align: bottom;
-  overflow: hidden;
-  white-space: pre;
-  width: calc(var(--chars) * 1ch);
-  animation: type calc(var(--chars) * 45ms) steps(var(--chars)) both;
-  animation-delay: var(--delay);
-}
-
-.term-caret {
-  animation: caret 1.1s steps(1) infinite;
 }
 
 /* The glow behind the hero: three soft lights, still. The rays over them carry the
@@ -399,9 +367,6 @@ html:not([data-theme='dark']) [data-rehype-pretty-code-figure] code span {
 @media (prefers-reduced-motion: reduce) {
   .rise-word,
   .fade-up,
-  .term-line,
-  .term-type,
-  .term-caret,
   .sheen::after,
   .reveal,
   .animate-marquee {

@@ -6,6 +6,12 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Added
 
+- **A recording of a real deployment, in the README and the site's hero.** One uncut session
+  of `nextship`, `nextship detect` and `nextship deploy --yes` against a live account,
+  ending on the URL App Platform served. `site/public/media/deploy.cast` keeps every byte
+  with its real timing; the animation is rendered from it with pauses over two seconds
+  shortened, 98 seconds shown in 43. Readers who ask for reduced motion get the final
+  frame. The app and its images were removed afterwards. (Gowtham)
 - **Documentation code blocks name what they hold.** Each block's header shows a
   language icon and a title: a file's name when the fence gives one, otherwise Terminal
   for commands and Output for what the CLI prints. Copy is an icon, and a failed copy still
@@ -43,6 +49,10 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Changed
 
+- **The site's hero no longer shows a hand-written transcript.** It printed lines nextship
+  never prints, such as "standalone off, adapter injected" and "v Live:". The recording
+  replaces it, and the transcript component and its typing animation are removed.
+  (Gowtham)
 - **The evidence page says the site counts page views.** Cloudflare Web Analytics is now on,
   verified in a browser: the beacon loads, a report is sent, and no cookie is set.
   (Gowtham)

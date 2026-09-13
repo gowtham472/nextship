@@ -17,10 +17,10 @@ import {
 } from 'lucide-react'
 
 import { CopyButton } from '@/components/copy-button'
+import { DeployRecording } from '@/components/landing/deploy-recording'
 import { FlowDiagram } from '@/components/landing/flow-diagram'
 import { HeroBackground } from '@/components/landing/hero-background'
 import { SpotlightCard } from '@/components/spotlight-card'
-import { Terminal, type Line } from '@/components/terminal'
 import { Marquee } from '@/components/ui/marquee'
 import { NumberTicker } from '@/components/ui/number-ticker'
 
@@ -30,20 +30,6 @@ const HEADLINE = ['Deploy', 'Next.js', 'to', 'infrastructure', 'you', 'own']
 
 /** Where the headline turns blue: the part that is the point. */
 const HEADLINE_ACCENT_FROM = 4
-
-const TRANSCRIPT: Line[] = [
-  { kind: 'command', text: 'nextship deploy --yes' },
-  { kind: 'blank' },
-  { kind: 'output', text: '> Building app in Docker' },
-  { kind: 'muted', text: '  deployment dpl-2b2c3e53' },
-  { kind: 'muted', text: '  next 16.4.0, standalone off, adapter injected' },
-  { kind: 'output', text: '> Pruning to what the build traced' },
-  { kind: 'muted', text: '  1.13 GB -> 591 MB' },
-  { kind: 'output', text: '> Pushing to registry.digitalocean.com' },
-  { kind: 'output', text: '> Releasing, then waiting for it to serve' },
-  { kind: 'blank' },
-  { kind: 'success', text: 'v Live: https://app.example.com' },
-]
 
 const KEEPS_WORKING = [
   'Streaming',
@@ -232,7 +218,7 @@ export default function HomePage() {
           </div>
 
           <div className="fade-up mx-auto mt-16 max-w-3xl" style={delay(1000)}>
-            <Terminal title="your-nextjs-app" lines={TRANSCRIPT} />
+            <DeployRecording />
           </div>
         </div>
       </section>
