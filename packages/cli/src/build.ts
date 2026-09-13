@@ -10,7 +10,7 @@
  * Design: ../../../docs/design.md §6, §7
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { randomBytes } from 'node:crypto'
 import path from 'node:path'
 import { NextshipError } from './errors.js'
@@ -81,8 +81,13 @@ export async function buildProject(project: ProjectInfo): Promise<BuildResult> {
  * The key lives outside git, so a second machine or a CI runner will not have it
  * and would generate its own. That is why the environment variable takes
  * precedence and why both the mismatch and the first generation are reported.
+ *
+ * The file is readable by its owner only. It used to be written with the default
+ * mode, 0644 on macOS and Linux, which let any other account on the machine read a
+ * key that decrypts Server Action payloads. A file an earlier version wrote is
+ * tightened when it is next read.
  */
-async function resolveEncryptionKey(root: string): Promise<string> {
+export async function resolveEncryptionKey(root: string): Promise<string> {
   const file = path.join(root, SECRETS_FILE)
   const stored = await readStoredKey(file)
   const fromEnvironment = process.env.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
@@ -97,11 +102,14 @@ async function resolveEncryptionKey(root: string): Promise<string> {
     return fromEnvironment
   }
 
-  if (stored) return stored
+  if (stored) {
+    await restrictToOwner(file)
+    return stored
+  }
 
   const generated = randomBytes(32).toString('base64')
   await mkdir(path.dirname(file), { recursive: true })
-  await writeFile(file, JSON.stringify({ serverActionsEncryptionKey: generated }, null, 2))
+  await writeFile(file, JSON.stringify({ serverActionsEncryptionKey: generated }, null, 2), { mode: 0o600 })
   detail(`generated a Server Actions encryption key in ${SECRETS_FILE}`)
   warn(
     `${SECRETS_FILE} is not committed, so another machine or a CI runner will generate a different key ` +
@@ -109,6 +117,20 @@ async function resolveEncryptionKey(root: string): Promise<string> {
       'NEXT_SERVER_ACTIONS_ENCRYPTION_KEY wherever else you build.'
   )
   return generated
+}
+
+/**
+ * Windows has no POSIX modes to set, and the file already inherits the user
+ * profile's access list there. A failure elsewhere is reported rather than
+ * ignored, because a key left readable is exactly what this exists to prevent.
+ */
+async function restrictToOwner(file: string): Promise<void> {
+  if (process.platform === 'win32') return
+  try {
+    await chmod(file, 0o600)
+  } catch (error) {
+    warn(`Could not restrict ${SECRETS_FILE} to its owner: ${error instanceof Error ? error.message : String(error)}`)
+  }
 }
 
 /**

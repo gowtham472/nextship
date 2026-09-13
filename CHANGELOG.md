@@ -86,6 +86,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Fixed
 
+- **The Server Actions encryption key file was readable by every account on the machine.**
+  `.nextship/secrets.local.json` was written with the default mode, 0644 on macOS and
+  Linux. It is now created readable by its owner only, and a file an earlier version wrote
+  is tightened the next time it is read, without changing the key. Found by the first
+  outside test. (Gowtham)
 - **`doctor` reported a false blocker on every Next.js 16.3.4 project.** It called
   `@img/sharp-wasm32` undeclared, because the dependency walk follows only packages
   installed on the machine, and that one is reached only through `sharp`'s optional
