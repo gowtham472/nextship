@@ -137,11 +137,12 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
 
-      - run: npm i -g corepack@latest && corepack enable
-
+      # Playwright's own binary rather than `pnpm playwright`: nothing in a deploy
+      # mode run needs pnpm, and fetching it through corepack is a download that
+      # once crashed a group before any of its tests ran.
       - name: Ensure Playwright browser
         working-directory: nextjs
-        run: pnpm playwright install chromium
+        run: node_modules/.bin/playwright install chromium
 
       - run: chmod +x adapter/conformance/*.sh
 
