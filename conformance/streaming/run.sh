@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Streaming conformance against a local container: builds the fixture with nextship
-# exactly as it builds any app, runs the image, and fails unless /stream streams.
+# Conformance against a local container: builds the fixture with nextship exactly as it
+# builds any app, runs the image, and fails unless /stream streams and /edge runs in the
+# Edge runtime.
 #
 # The fixture's dependencies must be installed first (npm ci in app/), because
 # nextship reads the installed Next.js version rather than the declared one.
@@ -43,3 +44,12 @@ for _ in $(seq 1 60); do
 done
 
 node "${HERE}/measure.mjs" "http://127.0.0.1:${PORT}/stream"
+
+# An Edge route has to answer from the Edge runtime Next.js runs inside the server. A
+# failure here means the image lost the Edge bundles, or the route fell back to Node.
+EDGE="$(curl -s "http://127.0.0.1:${PORT}/edge")"
+if [ "${EDGE}" != '{"runtime":"edge-runtime"}' ]; then
+  echo "edge: FAIL (/edge answered: ${EDGE:-nothing})" >&2
+  exit 1
+fi
+echo "edge: ok, /edge ran in the Edge runtime"

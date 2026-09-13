@@ -713,7 +713,11 @@ later behind a Suspense boundary, and `measure.mjs`, which fails unless the firs
 arrives well before the last and the shell arrives before the tail. `run.sh` builds the
 fixture with nextship, runs the image and measures it, and CI runs that on every push
 and pull request. The script was shown to fail against a server that buffers, one that
-never answers and one that drops the connection part way. It takes any URL, which is
+never answers and one that drops the connection part way. The same run also calls an
+`/edge` route declaring `runtime = 'edge'` and fails unless it answers from Next.js's
+Edge runtime, because Edge bundles are not in the build's trace output and a change to
+the prune could drop them without any other test noticing. It was shown to fail with the
+route switched to the Node.js runtime. It takes any URL, which is
 how a deployed target is checked. App Platform was measured live on 2026-09-11: three
 runs of three passed, first byte 230 to 448 ms against a 2.2 to 2.4 s total, the shell
 before the tail, sent chunked through DigitalOcean's Cloudflare edge with the cache

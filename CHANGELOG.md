@@ -86,6 +86,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Fixed
 
+- **The landing page said Edge runtime code "runs on Node instead".** It had never been
+  checked, and it was wrong. A route handler and a page declaring `runtime = 'edge'`
+  served from a nextship image, and the code saw the `EdgeRuntime` global and no Node.js
+  version: Next.js runs it in its Edge runtime inside the server. The landing page, the
+  introduction and the evidence page now say so, and the container conformance run
+  checks an Edge route on every push, since the prune could drop its bundles without
+  another test noticing. (Gowtham)
 - **No code block on the site was ever syntax coloured.** The stylesheet applied Shiki's
   colours through a `.shiki` class that rehype-pretty-code does not emit in this setup,
   so every token rendered in the text colour. It now selects the figure rehype-pretty-code

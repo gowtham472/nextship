@@ -54,7 +54,8 @@ destroyed afterwards, so its URL no longer serves.
 
 Verified on real containers: every route serves, image optimization produces WebP,
 streaming does not buffer (27 ms to first byte against a 2.02 s total), ISR works
-both time-based and on-demand, Server Actions execute, and `after()` runs. The image
+both time-based and on-demand, Server Actions execute, `after()` runs, and Edge runtime
+routes run in Next.js's Edge runtime inside the server. The image
 is 591 MB uncompressed against 1.13 GB before pruning.
 
 **It was built for its author's own apps, and it works for yours** if you deploy

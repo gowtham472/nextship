@@ -86,7 +86,8 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       # Builds the fixture in Docker exactly as nextship builds any app, runs the
-      # image, and fails unless the slow page's shell arrives before its tail.
+      # image, and fails unless the slow page's shell arrives before its tail and the
+      # Edge route answers from the Edge runtime.
       - run: bash conformance/streaming/run.sh
 
   site:

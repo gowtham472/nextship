@@ -143,7 +143,7 @@ const LEAVING = [
   { area: 'ISR, time based and on demand', state: 'Works. Verified against a live deployment.' },
   { area: 'Server Actions', state: 'Works. One encryption key is pinned across builds so actions stay decryptable.' },
   { area: 'Image optimization', state: 'Works, producing WebP. sharp is installed for the container platform, not yours.' },
-  { area: 'Edge runtime', state: 'Runs on Node instead. There is no edge tier in your own account to run it on.' },
+  { area: 'Edge runtime', state: 'Works, in your region rather than at the edge. Next.js runs it inside its own server.' },
   { area: 'Analytics and Speed Insights', state: 'Not available. Those are Vercel products, not Next.js features.' },
 ]
 

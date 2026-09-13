@@ -46,6 +46,15 @@ Cloudflare edge with the cache bypassed.
 The check is also known to fail when it should: it was run against a server that buffers,
 one that never answers, and one that drops the connection part way, and it reported each.
 
+## Edge runtime
+
+A route handler and a page declaring `runtime = 'edge'` both served from a nextship image,
+and the code in each saw the `EdgeRuntime` global and no Node.js version: Next.js runs it
+in its Edge runtime inside the server, not on the Node.js runtime. Measured on 2026-09-13
+with nextship 1.0.0 and Next.js 16.3.4 in a local container, and checked on every push
+since, because the prune that builds the image could otherwise drop the Edge bundles
+without any other test noticing.
+
 ## The runtime image
 
 Measured on a production project: Next.js 16.2.9, pnpm, 21 routes, `next/image` in 21
