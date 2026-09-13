@@ -12,8 +12,8 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   use the rounded style; Firefox, which lacks it, gets the thin scrollbar in the same
   colours. (Gowtham)
 - **A test that a failing command exits 1.** CI decides whether a deploy succeeded from the
-  exit code alone. The first outside test reported a failed deployment exiting 0; it did
-  not reproduce on 0.4.4 or 1.0.0, where nextship exits 1, and a pipe such as `| tee`
+  exit code alone. Our end-to-end test on macOS recorded a failed deployment exiting 0; it
+  did not reproduce on 0.4.4 or 1.0.0, where nextship exits 1, and a pipe such as `| tee`
   reports the pipe's status instead, which is the likely cause. The behaviour is now
   pinned through the real entry point. (Gowtham)
 - **A first deploy report.** A short issue form for anyone who tried nextship, whether the
@@ -63,13 +63,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Changed
 
-- **The first outside test is recorded, including where it failed.** A developer outside
-  the project deployed an app built to exercise every claimed feature, from macOS with
-  0.4.4, and checked it against the live URL. The evidence page now has their results,
-  labelled as theirs, and says plainly that the first deploy failed on the health check
-  path bug fixed for the next release. The Apple Silicon statements in the design document, the
-  requirements page, the roadmap and the README said only that the app deployed and
-  served; they now say it took a second attempt. (Gowtham)
+- **Our macOS end-to-end test is recorded, including where it failed.** We deployed an app
+  built to exercise every claimed feature, from an Apple Silicon Mac with 0.4.4, and checked
+  it against the live URL. The evidence page now has the results and says plainly that the
+  first deploy failed on the health check path bug fixed for the next release. The Apple
+  Silicon statements in the design document, the requirements page, the roadmap and the
+  README said only that the app deployed and served; they now say it took a second
+  attempt. (Gowtham)
 - **The site's hero no longer shows a hand-written transcript.** It printed lines nextship
   never prints, such as "standalone off, adapter injected" and "v Live:". The recording
   replaces it, and the transcript component and its typing animation are removed.
@@ -109,11 +109,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   the install and the build, and excluded from the context. Because BuildKit leaves a
   secret's contents out of its cache key, a digest of the files is passed above the install
   and folded into the image digest, so a changed registry setting still re-runs the install
-  and produces a new tag. Found by the first outside test. (Gowtham)
+  and produces a new tag. Found in our end-to-end test on macOS. (Gowtham)
 - **On-demand revalidation does not reach visitors of fully static pages on App Platform,
   and nothing said so.** Next.js marks a page with no revalidate time cacheable for a
-  year, confirmed in a nextship image, and App Platform's Cloudflare edge honours it: the
-  first outside test measured a `revalidatePath` that changed the container while the edge
+  year, confirmed in a nextship image, and App Platform's Cloudflare edge honours it: our
+  end-to-end test on macOS measured a `revalidatePath` that changed the container while the edge
   kept serving the old page. It is now a known limitation with the mitigation that test
   verified, `export const revalidate`, in the README, the design document and the
   deploying guide, and `nextship doctor` warns any project whose source revalidates on
@@ -122,32 +122,32 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 - **A rollback plan could show the same image as current and target.** After `env push` or
   `domain add` redeploys the running image with a changed spec, both deployments run one
   image, and the plan gave no sign anything would change. It now says the rollback returns
-  the app's configuration, such as environment variables, not its code. Found by the first
-  outside test. (Gowtham)
+  the app's configuration, such as environment variables, not its code. Found in our end-to-end
+  test on macOS. (Gowtham)
 - **The runtime image preloaded jemalloc from an x86_64-only path.** Harmless while images
   are built for `linux/amd64`, but an arm64 image would have lost the allocator silently,
   since the loader only warns about a missing preload. It is now linked from the
   architecture's own directory to one fixed path. Verified in an amd64 image: the preload
-  resolves, the running processes map jemalloc, and the loader logs no warning. Found by
-  the first outside test. (Gowtham)
+  resolves, the running processes map jemalloc, and the loader logs no warning. Found in
+  our end-to-end test on macOS. (Gowtham)
 - **The Server Actions encryption key file was readable by every account on the machine.**
   `.nextship/secrets.local.json` was written with the default mode, 0644 on macOS and
   Linux. It is now created readable by its owner only, and a file an earlier version wrote
-  is tightened the next time it is read, without changing the key. Found by the first
-  outside test. (Gowtham)
+  is tightened the next time it is read, without changing the key. Found in our end-to-end
+  test on macOS. (Gowtham)
 - **`doctor` reported a false blocker on every Next.js 16.3.4 project.** It called
   `@img/sharp-wasm32` undeclared, because the dependency walk follows only packages
   installed on the machine, and that one is reached only through `sharp`'s optional
   packages for other systems. The lockfile carries it and the image installs it. A package
   the lockfile carries is no longer reported, since the image installs from the lockfile;
-  a binary `bun.lockb` clears nothing. Found by the first outside test on macOS and
+  a binary `bun.lockb` clears nothing. Found in our end-to-end test on macOS and
   reproduced on Linux. The summary line also printed a success mark over a blocker count,
   and now prints a warning mark. (Gowtham)
 - **Any app with a dynamic homepage failed its first deploy.** When `/` was not prerendered,
   the health check path was the first prerendered route in sorted order, which was
   `/_global-error`: an underscore sorts before letters, and that page answers 500 by
-  design, so App Platform failed the health checks every time. Found by the first outside
-  test, on macOS with 0.4.4, and reproduced on 1.0.0 from the manifest Next.js 16.3.4
+  design, so App Platform failed the health checks every time. Found in our end-to-end
+  test on macOS with 0.4.4, and reproduced on 1.0.0 from the manifest Next.js 16.3.4
   writes. Internal routes, those with a segment starting with an underscore, and routes
   recorded with a non-2xx status are no longer chosen, and pages come before files such
   as `/favicon.ico`. Verified in an image: the same app now probes `/isr`, which answers

@@ -85,13 +85,13 @@ fixture:
 - **Runtime logs**, both the snapshot and `--follow`.
 - **Destroy**, which refuses unless you name the app.
 
-## The first outside test
+## An end-to-end test on macOS
 
-On 2026-09-11 a developer outside the project installed nextship 0.4.4 from npm on a
-MacBook Pro with an M3 Max, deployed a Next.js 16.3.4 app to App Platform, and measured it
-against the live URL. The app was built to be awkward: a streaming Suspense boundary, an
-ISR route, a Server Action, `next/image` on a raster source, a route reading a runtime
-environment variable, and a dynamic homepage. The figures below are theirs.
+On 2026-09-11 we installed nextship 0.4.4 from npm on a MacBook Pro with an M3 Max,
+deployed a Next.js 16.3.4 app to App Platform, and measured it against the live URL. The
+app was built to be awkward: a streaming Suspense boundary, an ISR route, a Server Action,
+`next/image` on a raster source, a route reading a runtime environment variable, and a
+dynamic homepage.
 
 | Checked live | Result |
 |---|---|
@@ -137,6 +137,6 @@ sends nothing.
 - **Multi-instance behaviour is not supported.** One instance is correct; a shared cache
   is the next major version's work.
 - **No third party penetration test**, and no dependency vulnerability scan in CI.
-- **One outside test so far.** Everything else above was run by the people who wrote
-  nextship, on their own machines. If you try it and something breaks, that is the most
-  useful thing anyone can currently contribute.
+- **No outside test yet.** Every verification above, the macOS run included, was carried
+  out by the people who wrote nextship. If you try it and something breaks, that is the
+  most useful thing anyone can currently contribute.

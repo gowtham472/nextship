@@ -171,7 +171,7 @@ async function vercelConfigFindings(root: string): Promise<Finding[]> {
 /**
  * The calls that revalidate on demand. App Platform's CDN keeps fully static pages
  * for as long as Next.js allows, which is a year, so these only reach visitors of a
- * page that also sets a revalidate time. Measured live by the first outside test.
+ * page that also sets a revalidate time. Measured live in our end-to-end test on macOS.
  */
 const ON_DEMAND_REVALIDATION = ['revalidatePath', 'revalidateTag', 'updateTag']
 

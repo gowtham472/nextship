@@ -1,8 +1,8 @@
 /**
  * The exit code a failure produces, checked through the real entry point.
  *
- * CI decides whether a deploy succeeded from nothing but this number. A first
- * outside test reported a failed deployment exiting 0; it did not reproduce, and
+ * CI decides whether a deploy succeeded from nothing but this number. Our
+ * end-to-end test on macOS recorded a failed deployment exiting 0; it did not reproduce, and
  * running through a pipe such as `| tee` reports the pipe's status instead, which
  * is the likely cause. This pins the behaviour either way: any error that reaches
  * the top level exits 1.

@@ -58,7 +58,7 @@ export interface ProjectInfo {
    * Installer configuration at the context root that can carry a registry token:
    * `.npmrc` and `.yarnrc.yml`. Mounted as secrets for the install and the build
    * rather than copied, so a token never sits in a builder layer or the local build
-   * cache. Copying them put them in both, as the first outside test found.
+   * cache. Copying them put them in both, as our end-to-end test on macOS found.
    */
   installerSecrets: string[]
   /** The project's own .dockerignore, merged into the generated one so its rules still apply. */

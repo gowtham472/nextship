@@ -79,8 +79,8 @@ Give every page you revalidate on demand a revalidate time:
 export const revalidate = 30
 ```
 
-The page then sends `s-maxage=30`, and the edge keeps it at most that long. The first
-outside test of nextship measured the change reaching visitors in about 30 seconds this
+The page then sends `s-maxage=30`, and the edge keeps it at most that long. Our own
+end-to-end test on macOS measured the change reaching visitors in about 30 seconds this
 way. `nextship doctor` warns when your source revalidates on demand.
 
 ## What it will not do
