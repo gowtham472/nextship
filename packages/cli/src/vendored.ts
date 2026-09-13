@@ -146,3 +146,38 @@ async function readManifest(file: string): Promise<Record<string, unknown> | nul
     return null
   }
 }
+
+/**
+ * The names from `names` that a lockfile carries, and so that the image installs.
+ *
+ * The graph walk above only follows packages installed on this machine, so a package
+ * reachable only through an optional dependency for another platform looks
+ * undeclared: `@img/sharp-wasm32` in every Next.js 16.3.4 project, reached through
+ * `sharp`'s optional packages for other systems. The image installs from the lockfile,
+ * so the lockfile is the authority on what the build receives.
+ *
+ * Returns an empty list for a lockfile it cannot read as text, `bun.lockb`, so those
+ * packages are still reported rather than silently cleared.
+ */
+export function namesInLockfile(lockfile: string, contents: string, names: string[]): string[] {
+  if (lockfile === 'package-lock.json') {
+    let keys: string[]
+    try {
+      keys = Object.keys((JSON.parse(contents) as { packages?: Record<string, unknown> }).packages ?? {})
+    } catch {
+      return []
+    }
+    return names.filter((name) => keys.some((key) => key === `node_modules/${name}` || key.endsWith(`/node_modules/${name}`)))
+  }
+
+  if (lockfile === 'pnpm-lock.yaml' || lockfile === 'yarn.lock') {
+    // Entries begin a line with the name and an @, optionally quoted, and in older
+    // pnpm lockfiles with a leading slash: '@img/sharp-wasm32@0.34.5', "lib@^1.0.0".
+    return names.filter((name) => {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      return new RegExp(`^\\s*['"]?/?${escaped}@`, 'm').test(contents)
+    })
+  }
+
+  return []
+}

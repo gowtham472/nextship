@@ -16,7 +16,7 @@ import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { undeclaredPackages } from './vendored.js'
+import { namesInLockfile, undeclaredPackages } from './vendored.js'
 
 type Layout = Record<string, Record<string, unknown>>
 
@@ -163,4 +163,33 @@ test('the report is sorted, so it reads the same on every run', async () => {
   const root = await fixture({ dependencies: {} }, { zeta: {}, alpha: {}, mid: {} })
 
   assert.deepEqual((await undeclaredPackages(root)).undeclared, ['alpha', 'mid', 'zeta'])
+})
+
+test('a package the npm lockfile carries is in the lockfile, at the top level or nested', () => {
+  const lock = JSON.stringify({
+    packages: { '': {}, 'node_modules/@img/sharp-wasm32': {}, 'node_modules/a/node_modules/nested': {} },
+  })
+  assert.deepEqual(namesInLockfile('package-lock.json', lock, ['@img/sharp-wasm32', 'nested', 'absent']), [
+    '@img/sharp-wasm32',
+    'nested',
+  ])
+})
+
+test('pnpm and yarn entries are matched by name at the start of an entry, quoted or not', () => {
+  const pnpm = "packages:\n\n  '@img/sharp-wasm32@0.34.5':\n    resolution: {}\n  /old-style@1.0.0:\n"
+  assert.deepEqual(namesInLockfile('pnpm-lock.yaml', pnpm, ['@img/sharp-wasm32', 'old-style', 'sharp']), [
+    '@img/sharp-wasm32',
+    'old-style',
+  ])
+  const yarn = '"lib@^1.0.0":\n  version "1.0.0"\nother@npm:2.0.0:\n'
+  assert.deepEqual(namesInLockfile('yarn.lock', yarn, ['lib', 'other', 'li']), ['lib', 'other'])
+})
+
+test('a name is not matched inside a longer name', () => {
+  const pnpm = "  '@img/sharp-wasm32-extra@1.0.0':\n"
+  assert.deepEqual(namesInLockfile('pnpm-lock.yaml', pnpm, ['@img/sharp-wasm32']), [])
+})
+
+test('a binary lockfile clears nothing, so its packages are still reported', () => {
+  assert.deepEqual(namesInLockfile('bun.lockb', 'binary', ['lib']), [])
 })

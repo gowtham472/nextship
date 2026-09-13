@@ -86,6 +86,14 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Fixed
 
+- **`doctor` reported a false blocker on every Next.js 16.3.4 project.** It called
+  `@img/sharp-wasm32` undeclared, because the dependency walk follows only packages
+  installed on the machine, and that one is reached only through `sharp`'s optional
+  packages for other systems. The lockfile carries it and the image installs it. A package
+  the lockfile carries is no longer reported, since the image installs from the lockfile;
+  a binary `bun.lockb` clears nothing. Found by the first outside test on macOS and
+  reproduced on Linux. The summary line also printed a success mark over a blocker count,
+  and now prints a warning mark. (Gowtham)
 - **Any app with a dynamic homepage failed its first deploy.** When `/` was not prerendered,
   the health check path was the first prerendered route in sorted order, which was
   `/_global-error`: an underscore sorts before letters, and that page answers 500 by

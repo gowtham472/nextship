@@ -159,3 +159,40 @@ test('every finding carries a consequence and an action', async () => {
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test('a package reachable only through another platform, but in the lockfile, is not a blocker', async () => {
+  // The shape of @img/sharp-wasm32 in every Next.js 16.3.4 project: installed, reached
+  // only through sharp's optional packages for other systems, and carried by the lockfile.
+  const root = await fixture({
+    'package.json': JSON.stringify({ name: 'demo', dependencies: { next: '16.3.4' } }),
+    'node_modules/next/package.json': JSON.stringify({ name: 'next' }),
+    'node_modules/@img/sharp-wasm32/package.json': JSON.stringify({ name: '@img/sharp-wasm32' }),
+    'package-lock.json': JSON.stringify({
+      packages: { '': {}, 'node_modules/next': {}, 'node_modules/@img/sharp-wasm32': {} },
+    }),
+  })
+  try {
+    const npm = { packageManager: 'npm' as const, lockfile: 'package-lock.json' }
+    const findings = await diagnose(projectFor(root, npm))
+    assert.equal(titled(findings, 'not declared anywhere'), undefined)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('a package neither declared nor in the lockfile is still a blocker', async () => {
+  const root = await fixture({
+    'package.json': JSON.stringify({ name: 'demo', dependencies: { next: '16.3.4' } }),
+    'node_modules/next/package.json': JSON.stringify({ name: 'next' }),
+    'node_modules/copied-by-hand/package.json': JSON.stringify({ name: 'copied-by-hand' }),
+    'package-lock.json': JSON.stringify({ packages: { '': {}, 'node_modules/next': {} } }),
+  })
+  try {
+    const npm = { packageManager: 'npm' as const, lockfile: 'package-lock.json' }
+    const finding = titled(await diagnose(projectFor(root, npm)), 'not declared anywhere')
+    assert.equal(finding?.level, 'blocker')
+    assert.ok(finding?.title.includes('copied-by-hand'))
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})

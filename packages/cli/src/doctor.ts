@@ -16,7 +16,7 @@ import { readFile, readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { ProjectInfo } from './detect.js'
 import { docsUrl } from './links.js'
-import { undeclaredPackages } from './vendored.js'
+import { namesInLockfile, undeclaredPackages } from './vendored.js'
 
 export type FindingLevel = 'blocker' | 'warning' | 'note'
 
@@ -73,7 +73,7 @@ export async function diagnose(project: ProjectInfo): Promise<Finding[]> {
   findings.push(...dependencyFindings(manifest))
   findings.push(...(await vercelConfigFindings(project.root)))
   findings.push(...(await sourceFindings(project.root)))
-  findings.push(...(await undeclaredPackageFindings(project.root)))
+  findings.push(...(await undeclaredPackageFindings(project)))
   findings.push(...runtimeFindings(project))
 
   const order: Record<FindingLevel, number> = { blocker: 0, warning: 1, note: 2 }
@@ -91,9 +91,16 @@ export async function diagnose(project: ProjectInfo): Promise<Finding[]> {
  * A blocker rather than a warning: unlike everything else here, this one fails
  * the build outright.
  */
-async function undeclaredPackageFindings(root: string): Promise<Finding[]> {
-  const { undeclared, truncated } = await undeclaredPackages(root)
-  if (truncated || undeclared.length === 0) return []
+async function undeclaredPackageFindings(project: ProjectInfo): Promise<Finding[]> {
+  const { undeclared: unreachable, truncated } = await undeclaredPackages(project.root)
+  if (truncated || unreachable.length === 0) return []
+
+  const lockfile = project.lockfile
+    ? await readFile(path.join(project.contextRoot, project.lockfile), 'utf8').catch(() => null)
+    : null
+  const locked = project.lockfile && lockfile !== null ? namesInLockfile(project.lockfile, lockfile, unreachable) : []
+  const undeclared = unreachable.filter((name) => !locked.includes(name))
+  if (undeclared.length === 0) return []
 
   const named = undeclared.slice(0, 5).join(', ')
   const rest = undeclared.length > 5 ? `, and ${undeclared.length - 5} more` : ''
