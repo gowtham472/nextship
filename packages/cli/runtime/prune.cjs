@@ -279,7 +279,11 @@ class Copier {
       fail("Next.js's bundled node-file-trace could not be loaded from next/dist/compiled/@vercel/nft.")
     }
 
-    const entries = [appRequire.resolve('next'), appRequire.resolve('next/dist/server/lib/start-server')]
+    const entries = [
+      appRequire.resolve('next'),
+      appRequire.resolve('next/dist/server/lib/start-server'),
+      ...routeModuleContexts(),
+    ]
     const result = await nodeFileTrace(entries, { base: this.root, ignore: LAUNCHER_TRACE_IGNORES })
     for (const file of result.fileList) {
       this.copyEntry(path.join(this.root, file))
@@ -319,6 +323,38 @@ class Copier {
       if (error.code !== 'EEXIST') throw error
     }
   }
+}
+
+/**
+ * Modules Next.js loads through a path computed at runtime, which no trace follows.
+ *
+ * `next/dist/server/require-hook` rewrites every request ending in
+ * `.shared-runtime` to `route-modules/pages/vendored/contexts/<name>`. That is how
+ * a module rendered on the server outside the page bundle, such as a dependency
+ * that requires `next/router`, shares the page's React context. Next.js adds these
+ * modules, and the `module.compiled` they require, to its own server trace, but it
+ * writes no server trace while an adapter is configured. Without them such a page
+ * answered 500 with "Cannot find module
+ * 'next/dist/server/route-modules/pages/vendored/contexts/html-context'". Found by
+ * Next.js's app-esm-js suite.
+ *
+ * They are trace entries rather than files to copy, so whatever they come to
+ * require is followed as well. A version of Next.js without them yields none.
+ */
+function routeModuleContexts() {
+  const modules = []
+  for (const type of ['app-page', 'pages']) {
+    let compiled
+    try {
+      compiled = appRequire.resolve(`next/dist/server/route-modules/${type}/module.compiled`)
+    } catch {
+      continue
+    }
+    modules.push(compiled)
+    const contexts = path.join(path.dirname(compiled), 'vendored', 'contexts')
+    for (const file of walk(contexts, (name) => name.endsWith('.js'))) modules.push(file)
+  }
+  return modules
 }
 
 /**

@@ -177,6 +177,41 @@ test('still assembles a server when Next.js wrote no server trace', async () => 
   }
 })
 
+// Loaded through a path Next.js computes at runtime, so no trace reaches them, and
+// Next.js writes no server trace to list them while an adapter is configured.
+test('traces the route module contexts Next.js loads by a computed path', async () => {
+  const pages = 'node_modules/next/dist/server/route-modules/pages'
+  const appPage = 'node_modules/next/dist/server/route-modules/app-page'
+  const root = await fixture({
+    ...compiledOutput,
+    'node_modules/dep/index.js': '',
+    'node_modules/dep/package.json': '{}',
+    [`${pages}/module.compiled.js`]: 'module.exports = {}',
+    [`${pages}/vendored/contexts/html-context.js`]: 'module.exports = {}',
+    [`${pages}/vendored/contexts/html-context.d.ts`]: 'export {}',
+    [`${appPage}/module.compiled.js`]: 'module.exports = {}',
+    [`${appPage}/vendored/contexts/app-router-context.js`]: 'module.exports = {}',
+  })
+  const out = path.join(root, 'out')
+  try {
+    const result = prune(root, '.', out)
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /server: launcher trace 6 files/)
+
+    for (const kept of [
+      `${pages}/module.compiled.js`,
+      `${pages}/vendored/contexts/html-context.js`,
+      `${appPage}/module.compiled.js`,
+      `${appPage}/vendored/contexts/app-router-context.js`,
+    ]) {
+      assert.ok(await exists(path.join(out, kept)), `${kept} should be in the output`)
+    }
+    assert.equal(await exists(path.join(out, `${pages}/vendored/contexts/html-context.d.ts`)), false, 'declarations are not modules')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test('fails clearly when the tracer inside next cannot be loaded', async () => {
   const { 'node_modules/next/dist/compiled/@vercel/nft/index.js': _tracer, ...withoutTracer } = compiledOutput
   const root = await fixture({

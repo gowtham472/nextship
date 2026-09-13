@@ -6,6 +6,15 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Fixed
 
+- **A Pages Router page answered 500 when `next/head`, `next/router` or `next/document`
+  loaded outside the page bundle.** That happens in an app whose package.json sets
+  `"type": "module"`, and for a server-rendered dependency that imports them. Next.js
+  then reaches the route module contexts through a path it computes at runtime, which
+  no trace follows. It adds them to its own server trace, but writes none while an
+  adapter is configured, so the image left them out and the page failed with `Cannot
+  find module 'next/dist/server/route-modules/pages/vendored/contexts/html-context'`. The
+  prune step now traces them, and the `module.compiled` they require, as Next.js does.
+  Found by Next.js's app-esm-js suite, and reproduced both ways. (Gowtham)
 - **Projects with the same package name, or none, shared one Next.js build cache.** The
   cache id was the package name, so every unnamed project used `app`, and two building at
   once wrote the same Turbopack database concurrently. The compatibility suite, which
