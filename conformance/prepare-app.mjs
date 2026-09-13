@@ -38,9 +38,11 @@ const POST_BUILD = ' && pnpm post-build'
  * Names that begin with an underscore go as a class: the harness treats them as
  * invalid for a deployment, which is why it renames `__NEXT_TEST_MODE`. The rest
  * belong to nextship, the image or this script, and must not be overridden.
+ * RUST_MIN_STACK is Next.js's own: loading SWC in the harness process sets it, and
+ * the build sets the same value for itself.
  */
 const NOT_TEST_ENV =
-  /^(_.*|NODE_ENV|JEST_.*|TEST_FILE_PATH|NEXT_TEST_.*|PORT|HOSTNAME|NEXT_DEPLOYMENT_ID|NEXT_ADAPTER_PATH|NEXT_SERVER_ACTIONS_ENCRYPTION_KEY|NEXTSHIP_.*)$/
+  /^(_.*|NODE_ENV|JEST_.*|TEST_FILE_PATH|NEXT_TEST_.*|RUST_MIN_STACK|PORT|HOSTNAME|NEXT_DEPLOYMENT_ID|NEXT_ADAPTER_PATH|NEXT_SERVER_ACTIONS_ENCRYPTION_KEY|NEXTSHIP_.*)$/
 const EXPORTABLE = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 const testEnv = variablesTheTestSet()
@@ -107,7 +109,15 @@ if (lockfile && manifest.name === undefined && lockfile.name !== 'app') {
   writeFileSync('package-lock.json', `${JSON.stringify(lockfile, null, 2)}\n`)
 }
 
-const containerEnv = new Map([...testEnv, ...flags])
+// The deploy script starts the server as localhost, which a runner can resolve to
+// ::1 as well as 127.0.0.1, and Node binds only the first. IPv4 first makes that
+// 127.0.0.1 on every runner, where the readiness check and any client that names
+// the address can reach it. A test's own options are kept after it.
+const containerEnv = new Map([
+  ...testEnv,
+  ...flags,
+  ['NODE_OPTIONS', ['--dns-result-order=ipv4first', testEnv.get('NODE_OPTIONS')].filter(Boolean).join(' ')],
+])
 process.stderr.write(
   `nextship: build variables: ${[...buildEnv.keys()].join(' ')}\n` +
     `nextship: container variables: ${[...containerEnv.keys()].join(' ') || 'none'}\n`

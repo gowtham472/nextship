@@ -194,32 +194,39 @@ BUILD_ID="$(sed -n 's/^#[0-9]\{1,\} [0-9.]\{1,\} BUILD_ID: \(.\{1,\}\)$/\1/p' "$
 } > "${LOGDIR}/build.log"
 
 # The harness runs tests concurrently, so a fixed port would collide. The kernel
-# picks a free one, asked for as late as possible so nothing else takes it first.
+# picks one free on every local address, asked for as late as possible so nothing
+# else takes it first.
 PORT="$(node -e "
 const server = require('node:net').createServer()
-server.listen(0, '127.0.0.1', () => { process.stdout.write(String(server.address().port)); server.close() })
+server.listen(0, () => { process.stdout.write(String(server.address().port)); server.close() })
 ")"
 
-# The server listens on the port the harness is given, on the host's network.
+# The server listens on the harness's port, on the host's network, as localhost.
 #
 # Published on port 3000 behind a remapped host port, the server's idea of its
 # own address was not the harness's. An app that fetches itself through the Host
 # header reached a port nothing listened on inside the container, and a route
 # handler that redirects to `request.nextUrl.origin` sent the browser to
-# http://0.0.0.0:3000. Next.js builds that origin from the address it listens on,
-# and rewrites 127.0.0.1 to localhost, which the browser can reach.
+# http://0.0.0.0:3000.
+#
+# The name matters as much as the port. Next.js builds that origin from the name
+# it listens on, while middleware turns any loopback address into localhost. As
+# 127.0.0.1, every middleware rewrite looked like one to another host and was
+# proxied instead of served, so data requests came back as HTML. localhost is the
+# name `next start` reports and the harness then requests, so every side agrees.
 #
 # No health check: its request to / every 30 seconds is traffic no test sent,
 # which can revalidate a page mid-test and adds lines to the server log that
 # tests read.
 log "starting ${TAG} as ${CONTAINER} on port ${PORT}"
 docker run -d --name "${CONTAINER}" --platform linux/amd64 --network host --no-healthcheck \
-  -e PORT="${PORT}" -e HOSTNAME=127.0.0.1 "${CONTAINER_ENV[@]}" "${TAG}" >&2
+  -e PORT="${PORT}" -e HOSTNAME=localhost "${CONTAINER_ENV[@]}" "${TAG}" >&2
 
 # Ready when the server accepts a connection. The request to / this used to send
 # ran middleware and rendered a page before any test had, and it waited out the
 # whole minute for any app whose / answered with an error status, 404 included.
-# With the host's network nothing accepts on the port until the server does.
+# With the host's network nothing accepts on the port until the server does. The
+# server binds 127.0.0.1 for localhost; prepare-app.mjs explains why.
 ready=0
 for _ in $(seq 1 300); do
   if (exec 3<>"/dev/tcp/127.0.0.1/${PORT}") 2>/dev/null; then
@@ -236,4 +243,4 @@ docker logs "${CONTAINER}" > "${LOGDIR}/server.log" 2>&1 || true
 [ "${ready}" -eq 1 ] || { log "the server never accepted a connection"; exit 1; }
 
 # The only line on stdout.
-echo "http://127.0.0.1:${PORT}"
+echo "http://localhost:${PORT}"
