@@ -94,17 +94,19 @@ depth on a verified one.
 ## Verified against the real thing
 
 The Next.js adapter compatibility suite is the framework's own e2e corpus, run in deploy
-mode against a real container per test file. On the most recent full run, **1051 of 1115
-suites passed, 94.3%**.
+mode against a real container per test file. Against 16.4.0-canary.22, **all 1123 suites
+and all 3599 assertions passed**, every suite on its first attempt, in two runs that
+matched suite by suite. Nine tests that assert what Vercel's CDN or proxy does are
+skipped, and the
+[results](https://github.com/gowtham472/nextship#compatibility-suite-results) say why for
+each.
 
-It was run twice, hours apart on separate runners, and returned the same 1051 both times,
-failing an identical set of 64 suites. None of the published failures is flake.
+Getting there meant telling the harness's failures apart from nextship's. Most of 1.0.1's
+64 failing suites were the harness: the Docker build never received what a test configures,
+and packages fixtures commit under `node_modules` were deleted before the build.
 
-Every one of the 64 failures is attributed in the
-[support matrix](https://github.com/gowtham472/nextship#compatibility-suite-results),
-sorted into what is a genuine limitation, what is a capability nextship does not claim,
-and what the framework itself only runs under an experimental flag.
-
-Running it found three defects no unit test would have caught: the build log never reached
-the harness, the deployment id was exported only under a prefixed name, and the builder
-image carried no Python for dependencies that compile on install.
+Running it has found five defects no unit test would have caught: the build log never
+reached the harness, the deployment id was exported only under a prefixed name, the builder
+image carried no Python for dependencies that compile on install, projects shared one
+Next.js build cache, and the image left out route module contexts a Pages Router page can
+need.

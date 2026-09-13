@@ -14,15 +14,24 @@ builds a real container per test file and deploys it.
 
 | Result | Value |
 |---|---|
-| Suites passing | 1051 of 1115, 94.3% |
+| Suites passing | 1123 of 1123 |
+| Assertions passing | 3599 of 3599, the measure Next.js's adapters support page publishes |
+| Retries | None: every suite passed on its first attempt |
+| Skipped by our list | 9 tests that assert what Vercel's CDN or proxy does, each with its reason |
 | Next.js version | 16.4.0-canary.22 |
 | Mode | `deploy`, a real container per test file |
-| Reproduced | Two runs, hours apart, on separate runners, failing the same 64 suites with a byte identical set |
+| Reproduced | Two runs, the second on a later commit, matching suite by suite in passed, failed and skipped tests |
 
-The 64 failures are attributed rather than waved away: 17 need a `next.config.ts` flag,
-16 depend on vendored `node_modules`, 18 deployed cleanly and then failed an assertion, 6
-use webpack under Turbopack, and 7 failed to build for other reasons. Three defects the
-suite exposed were fixed, which moved the rate from 93.4% to 94.3% with no regressions.
+1.0.1's run passed 1051 of 1115 suites. Researching all 64 failures found most in our test
+harness rather than in nextship: the Docker build never received the variables a test sets
+or the flags Next.js's own deploy path passes, packages fixtures commit under `node_modules`
+were deleted before the build, and the container sat behind a remapped port. Two were real
+nextship defects, both fixed: a Next.js build cache shared between projects, and route module
+contexts missing from the image. The nine skipped tests, and why each cannot pass off
+Vercel, are in the
+[results](https://github.com/gowtham472/nextship#compatibility-suite-results).
+
+A full run now takes 319 runner-minutes against 788, in the same 32 groups.
 
 The suite runs from GitHub Actions in this repository, weekly and on demand, so a
 regression shows up without anyone remembering to look.
@@ -131,8 +140,10 @@ sends nothing.
 
 ## What has not been proven
 
-- **PPR, Cache Components and middleware are untested.** Not known broken: untested.
-  Nothing is claimed about them.
+- **Middleware, Cache Components and PPR are proven by the compatibility suite alone.** In
+  the full run, 481 assertions pass in suites named for middleware and 122 in suites for
+  Cache Components, in containers on the CI runner. Deploy mode skips most PPR tests,
+  leaving 10. None has been exercised on a live App Platform app.
 - **Multi-instance behaviour is not supported.** One instance is correct; a shared cache
   is the next major version's work.
 - **No third party penetration test**, and no dependency vulnerability scan in CI.

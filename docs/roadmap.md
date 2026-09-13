@@ -148,10 +148,10 @@ target that is built, verified live, and actually used. AWS is v1.1.
 | Deliverable | State |
 |---|---|
 | A license, so the code may legally be used | **Done.** Apache-2.0, copyright Gowtham and Ragul D |
-| Adapter compatibility suite **run**, results published as a support matrix | **Done.** 1051 of 1115 suites pass (94.3%), reproduced exactly across two runs, every failure attributed in the README's support matrix |
+| Adapter compatibility suite **run**, results published as a support matrix | **Done.** 1051 of 1115 suites passed at release, reproduced exactly across two runs. After 1.0.1, researching those failures moved it to all 1123 suites and 3599 assertions in two runs that matched suite by suite, with nine Vercel-specific tests skipped; most failures had been the harness, two were nextship defects |
 | The harness scripts proven to work before spending CI hours on them | **Done.** Run against a real app: `e2e-deploy.sh` exits 0 with exactly one URL on stdout that serves 200, `e2e-logs.sh` emits all five markers the harness reads, `e2e-cleanup.sh` removes the container and image |
 | Streaming conformance as a repeatable test rather than a one-off measurement | **Done.** `conformance/streaming/` builds a fixture with nextship, runs it and fails unless the shell arrives before the tail; CI runs it on every change, first byte 96 ms against a 2063 ms total. Pointed at a live App Platform app it passed three runs of three, first byte 230 to 448 ms against 2.2 to 2.4 s, sent chunked through DigitalOcean's Cloudflare edge with the cache bypassed. The app and its images were removed afterwards |
-| Documented limitations, with nothing claimed that has not been observed working | **Done.** The README states what is not supported and why, and refuses to claim PPR, middleware or Cache Components |
+| Documented limitations, with nothing claimed that has not been observed working | **Done.** The README states what is not supported and why, and claims no more for PPR, middleware or Cache Components than the compatibility suite shows |
 | An install path that needs no prior knowledge | **Done.** `npm install -g nextship-cli`, published with provenance, each release staged and approved with 2FA. Installed that way on a MacBook Pro with an M3 Max, 0.4.4 deployed a Next.js app to App Platform on the second attempt, after its first hit the health check path bug fixed in 1.0.1 |
 
 **Explicitly not in v1.0:** AWS, a second compute option, CDN assets, and anything from

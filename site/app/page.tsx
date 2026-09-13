@@ -43,11 +43,11 @@ const KEEPS_WORKING = [
 
 const STATS = [
   {
-    value: 94.3,
-    decimals: 1,
+    value: 100,
+    decimals: 0,
     unit: '%',
     label: "of Next.js's own deploy-mode suites pass",
-    detail: '1,051 of 1,115, reproduced across two runs',
+    detail: '1,123 of 1,123, 9 Vercel-only tests skipped',
   },
   {
     value: 591,

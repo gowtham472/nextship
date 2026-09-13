@@ -50,7 +50,7 @@ destroyed afterwards, so its URL no longer serves.
 | Local pipeline: `detect`, `build`, `package`, `run` | Done. Verified on a real production project and a purpose-built feature app |
 | DigitalOcean deployment: `deploy`, `rollback`, `logs` | Done. Verified against a live app, including two rollbacks in opposite directions, and deployed from an Apple Silicon Mac (M3 Max) with 0.4.4 from npm, on the second attempt |
 | AWS | Not in v1.0. The driver interface exists and DigitalOcean implements it; the AWS driver is v1.1 |
-| Official Next.js adapter compatibility suite | Run. 1051 of 1115 suites pass (94.3%), with every failure attributed. See the support matrix below |
+| Official Next.js adapter compatibility suite | Passes in full on 16.4.0-canary.22: 1123 of 1123 suites and 3599 of 3599 assertions, with 9 Vercel-specific tests skipped and each reason published. See the results below |
 
 Verified on real containers: every route serves, image optimization produces WebP,
 streaming does not buffer (27 ms to first byte against a 2.02 s total), ISR works
@@ -740,8 +740,11 @@ deploy:
   chosen from the build's prerendered pages, never Next.js's internal ones, so most apps
   are probed on a page served from disk. With nothing prerendered, `/` is polled and
   renders every time.
-- **Nothing is claimed about PPR, Cache Components, middleware or multi-instance
-  behaviour.** They are untested, not known broken.
+- **Middleware, Cache Components and PPR are proven by the compatibility suite alone, and
+  PPR barely.** In the full run, 481 assertions pass in suites named for middleware and 122
+  in suites for Cache Components, in containers on the CI runner. Deploy mode skips most
+  PPR tests, leaving 10. None has been exercised on a live App Platform app, and
+  multi-instance behaviour is not tested at all.
 
 ## Architecture
 
@@ -845,39 +848,64 @@ which needs a dedicated account to run against.
 
 Next.js's own end-to-end corpus, in `deploy` mode, building a real container per test
 file. Run against `16.4.0-canary.22` in
-[run 34351774914](https://github.com/gowtham472/nextship/actions/runs/34351774914).
+[run 34755775792](https://github.com/gowtham472/nextship/actions/runs/34755775792).
 
 | | |
 |---|---|
-| **Suites run** | 1115 |
-| **Passing** | **1051** |
-| **Pass rate** | **94.3%** |
-| **Reproducible** | Two independent runs, identical result |
+| **Suites passing** | **1123 of 1123** |
+| **Assertions passing** | **3599 of 3599**, the measure Next.js's adapters support page publishes |
+| **Retries** | None. Every suite passed on its first attempt |
+| **Skipped by our list** | 9 tests that assert what Vercel's CDN or proxy does, listed below |
+| **Reproducible** | A second run, [34757301752](https://github.com/gowtham472/nextship/actions/runs/34757301752), matched suite by suite |
 
-The suite was run twice, hours apart, on separate runners:
-[34331951663](https://github.com/gowtham472/nextship/actions/runs/34331951663) and
-[34360207441](https://github.com/gowtham472/nextship/actions/runs/34360207441). Both
-returned 1051 of 1115, failing the same 64 suites with a byte-identical set. Nothing here
-is flake, which is what makes the table below worth publishing: every entry is a
-reproducible limitation rather than a runner having a bad day. For contrast, Next.js's own
-deploy manifest records 33 flaky tests in a single suite for the reference adapter.
+The counts come from the results file Next.js's test runner writes for every suite. The
+1033 tests it reports as pending are the ones deploy mode skips: those in Next.js's own
+deploy manifest, those a test skips itself when deployed, and our nine. The adapters page
+leaves pending tests out of both sides, and so does this.
 
-The 64 failures, sorted by what they actually mean rather than by count:
+**From 94.3% to all of it.** 1.0.1's run passed 1051 of 1115 suites. Researching each of
+the 64 failures showed that most were in our harness rather than in nextship, and the table
+that attributed them here was wrong in two places: packages vendored into `node_modules` and
+webpack configs under Turbopack were never nextship limitations. The harness now gives each
+app what Next.js's own deploy path gives it:
 
-| Cause | Suites | What it means |
+- **The test's variables and the harness's flags reach the build and the container.** Docker
+  inherited none of them, so `NEXT_PRIVATE_TEST_MODE` never compiled in the hydration
+  marker the browser tests wait for, and `IS_TURBOPACK_TEST` never told `next build` which
+  bundler the suite runs.
+- **Packages a fixture commits under `node_modules` survive.** npm deleted them as
+  extraneous; they are restored after the image's install, as Vercel's path does.
+- **The server listens where the harness looks for it,** as localhost on the harness's
+  port. Behind a remapped port, an app that fetched itself reached nothing.
+- **The native TypeScript config suites run with the loader** Next.js's own CI runs them
+  with.
+
+Two failures were real nextship defects, both fixed: projects with the same package name,
+or none, shared one Next.js build cache, which two builds at once corrupted, and the image
+left out the route module contexts a Pages Router page needs when `next/head` or
+`next/router` loads outside its bundle. Earlier runs found three more: the build log never
+reached the harness, the deployment id was exported only under a prefixed name, and the
+builder had no Python for dependencies that compile on install.
+
+The suite also got faster: 319 runner-minutes and 17 minutes end to end, against 788 and
+50 for 1.0.1's run, in the same 32 groups. What no longer happens: a 10 second fallback on
+every browser page load, a readiness check that sat out a minute for any app whose `/`
+answered with an error, and a fresh dependency install for every app, because npm had
+named each lockfile after its temporary directory.
+
+#### Tests skipped as Vercel-specific
+
+| Suite | Tests | Why |
 |---|---|---|
-| `next.config.ts` needing an experimental flag | 17 | Next.js runs these suites only in `dev` and `start` mode, in a dedicated CI job that exports `__NEXT_NODE_NATIVE_TS_LOADER_ENABLED=true` and `NODE_OPTIONS=--experimental-transform-types`. nextship matches the framework's default, which is the legacy transpile path. Enabling the flag would turn them green and break `next.config.ts` files that use TS enums, so it is not done |
-| Packages vendored into `node_modules` | 16 | These fixtures commit packages straight into `node_modules`. nextship installs from your lockfile inside the image and does not ship the host's `node_modules`, because those binaries are built for the wrong platform. A real limitation, documented rather than hidden |
-| Deployed cleanly, assertion failed | 18 | Under investigation. The app built, started and served; a specific assertion did not hold |
-| A `webpack` config under forced Turbopack | 6 | The suite sets `IS_TURBOPACK_TEST=1`, so a fixture carrying a `webpack` config and no `turbopack` config cannot build. This is a property of the harness configuration, not of the adapter |
-| Build failed, other | 7 | Under investigation |
+| `prerender` | 4 caching header tests | They expect `public, max-age=0, must-revalidate`, the header Vercel's CDN sends browsers. nextship returns what Next.js sets, which the same tests expect of `next start` |
+| `app-dir/expire-time` | 1 | Marked `it.failing` when deployed, because Vercel's proxy does not yet honour `expireTime`. nextship does the blocking revalidation the test describes, so the test passes and `it.failing` reports that as an error |
+| `app-dir/non-ascii-cache-item-name` | 1 | Off Vercel, the fixture installs a cache handler that never returns an entry, while the test needs a cached value |
+| `middleware-rewrites` | 1 | Expects a rewrite's added query values in the URL a Pages API route receives, which the test attributes to deployed proxies. nextship passes them in `req.query`, as `next start` does |
+| `app-dir/not-found-non-document` | 2 | Expect the HTML 404 Vercel's routing layer serves without invoking Next.js. nextship returns Next.js's plain text 404 |
 
-Three defects were found and fixed by running this, none of which any unit test would
-have caught: the build log never reached the harness so every assertion on build output
-failed against an empty string, the deployment id was exported only under a
-nextship-prefixed name so a `next.config` reading `process.env` saw nothing, and the
-builder image carried no Python, so any dependency falling back to node-gyp could not
-install. Fixing those three moved the rate from 93.4% to 94.3% with no regressions.
+The list, with each reason, is
+[`conformance/deploy-tests-manifest.nextship.json`](./conformance/deploy-tests-manifest.nextship.json).
+Bun's adapter keeps a list of its own the same way.
 
 
 ## Roadmap
@@ -888,7 +916,7 @@ install. Fixing those three moved the rate from 93.4% to 94.3% with no regressio
 | **v0.2** | Build in Docker, prune, run and verify locally | Done |
 | **v0.3** | First cloud deployment to DigitalOcean: deploy, rollback, logs | Done, verified live. Image retention and a health endpoint were moved to v0.4 with reasons |
 | **v0.4** | Day-two operations: domains and TLS, env, images, destroy, logs | Done, verified live |
-| **v1.0** | Trustworthy for personal use: compatibility suite results, streaming conformance, honest limitations | Done. The suite has run (94.3%), the package is on npm under Apache-2.0, and streaming conformance passes in CI and on a live App Platform app |
+| **v1.0** | Trustworthy for personal use: compatibility suite results, streaming conformance, honest limitations | Done. The suite passes in full (1123 of 1123 suites), the package is on npm under Apache-2.0, and streaming conformance passes in CI and on a live App Platform app |
 | **v1.1** | AWS | Planned. The driver interface exists and DigitalOcean implements it; the AWS driver needs an account to verify against |
 
 Beyond v1.0, each with the trigger that would justify it: correctness at scale (a

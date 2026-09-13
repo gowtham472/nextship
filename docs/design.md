@@ -733,9 +733,14 @@ configured, so it also confirms the launcher-trace fallback (§7.1) in productio
 suite requires, and `.github/workflows/conformance.yml` clones Next.js, builds it and
 runs the suite in thirty-two groups. The scripts follow the documented contract:
 exactly the deployment URL on stdout, the required markers persisted for the separate
-logs process, and cleanup of the container and image after each test. 1051 of 1115
-suites pass (94.3%), reproduced exactly across two runs, with every failure attributed
-in the README's support matrix.
+logs process, and cleanup of the container and image after each test. Before packaging,
+`prepare-app.mjs` hands the build and the container what Vercel's deploy path hands its
+own: the variables the test set, found as the difference between the deploy script's
+environment and the harness process's in /proc, and the harness's flags. The container
+shares the runner's network as localhost on the harness's port. All 1123 suites and 3599
+assertions pass on 16.4.0-canary.22, in two runs that matched suite by suite, with nine
+Vercel-specific tests skipped by `deploy-tests-manifest.nextship.json`, each with its
+reason.
 
 **Streaming conformance (Implemented).** `conformance/streaming/`
 holds a fixture whose `/stream` page renders its shell at once and its tail two seconds

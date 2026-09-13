@@ -77,9 +77,11 @@ command and option.
 ## Compatibility
 
 Next.js's own end-to-end suite, run in deploy mode against a real container per test
-file: 1051 of 1115 suites pass, reproduced exactly across two runs. Every failure is
-attributed in the
-[support matrix](https://github.com/gowtham472/nextship#compatibility-suite-results).
+file on 16.4.0-canary.22: all 1123 suites and 3599 assertions pass, in two runs that
+matched suite by suite. Nine tests that assert what Vercel's CDN or proxy does are
+skipped, and the
+[results](https://github.com/gowtham472/nextship#compatibility-suite-results) give the
+reason for each.
 
 ## Links
 

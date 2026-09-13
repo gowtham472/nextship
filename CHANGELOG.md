@@ -38,6 +38,28 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   than written into the Dockerfile, which is hashed into the image tag, so the same commit
   still gets the same tag wherever it is built. (Gowtham)
 
+### Changed
+
+- **The compatibility suite tests nextship rather than our harness, and passes in full.**
+  Researching each of the 64 suites that failed in 1.0.1's run found most failures in how
+  our deploy script staged apps. The Docker build received none of the variables a test
+  sets or the flags Next.js's own deploy path passes, so browser tests waited out a 10
+  second hydration fallback on every page load and fixtures with a webpack config stopped
+  the build; npm deleted the packages fixtures commit under `node_modules`; the container
+  sat behind a remapped port, so an app that fetched itself reached nothing; and the native
+  TypeScript config suites ran without the loader Next.js runs them with.
+  `conformance/prepare-app.mjs` now carries all of it into the build and the container,
+  and the server listens as localhost on the harness's port. Nine tests that assert what
+  Vercel's CDN or proxy does are skipped, each with its reason in
+  `conformance/deploy-tests-manifest.nextship.json`. On 16.4.0-canary.22: 1123 of 1123
+  suites and 3599 of 3599 assertions, every suite on its first attempt, in two runs that
+  matched suite by suite. A full run also
+  dropped from 788 runner-minutes to 319. Along with the hydration waits, two other waits
+  are gone: every app installed its dependencies afresh, because npm named each lockfile
+  after its temporary directory, where apps with the same dependencies now share one
+  install layer; and readiness was a request to `/` that sat out a minute when it answered
+  with an error, where it is now a connection. (Gowtham)
+
 ### Added
 
 - **The compatibility suite scores itself, by suite and by assertion.** Next.js's test
@@ -45,8 +67,8 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   print only failures, were the only record and could not give a total. Each group now
   uploads its results, and a final job reports suites passed and assertions passed, the
   measure Next.js's adapters support page publishes, with every failing assertion listed.
-  A `tests` input runs chosen suites in one job, and the Next.js build is cached by commit,
-  so checking a fix no longer costs a full run. (Gowtham)
+  A `tests` input runs chosen suites, about ten to a job, and the Next.js build is cached by
+  commit, so checking a fix no longer costs a full run. (Gowtham)
 
 ## [1.0.1] - 2026-09-13
 

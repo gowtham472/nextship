@@ -94,8 +94,8 @@ Next.js's adapters support page uses. It lists every failing suite with its fail
 assertions, and keeps the full result as a `summary` artifact.
 
 To check a fix against the suites it targets without running all of them, pass their
-paths in the `tests` input. They run in one job, and the Next.js build is cached by commit,
-so a second run against the same `nextjsRef` skips building Next.js:
+paths in the `tests` input. They run about ten to a job, and the Next.js build is cached by
+commit, so a second run against the same `nextjsRef` skips building Next.js:
 
 ```bash
 gh workflow run conformance.yml -f nextjsRef=v16.4.0-canary.22 -f tests="test/e2e/prerender.test.ts"
@@ -159,7 +159,7 @@ the OIDC exchange and fail with `ENEEDAUTH`.
 
 **Each release:**
 
-1. Run the compatibility suite and make sure the support matrix in the README reflects it.
+1. Run the compatibility suite and make sure the results in the README reflect it.
    Publishing claims about Next.js support that nothing has tested is the one mistake that
    costs trust permanently.
 2. Move everything under `## [Unreleased]` in the changelog into a new version heading.
