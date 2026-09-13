@@ -7,9 +7,11 @@ import rehypeAutolinkHeadings from 'rehype-autolink-headings'
 import rehypePrettyCode from 'rehype-pretty-code'
 import rehypeSlug from 'rehype-slug'
 import remarkGfm from 'remark-gfm'
+import { getSingletonHighlighter } from 'shiki'
 
 import { TableOfContents } from '@/components/docs/toc'
 import { mdxComponents } from '@/components/mdx'
+import { darkTheme, lightTheme, outputLanguage } from '@/lib/code-themes'
 import { getDoc, getHeadings } from '@/lib/docs'
 import { DOCS_SLUGS, getNeighbours, getSection } from '@/lib/nav'
 
@@ -45,14 +47,17 @@ const mdxOptions: NonNullable<React.ComponentProps<typeof MDXRemote>['options']>
     ],
     // Both themes are emitted and the stylesheet drops the unused one, so code
     // colours follow a theme switch without re-highlighting on the client. Untagged
-    // fences, which hold what the CLI prints, are treated as plain text so they get
-    // the same block as everything else rather than falling through unstyled.
+    // fences hold what the CLI prints, so they are highlighted with the output
+    // grammar, which colours each line the way the terminal does. That grammar is
+    // not bundled with Shiki, so the highlighter is created with it loaded.
     [
       rehypePrettyCode,
       {
-        theme: { light: 'github-light', dark: 'github-dark-dimmed' },
+        theme: { light: lightTheme, dark: darkTheme },
         keepBackground: false,
-        defaultLang: { block: 'text' },
+        defaultLang: { block: 'output' },
+        getHighlighter: (options: Parameters<typeof getSingletonHighlighter>[0]) =>
+          getSingletonHighlighter({ ...options, langs: [...(options?.langs ?? []), outputLanguage] }),
       },
     ],
   ],

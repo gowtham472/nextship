@@ -6,6 +6,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Added
 
+- **Documentation code blocks name what they hold.** Each block's header shows a
+  language icon and a title: a file's name when the fence gives one, otherwise Terminal
+  for commands and Output for what the CLI prints. Copy is an icon, and a failed copy still
+  says to press Ctrl+C. Syntax colours follow the brand in both themes, and output blocks
+  are coloured the way the terminal colours them: a blue step, a green result, a yellow
+  warning, a red failure, dimmed detail. The quick start now shows `nextship.json` as the
+  file it is. (Gowtham)
 - **An evidence page on the site.** The suite results, the streaming measurements from
   three places, the image sizes, the base image benchmark, what was verified against a
   live account, the supply chain and what the CLI can reach, each with where it was
@@ -36,6 +43,9 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Changed
 
+- **The evidence page says the site counts page views.** Cloudflare Web Analytics is now on,
+  verified in a browser: the beacon loads, a report is sent, and no cookie is set.
+  (Gowtham)
 - **The site moved to nextship.doodlebytestudio.in.** Canonical links, the sitemap, share
   images, the README, the npm `homepage` and the repository homepage all use the new
   address. The workers.dev address still serves, and its canonical links now point at the
@@ -62,6 +72,10 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Fixed
 
+- **No code block on the site was ever syntax coloured.** The stylesheet applied Shiki's
+  colours through a `.shiki` class that rehype-pretty-code does not emit in this setup,
+  so every token rendered in the text colour. It now selects the figure rehype-pretty-code
+  marks. (Gowtham)
 - **The evidence page claimed site analytics that do not exist.** It said the site
   measures page views without cookies, written ahead of the analytics being enabled, and
   no analytics are running. The sentence is removed until they are. (Gowtham)

@@ -71,10 +71,22 @@ nextship deploy --yes  # executes it
 
 The plan is printed every time. Nothing is created, changed or charged until `--yes`.
 
-On the first deploy nextship records the app name, region and registry in `nextship.json`.
-Commit that file. It is how every later command knows which app belongs to this project,
-and it is the only reason `destroy` can be certain it will not touch anything else in your
-account.
+On the first deploy nextship records the app name, region and registry in `nextship.json`:
+
+```json title="nextship.json"
+{
+  "version": 1,
+  "target": "digitalocean",
+  "region": "blr",
+  "name": "acme-web",
+  "registry": "acme-registry",
+  "appId": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+}
+```
+
+Commit that file. It holds no secrets. It is how every later command knows which app
+belongs to this project, and it is the only reason `destroy` can be certain it will not
+touch anything else in your account.
 
 ## Where to go next
 

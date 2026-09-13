@@ -163,31 +163,33 @@ body {
   mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 75%);
 }
 
-/* Shiki emits both themes; the unused one is dropped rather than overridden, so
-   only one set of colours is ever in the cascade. */
-html:not([data-theme='dark']) .shiki span {
+/* Shiki emits both themes as variables on each token, and these rules pick one, so
+   only one set of colours is ever in the cascade. They select by the figure
+   rehype-pretty-code marks rather than a .shiki class, which it does not emit here:
+   selecting by that class meant no block on the site was ever coloured. */
+html:not([data-theme='dark']) [data-rehype-pretty-code-figure] code span {
   color: var(--shiki-light);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .shiki span {
+  :root:not([data-theme='light']) [data-rehype-pretty-code-figure] code span {
     color: var(--shiki-dark);
   }
 }
 
-:root[data-theme='dark'] .shiki span {
+:root[data-theme='dark'] [data-rehype-pretty-code-figure] code span {
   color: var(--shiki-dark);
 }
 
 [data-rehype-pretty-code-figure] pre {
   overflow-x: auto;
-  padding: 1rem 0;
+  padding: 1.125rem 0;
 }
 
 [data-rehype-pretty-code-figure] code {
   display: grid;
-  font-size: 0.8125rem;
-  line-height: 1.6;
+  font-size: 0.84375rem;
+  line-height: 1.7;
   counter-reset: line;
 }
 
@@ -199,14 +201,6 @@ html:not([data-theme='dark']) .shiki span {
 [data-rehype-pretty-code-figure] [data-highlighted-line] {
   background: var(--selection);
   border-left-color: var(--border-strong);
-}
-
-[data-rehype-pretty-code-title] {
-  padding: 0.625rem 1.25rem;
-  border-bottom: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--muted);
 }
 
 /*
