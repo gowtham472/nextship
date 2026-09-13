@@ -4,6 +4,14 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Changed
+
+- **The landing page shows a deployment as a build line.** The five pipeline cards are now
+  a row of steps on a rail with a stage showing what the selected step does, using values
+  nextship prints. It plays through the steps while on screen, stops once a visitor picks
+  one, pauses on hover or focus, and does not move at all for visitors who ask for reduced
+  motion. Every step's text is in the page without JavaScript. (Gowtham)
+
 ## [1.0.2] - 2026-09-13
 
 A route handler that redirects to `request.url` now sends visitors to the app's own

@@ -3,23 +3,19 @@ import {
   ArrowRight,
   Check,
   ClipboardList,
-  Container,
   Info,
   KeyRound,
   Layers,
   PackageOpen,
-  Rocket,
-  ScanSearch,
-  Scissors,
   ShieldCheck,
   SlidersHorizontal,
-  Upload,
 } from 'lucide-react'
 
 import { CopyButton } from '@/components/copy-button'
 import { DeployRecording } from '@/components/landing/deploy-recording'
 import { FlowDiagram } from '@/components/landing/flow-diagram'
 import { HeroBackground } from '@/components/landing/hero-background'
+import { Pipeline } from '@/components/landing/pipeline'
 import { SpotlightCard } from '@/components/spotlight-card'
 import { Marquee } from '@/components/ui/marquee'
 import { NumberTicker } from '@/components/ui/number-ticker'
@@ -62,39 +58,6 @@ const STATS = [
     unit: 'ms',
     label: 'to first byte while a page streams',
     detail: 'against a 2.02 s total, on a real container',
-  },
-]
-
-const PIPELINE = [
-  {
-    step: '01',
-    title: 'Detect',
-    icon: ScanSearch,
-    body: 'Reads the installed Next.js version, the package manager, the lockfile and the workspace layout. Nothing is guessed from a declared range.',
-  },
-  {
-    step: '02',
-    title: 'Build',
-    icon: Container,
-    body: 'Builds inside Docker with the official Deployment Adapter injected. Your machine compiles nothing and needs no toolchain.',
-  },
-  {
-    step: '03',
-    title: 'Prune',
-    icon: Scissors,
-    body: 'Keeps only the files the build traced as reachable. A 1.13 GB tree becomes 591 MB without a Dockerfile or a standalone flag.',
-  },
-  {
-    step: '04',
-    title: 'Push',
-    icon: Upload,
-    body: 'Pushes to a registry in your own account, with the credential written to a temporary config rather than a process argument.',
-  },
-  {
-    step: '05',
-    title: 'Release',
-    icon: Rocket,
-    body: 'Merges into the existing app spec so settings you set by hand survive, then waits for the deployment to actually serve traffic.',
   },
 ]
 
@@ -269,23 +232,9 @@ export default function HomePage() {
             <FlowDiagram />
           </div>
 
-          <ol className="reveal mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {PIPELINE.map((item) => (
-              <li
-                key={item.step}
-                className="rounded-2xl border border-border bg-card p-5 transition-colors hover:border-border-strong"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-accent/10 text-accent-text">
-                    <item.icon className="h-[18px] w-[18px]" aria-hidden="true" />
-                  </span>
-                  <span className="font-mono text-xs text-muted">{item.step}</span>
-                </div>
-                <h3 className="mt-4 font-semibold">{item.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted">{item.body}</p>
-              </li>
-            ))}
-          </ol>
+          <div className="reveal mt-14">
+            <Pipeline />
+          </div>
         </div>
       </section>
 
