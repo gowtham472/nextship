@@ -114,3 +114,15 @@ test('a project without installer configuration passes no installer digest', () 
   const args = buildArguments(project, context, identity, { target: 'runtime', tag: 'demo:x' })
   assert.ok(!args.some((arg) => arg.startsWith('NEXTSHIP_INSTALLER_DIGEST')))
 })
+
+test('the Next.js build cache is per project location, and stable for one location', () => {
+  const same = buildArguments(project, context, identity, { target: 'runtime', tag: 'demo:x' })
+  const again = buildArguments(project, context, identity, { target: 'runtime', tag: 'demo:y' })
+  const cacheArg = (args: string[]) => args.find((arg) => arg.startsWith('NEXTSHIP_NEXT_CACHE_ID='))
+  assert.match(cacheArg(same) ?? '', /^NEXTSHIP_NEXT_CACHE_ID=nextship-next-demo-[0-9a-f]{12}$/)
+  assert.equal(cacheArg(same), cacheArg(again), 'one project keeps its cache across builds')
+
+  // Two projects with the same name in different places: the case that shared a cache.
+  const elsewhere = { ...project, root: '/tmp/other/demo', contextRoot: '/tmp/other/demo' }
+  assert.notEqual(cacheArg(buildArguments(elsewhere, context, identity, { target: 'runtime', tag: 'demo:x' })), cacheArg(same))
+})

@@ -9,6 +9,7 @@
  * Design: ../../../docs/design.md §7
  */
 
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
@@ -51,6 +52,8 @@ export function buildArguments(
     // invalidates the application build without re-running the install.
     '--build-arg',
     `NEXTSHIP_DEPLOYMENT_ID=${identity.deploymentId}`,
+    '--build-arg',
+    `NEXTSHIP_NEXT_CACHE_ID=${nextCacheId(project)}`,
     // Read from the child's environment rather than a file on disk, so the key
     // is never written anywhere the CLI does not already keep it.
     '--secret',
@@ -75,6 +78,16 @@ export function buildArguments(
 
   args.push(project.contextRoot)
   return args
+}
+
+/**
+ * The Next.js build cache a project uses: its name for recognition, and a hash of
+ * where it lives so two projects with the same name, or none, never share one.
+ * The same project in the same place keeps its cache from build to build.
+ */
+export function nextCacheId(project: ProjectInfo): string {
+  const location = createHash('sha256').update(`${project.contextRoot}\0${project.appDir}`).digest('hex')
+  return `nextship-next-${project.name}-${location.slice(0, 12)}`
 }
 
 export async function dockerBuild(

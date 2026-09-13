@@ -98,6 +98,11 @@ export function renderDockerfile(project: ProjectInfo): string {
     `WORKDIR ${appPath}`,
     // Declared after the install so a new deployment id never invalidates it.
     'ARG NEXTSHIP_DEPLOYMENT_ID',
+    // Names the Next.js build cache below. It is an argument rather than text in
+    // this file because it is derived from where the project lives, and this file is
+    // hashed into the image tag: a path in it would give one commit a different tag
+    // in every directory it is built from.
+    'ARG NEXTSHIP_NEXT_CACHE_ID',
     // The same id under both names. Next.js resolves `deploymentId` from the
     // config the adapter returns, but a config that reads the environment
     // directly, which the framework's own test fixtures and several hosting
@@ -113,7 +118,13 @@ export function renderDockerfile(project: ProjectInfo): string {
       // a cold build: measured at 145 s against 19 s for no change. It is a cache
       // mount rather than a copied directory, so it never enters a layer, and the
       // prune step runs in a later RUN where the mount no longer exists.
-      `--mount=type=cache,id=nextship-next-${project.name},target=${appPath}/.next/cache`,
+      //
+      // One cache per project, locked while a build holds it. The id used to be the
+      // package name alone, and every project without one was `app`, so unrelated
+      // projects shared a cache, and two building at once wrote the same Turbopack
+      // database concurrently. Found in the compatibility suite, where builds run two
+      // at a time: the cache was corrupted and Turbopack deleted it mid-build.
+      '--mount=type=cache,id=${NEXTSHIP_NEXT_CACHE_ID},sharing=locked,target=' + `${appPath}/.next/cache`,
       ...envMounts,
       // Present for the build too: `yarn run` and `pnpm run` read their configuration.
       ...installerMounts,

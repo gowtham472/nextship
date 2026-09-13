@@ -4,6 +4,17 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Projects with the same package name, or none, shared one Next.js build cache.** The
+  cache id was the package name, so every unnamed project used `app`, and two building at
+  once wrote the same Turbopack database concurrently. The compatibility suite, which
+  builds two apps at a time, corrupted it: Turbopack reported an internal error and deleted
+  the cache mid-build. Each project now gets a cache named for its package and a hash of
+  its location, locked while a build uses it. The id is passed as a build argument rather
+  than written into the Dockerfile, which is hashed into the image tag, so the same commit
+  still gets the same tag wherever it is built. (Gowtham)
+
 ### Added
 
 - **The compatibility suite scores itself, by suite and by assertion.** Next.js's test

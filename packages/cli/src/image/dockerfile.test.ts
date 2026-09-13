@@ -37,7 +37,10 @@ test('standalone project renders a three-stage build', () => {
   assert.match(dockerfile, /FROM node:22-slim AS runtime/)
 
   assert.match(dockerfile, /RUN --mount=type=cache,id=nextship-pnpm,target=\/cache\/pnpm pnpm install --frozen-lockfile/)
-  assert.match(dockerfile, /--mount=type=cache,id=nextship-next-demo,target=\/src\/\.next\/cache/)
+  assert.match(dockerfile, /--mount=type=cache,id=\$\{NEXTSHIP_NEXT_CACHE_ID\},sharing=locked,target=\/src\/\.next\/cache/)
+  // Declared before the build that mounts it, and never a path in the file itself.
+  assert.ok(dockerfile.indexOf('ARG NEXTSHIP_NEXT_CACHE_ID') < dockerfile.indexOf('{NEXTSHIP_NEXT_CACHE_ID},sharing=locked'))
+  assert.ok(!dockerfile.includes(base.contextRoot), 'the Dockerfile stays independent of where the project lives')
 
   // The install must not depend on the source tree. Measured: the install is 97s
   // and the compile is 6s, so copying sources first made every edit pay for both.
