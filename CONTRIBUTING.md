@@ -98,7 +98,7 @@ paths in the `tests` input. They run in one job, and the Next.js build is cached
 so a second run against the same `nextjsRef` skips building Next.js:
 
 ```bash
-gh workflow run conformance.yml -f nextjsRef=v16.4.0-canary.22   -f tests="test/e2e/app-dir/actions/app-action.test.ts test/e2e/prerender.test.ts"
+gh workflow run conformance.yml -f nextjsRef=v16.4.0-canary.22 -f tests="test/e2e/prerender.test.ts"
 ```
 
 ## Rehearsing the AWS path locally
