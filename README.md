@@ -120,6 +120,10 @@ nextship deploy --yes      # execute it
 `deploy` prints a plan and stops. Nothing is created, changed or charged until you
 pass `--yes`.
 
+Tried it? A [first deploy report](https://github.com/gowtham472/nextship/issues/new?template=first_deploy.yml) takes two minutes, whether it worked or not.
+Every verification so far was run by the people who wrote nextship, so how it goes on
+your machine is the most useful thing anyone can report.
+
 ---
 
 ## Commands

@@ -6,6 +6,10 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Added
 
+- **A first deploy report.** A short issue form for anyone who tried nextship, whether the
+  deploy worked, broke, or never started: how far they got, how long it took and where
+  they got stuck. The existing forms only fit a bug or a feature request, so a working
+  first run had nowhere to go. The quick start and the README link to it. (Gowtham)
 - **A recording of a real deployment, in the README and the site's hero.** One uncut session
   of `nextship`, `nextship detect` and `nextship deploy --yes` against a live account,
   ending on the URL App Platform served. `site/public/media/deploy.cast` keeps every byte

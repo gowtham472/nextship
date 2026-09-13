@@ -1,0 +1,58 @@
+name: First deploy report
+description: You tried nextship. Tell us how the first run went, whether it worked or not.
+title: "First deploy: "
+labels: [first-run]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every verification so far was run by the people who wrote nextship, on their own
+        machines. How it goes for you is the most useful thing anyone can report right now,
+        including when everything worked. Remove tokens and secrets before pasting anything.
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: How far did you get?
+      options:
+        - The app deployed and its URL served
+        - It deployed, but something in the app does not work
+        - It stopped before a deployment finished
+        - I read the docs and decided not to try it
+    validations:
+      required: true
+  - type: dropdown
+    id: time
+    attributes:
+      label: From installing nextship to a live URL, roughly how long?
+      options:
+        - Under 15 minutes
+        - 15 to 60 minutes
+        - Over an hour
+        - I did not get a live URL
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: Where did you get stuck, or what surprised you?
+      description: The step, what you expected, and what happened instead. "Nothing" is a useful answer.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output of the command that failed, if one did
+      render: text
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system and chip, Node.js, Docker, Next.js and nextship versions.
+      placeholder: macOS 15 on M3, Node 24.18, Docker 29.7, Next.js 16.3.4, nextship 1.0.0
+    validations:
+      required: true
+  - type: textarea
+    id: app
+    attributes:
+      label: What kind of app was it?
+      description: Router, package manager, monorepo or not, and features it relies on, such as ISR, Server Actions or image optimization.
