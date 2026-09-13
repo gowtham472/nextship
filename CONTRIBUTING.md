@@ -88,6 +88,19 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 One fixed key is required because the suite builds many apps and Server Actions must stay
 decryptable across all of them.
 
+Every run ends with a **Score the run** job whose summary gives two numbers: suites passed,
+where one failing assertion fails the whole suite, and assertions passed, the measure
+Next.js's adapters support page uses. It lists every failing suite with its failing
+assertions, and keeps the full result as a `summary` artifact.
+
+To check a fix against the suites it targets without running all of them, pass their
+paths in the `tests` input. They run in one job, and the Next.js build is cached by commit,
+so a second run against the same `nextjsRef` skips building Next.js:
+
+```bash
+gh workflow run conformance.yml -f nextjsRef=v16.4.0-canary.22   -f tests="test/e2e/app-dir/actions/app-action.test.ts test/e2e/prerender.test.ts"
+```
+
 ## Rehearsing the AWS path locally
 
 `conformance/aws/probe.sh` runs nextship's container path against Floci, a local AWS

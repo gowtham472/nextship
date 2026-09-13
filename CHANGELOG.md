@@ -4,6 +4,16 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Added
+
+- **The compatibility suite scores itself, by suite and by assertion.** Next.js's test
+  runner writes a results file for every suite, and nothing kept them, so the logs, which
+  print only failures, were the only record and could not give a total. Each group now
+  uploads its results, and a final job reports suites passed and assertions passed, the
+  measure Next.js's adapters support page publishes, with every failing assertion listed.
+  A `tests` input runs chosen suites in one job, and the Next.js build is cached by commit,
+  so checking a fix no longer costs a full run. (Gowtham)
+
 ## [1.0.1] - 2026-09-13
 
 Fixes from our own end-to-end test on an Apple Silicon Mac, which deployed an app built to

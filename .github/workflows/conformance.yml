@@ -6,8 +6,9 @@
 # and then runs thirty-two parallel Playwright groups. Sixteen left the slowest
 # group at 69 minutes against a 90 minute cap, which the suite would outgrow.
 #
-# Results belong in the README as a support matrix. Expect failures on the first
-# run; that is the point.
+# Two ways to run it. With no `tests` input it runs everything and the summary job
+# scores the run. With `tests` it runs only those files in one job, which is how a
+# fix is checked against the suites it targets in minutes rather than an hour.
 #
 # Contract: nextjs.org/docs/app/api-reference/adapters/testing-adapters
 # Author: Gowtham
@@ -20,6 +21,10 @@ on:
         description: 'Next.js repo ref (branch, tag or SHA)'
         default: 'canary'
         type: string
+      tests:
+        description: 'Test files to run instead of the whole suite, space separated (for example test/e2e/prerender.test.ts)'
+        default: ''
+        type: string
   schedule:
     # Weekly, so a Next.js regression is found before a release rather than after.
     - cron: '0 3 * * 1'
@@ -29,6 +34,8 @@ jobs:
     name: Build Next.js and nextship
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      nextjs-sha: ${{ steps.ref.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with: { path: adapter }
@@ -40,30 +47,53 @@ jobs:
           path: nextjs
           fetch-depth: 25
 
+      - id: ref
+        run: echo "sha=$(git -C nextjs rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # Building Next.js from source is most of this job's time, and it depends on
+      # nothing but the Next.js commit. Keyed on that commit, every run against the
+      # same ref after the first skips it.
+      - id: nextjs-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            nextjs
+            ~/.cache/ms-playwright
+          key: nextjs-build-${{ steps.ref.outputs.sha }}
+
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
 
       - run: npm i -g corepack@latest && corepack enable
 
       - name: Install and build Next.js
+        if: steps.nextjs-cache.outputs.cache-hit != 'true'
         working-directory: nextjs
         run: pnpm install && pnpm build && pnpm install
 
       - name: Install Playwright
+        if: steps.nextjs-cache.outputs.cache-hit != 'true'
         working-directory: nextjs
         run: pnpm playwright install --with-deps chromium
+
+      - uses: actions/cache/save@v4
+        if: steps.nextjs-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            nextjs
+            ~/.cache/ms-playwright
+          key: nextjs-build-${{ steps.ref.outputs.sha }}
 
       - name: Build nextship
         working-directory: adapter
         run: pnpm install && pnpm build && pnpm test
 
+      # nextship changes on every run, so it is cached per run and apart from Next.js,
+      # which keeps the large entry from being stored twice.
       - uses: actions/cache/save@v4
         with:
-          path: |
-            nextjs
-            adapter
-            ~/.cache/ms-playwright
-          key: conformance-${{ github.sha }}-${{ github.run_id }}
+          path: adapter
+          key: conformance-adapter-${{ github.sha }}-${{ github.run_id }}
 
   test:
     name: Tests ${{ matrix.group }}
@@ -73,15 +103,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [1/32, 2/32, 3/32, 4/32, 5/32, 6/32, 7/32, 8/32, 9/32, 10/32, 11/32, 12/32, 13/32, 14/32, 15/32, 16/32, 17/32, 18/32, 19/32, 20/32, 21/32, 22/32, 23/32, 24/32, 25/32, 26/32, 27/32, 28/32, 29/32, 30/32, 31/32, 32/32]
+        group: ${{ fromJSON(inputs.tests != '' && '["selected"]' || '["1/32","2/32","3/32","4/32","5/32","6/32","7/32","8/32","9/32","10/32","11/32","12/32","13/32","14/32","15/32","16/32","17/32","18/32","19/32","20/32","21/32","22/32","23/32","24/32","25/32","26/32","27/32","28/32","29/32","30/32","31/32","32/32"]') }}
     steps:
       - uses: actions/cache/restore@v4
         with:
           path: |
             nextjs
-            adapter
             ~/.cache/ms-playwright
-          key: conformance-${{ github.sha }}-${{ github.run_id }}
+          key: nextjs-build-${{ needs.build.outputs.nextjs-sha }}
+          fail-on-cache-miss: true
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: adapter
+          key: conformance-adapter-${{ github.sha }}-${{ github.run_id }}
+          fail-on-cache-miss: true
 
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
@@ -102,6 +138,7 @@ jobs:
           NEXT_EXTERNAL_TESTS_FILTERS: test/deploy-tests-manifest.json
           ADAPTER_DIR: ${{ github.workspace }}/adapter
           IS_TURBOPACK_TEST: 1
+          # Also what makes the runner write a results file for every suite.
           NEXT_TEST_JOB: 1
           NEXT_TELEMETRY_DISABLED: 1
           NEXT_TEST_DEPLOY_SCRIPT_PATH: ${{ github.workspace }}/adapter/conformance/e2e-deploy.sh
@@ -110,4 +147,54 @@ jobs:
           # One key for the whole run, so Server Actions stay decryptable across
           # the many apps the harness builds.
           NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${{ secrets.CONFORMANCE_ACTIONS_KEY }}
-        run: node run-tests.js --timings -g ${{ matrix.group }} -c 2 --type e2e
+          # Read from the environment rather than interpolated into the script, so a
+          # value in the input can only ever be test file arguments.
+          SELECTED_TESTS: ${{ inputs.tests }}
+          GROUP: ${{ matrix.group }}
+        run: |
+          if [ "$GROUP" = "selected" ]; then
+            # Word splitting is the point: each file is its own argument.
+            # shellcheck disable=SC2086
+            node run-tests.js -c 2 --type e2e $SELECTED_TESTS
+          else
+            node run-tests.js --timings -g "$GROUP" -c 2 --type e2e
+          fi
+
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ strategy.job-index }}
+          path: nextjs/test/**/*.results.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  summary:
+    name: Score the run
+    needs: test
+    # Scored whenever the suite ran, including when groups failed, which they do.
+    if: ${{ !cancelled() && needs.test.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: conformance/summarize.mjs
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          merge-multiple: true
+          path: results
+
+      - run: node conformance/summarize.mjs results summary.json >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: summary
+          path: summary.json
+          retention-days: 90
