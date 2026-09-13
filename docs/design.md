@@ -230,6 +230,13 @@ file, so there is one source of truth. One Dockerfile, three stages.
     Next.js server trace for a non-standalone build deliberately omits
     `next/dist/server/next.js` (its `TRACE_IGNORES`), and relying on it alone boots
     to `Cannot find module`. Verified on 16.2.9;
+  - in the same trace, the route module contexts for `pages` and `app-page`
+    (`module.compiled` and `vendored/contexts/*.js`). Next.js's require hook reaches
+    them through a path computed at runtime, whenever `next/head`, `next/router` or
+    `next/document` loads outside a page bundle, as in an app whose package.json sets
+    `"type": "module"`. Next.js adds them to its own server trace, which it does not
+    write while an adapter is configured, and without them such a page answered 500.
+    Found by the compatibility suite's app-esm-js on 16.4.0-canary.22;
   - `public/` and the app's `package.json`;
   - the two files Next.js adds to standalone output by hand
     (`jest-worker/processChild` and `threadChild`). They are spawned as child
@@ -244,6 +251,16 @@ file, so there is one source of truth. One Dockerfile, three stages.
   It writes `server.cjs`, the same launcher Next.js generates for standalone output,
   with the resolved config inlined. That is what keeps `@next/swc` (125 MB) out of
   the runtime image: without it, a TypeScript config is compiled on every start.
+
+  The launcher adds one thing standalone does not: when the server listens on an
+  unspecified address, 0.0.0.0 or ::, a `Location` header naming that address and the
+  server's port is made relative. Next.js builds a route handler's `request.url`
+  from the listen address, so a redirect built from it sent visitors to
+  https://0.0.0.0:3000; Next.js already relativizes middleware redirects the same way.
+  No request header takes part. Next.js's `trustHostHeader` was tried first and
+  rejected: on 16.4.0-canary.22 it changes request URLs in the routing layer only,
+  and the disagreement turned every middleware rewrite into a proxy request that
+  failed.
 
 ### 7.2 Runtime stage
 
@@ -754,6 +771,7 @@ credentials in CI.
 | **`public/` ships inside the image.** 78 MB on the real project. | Media is served by the container rather than a CDN. | v0.4 |
 | **The ISR cache does not survive a restart.** `.next/cache` lives inside the container, so every restart, redeploy and rescheduling starts cold. Optimized images share the same directory and are re-generated too. Single-instance ISR is correct per process, which is not the same as durable. | The first request to each cached route after any restart renders instead of reading cache. On an image-heavy site the cold-start cost is dominated by re-optimizing images. | **Decided: accepted for v1.** Verify whether App Platform offers a persistent volume for a service before v0.3; if not, this is inherent until the v2 shared cache handler |
 | **App Platform's CDN keeps fully static pages, so on-demand revalidation does not reach visitors.** Next.js sends `Cache-Control: s-maxage=31536000` for a page with no revalidate time, confirmed in a nextship image, and App Platform serves through Cloudflare, which honours it. Our end-to-end test on macOS measured it live: a Server Action that called `revalidatePath` changed the container's copy while the edge kept serving the old page with `cf-cache-status: HIT`. | Updates made with `revalidatePath`, `revalidateTag` or `updateTag` are invisible to visitors of a fully static page for as long as the edge keeps it, while working in local testing. | **Mitigated, not solved.** A page given `export const revalidate` sends `s-maxage` of that many seconds instead; that test saw the change reach visitors in about 30 s with 30. `doctor` warns projects that revalidate on demand. Purging the edge would need an App Platform cache API, which is not known to exist |
+| **A route handler's `request.url` names the container.** Next.js builds it from the address the server listens on, so behind a proxy it reads `https://0.0.0.0:3000/...`, measured in a nextship image on 16.4.0-canary.22. | Redirects built from it work, because the launcher makes them relative (§7.1). Other absolute URLs built from it do not: a link in a response body, or a callback URL given to an OAuth provider. | Documented. Vercel builds request URLs from the Host header with `trustHostHeader`, which Next.js's page and route server honours only when it is given no hostname and port of its own, as in Vercel's minimal mode |
 | **Dependencies referenced by `file:` paths outside the build context fail.** The context is the project or workspace root, and nothing outside it exists in the builder. | The install step fails. | Accepted |
 | **A fully dynamic app is probed on a rendered route.** The health path is chosen from the build's prerendered routes; when a build prerenders nothing, `/` is the only option. | A render every few seconds, forever, for apps with no static route at all. | Inherent without owning the HTTP server, which is a far larger cost than the one it would save |
 | **Retention is manual.** `images prune` exists but nothing runs it, so storage still grows until someone does. | An unattended project fills its quota eventually. | Pruning on deploy needs care: garbage collection makes the registry read-only, so it cannot run in the same command that pushes |

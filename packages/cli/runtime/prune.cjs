@@ -362,6 +362,26 @@ function routeModuleContexts() {
  * config inlined so the server never has to load next.config at boot. That is
  * what keeps the SWC compiler out of the runtime image: without it, a TypeScript
  * config would be compiled on every start.
+ *
+ * One addition: redirects to the server's own listen address become relative.
+ * Next.js builds a route handler's `request.url` from the address the server
+ * listens on, so behind a proxy a handler that redirects to
+ * `new URL('/login', request.url)` answers `Location: https://0.0.0.0:3000/login`.
+ * Next.js already makes a middleware redirect to its own origin relative
+ * (`getRelativeURL` in resolve-routes); this extends that to every response, and
+ * the browser resolves the result against the address it actually used.
+ *
+ * Measured on 16.4.0-canary.22 with requests carrying a public Host and
+ * `x-forwarded-proto: https`. `experimental.trustHostHeader`, which Vercel sets,
+ * was tried first and is not a fix outside Vercel: the page and route server keep
+ * building request URLs from the listen address, the routing layer switches to
+ * the Host header, and the mismatch turned every middleware rewrite into a proxy
+ * request over TLS to the plain HTTP server, a 500.
+ *
+ * Only the unspecified addresses, 0.0.0.0 and ::, on the server's own port are
+ * rewritten. No visitor can reach those, and no request header takes part, so
+ * a client cannot steer it. A server bound to a name it can be reached by, as the
+ * compatibility harness binds localhost, is left exactly as Next.js makes it.
  */
 function renderLauncher(nextConfig) {
   return `'use strict'
@@ -375,6 +395,28 @@ process.chdir(__dirname)
 
 const currentPort = parseInt(process.env.PORT, 10) || 3000
 const hostname = process.env.HOSTNAME || '0.0.0.0'
+
+// Redirects to the listen address, which no visitor can reach, become relative. See prune.cjs.
+if (hostname === '0.0.0.0' || hostname === '::') {
+  const { ServerResponse } = require('node:http')
+  const host = hostname === '::' ? '[::]' : hostname
+  const ownOrigins = ['http://' + host + ':' + currentPort, 'https://' + host + ':' + currentPort]
+  const relative = (value) => {
+    if (typeof value !== 'string') return value
+    const origin = ownOrigins.find((candidate) => value.toLowerCase().startsWith(candidate))
+    if (origin === undefined) return value
+    const rest = value.slice(origin.length)
+    if (rest !== '' && !'/?#'.includes(rest[0])) return value
+    return rest.startsWith('/') ? rest : '/' + rest
+  }
+  for (const method of ['setHeader', 'appendHeader']) {
+    const original = ServerResponse.prototype[method]
+    ServerResponse.prototype[method] = function (name, value) {
+      if (typeof name !== 'string' || name.toLowerCase() !== 'location') return original.call(this, name, value)
+      return original.call(this, name, Array.isArray(value) ? value.map(relative) : relative(value))
+    }
+  }
+}
 
 let keepAliveTimeout = parseInt(process.env.KEEP_ALIVE_TIMEOUT, 10)
 const nextConfig = ${JSON.stringify(nextConfig)}

@@ -212,6 +212,72 @@ test('traces the route module contexts Next.js loads by a computed path', async 
   }
 })
 
+// A route handler's request.url carries the listen address, so behind a proxy a
+// redirect built from it sent visitors to https://0.0.0.0:3000.
+test('the launcher makes redirects to its own listen address relative, and nothing else', async () => {
+  const root = await fixture({
+    ...compiledOutput,
+    'node_modules/dep/index.js': '',
+    'node_modules/dep/package.json': '{}',
+    // Sets each Location on a real ServerResponse and reports what it holds.
+    'node_modules/next/dist/server/lib/start-server.js': `
+      const { IncomingMessage, ServerResponse } = require('node:http')
+      const { Socket } = require('node:net')
+      exports.startServer = async () => {
+        const seen = {}
+        for (const location of JSON.parse(process.env.LOCATIONS)) {
+          const res = new ServerResponse(new IncomingMessage(new Socket()))
+          res.setHeader('Location', location)
+          seen[location] = res.getHeader('location')
+        }
+        const appended = new ServerResponse(new IncomingMessage(new Socket()))
+        appended.setHeader('location', ['https://0.0.0.0:3000/a'])
+        appended.appendHeader('content-location', 'https://0.0.0.0:3000/b')
+        seen.array = appended.getHeader('location')
+        seen.other = appended.getHeader('content-location')
+        process.stdout.write(JSON.stringify(seen))
+      }`,
+  })
+  const out = path.join(root, 'out')
+  try {
+    assert.equal(prune(root, '.', out).status, 0)
+    const locations = [
+      'https://0.0.0.0:3000/login?next=%2Fcart#top',
+      'http://0.0.0.0:3000',
+      'https://0.0.0.0:3000?page=2',
+      'https://0.0.0.0:30001/elsewhere',
+      'https://shop.example.com/login',
+      '/already-relative',
+    ]
+    const start = (env: Record<string, string>) => {
+      const result = spawnSync(process.execPath, [path.join(out, 'server.cjs')], {
+        encoding: 'utf8',
+        env: { PATH: process.env.PATH ?? '', PORT: '3000', LOCATIONS: JSON.stringify(locations), ...env },
+      })
+      assert.equal(result.status, 0, result.stderr)
+      return JSON.parse(result.stdout)
+    }
+
+    assert.deepEqual(start({}), {
+      'https://0.0.0.0:3000/login?next=%2Fcart#top': '/login?next=%2Fcart#top',
+      'http://0.0.0.0:3000': '/',
+      'https://0.0.0.0:3000?page=2': '/?page=2',
+      'https://0.0.0.0:30001/elsewhere': 'https://0.0.0.0:30001/elsewhere',
+      'https://shop.example.com/login': 'https://shop.example.com/login',
+      '/already-relative': '/already-relative',
+      array: ['/a'],
+      other: 'https://0.0.0.0:3000/b',
+    })
+
+    // Bound to a reachable name, the server's redirects are left as Next.js made them.
+    const named = start({ HOSTNAME: 'localhost' })
+    assert.equal(named['https://0.0.0.0:3000/login?next=%2Fcart#top'], 'https://0.0.0.0:3000/login?next=%2Fcart#top')
+    assert.deepEqual(named.array, ['https://0.0.0.0:3000/a'])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test('fails clearly when the tracer inside next cannot be loaded', async () => {
   const { 'node_modules/next/dist/compiled/@vercel/nft/index.js': _tracer, ...withoutTracer } = compiledOutput
   const root = await fixture({

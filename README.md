@@ -685,6 +685,7 @@ Things you would otherwise configure by hand, all inferred or applied automatica
 - Installs dependencies inside the image, so `next`, `sharp` and every native module are built for Linux
 - Copies only traced files, and never a dependency source map or development runtime: `node_modules` went from 469 MB to 58 MB on a real project
 - Generates the same launcher standalone mode would, so `@next/swc` (125 MB) stays out and boot is instant
+- Makes a redirect to the container's own address relative, so a route handler redirecting to `new URL('/login', request.url)` lands on your domain rather than `0.0.0.0`
 - Runs as a non-root user under `tini`, with jemalloc for sharp and a `HEALTHCHECK`
 - Points the platform health check at a route your build prerenders, so probing costs a file read rather than a render
 - Disables proxy buffering, so streaming and PPR are not silently broken by the platform
@@ -720,6 +721,12 @@ deploy:
   page. Give any page you revalidate on demand an `export const revalidate`; the edge then
   keeps it at most that many seconds. `nextship doctor` warns when your source revalidates
   on demand.
+- **A route handler's `request.url` names the container, not your domain.** Next.js builds
+  it from the address the server listens on, so behind a proxy it reads
+  `https://0.0.0.0:3000/...`. A redirect built from it still works, because nextship
+  makes it relative. Any other absolute URL built from it does not, such as a link in a
+  response body or a callback URL handed to an OAuth provider: build those from your
+  site's configured URL instead.
 - **Logs are not history.** `--follow` streams live output, but a replaced deployment
   still takes its past output with it. Retaining it needs forwarding to an external
   service, which is not built.

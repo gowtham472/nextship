@@ -6,6 +6,20 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Fixed
 
+- **A route handler that redirected to `request.url` sent visitors to `0.0.0.0`.** Next.js
+  builds a route handler's request URL from the address the server listens on, so behind
+  a proxy `NextResponse.redirect(new URL('/target', request.url))` answered with
+  `Location: https://0.0.0.0:3000/target`. The launcher now makes a redirect to the
+  server's own listen address relative, which a browser resolves against the address it
+  used, as Next.js already does for middleware redirects. Only the unspecified addresses
+  on the server's port are rewritten and no request header takes part, so a client cannot
+  steer it. Measured in a nextship image with requests shaped like App Platform's router,
+  carrying a public `Host` and `x-forwarded-proto: https`: before, the Location above;
+  after, `/target`, with middleware rewrites and pages unchanged. Not yet observed on a
+  live app. `request.url` itself still names the container, which the README's
+  limitations describe. Next.js's `trustHostHeader`, which Vercel sets, was tried first
+  and is not a fix outside Vercel: request URLs changed in the routing layer only, and
+  every middleware rewrite became a proxy request that failed with a 500. (Gowtham)
 - **A Pages Router page answered 500 when `next/head`, `next/router` or `next/document`
   loaded outside the page bundle.** That happens in an app whose package.json sets
   `"type": "module"`, and for a server-rendered dependency that imports them. Next.js
