@@ -21,13 +21,13 @@ import { NextshipError } from '../../errors.js'
 /** A deployment that has held the lock this long has almost certainly died. */
 export const STALE_AFTER_MS = 30 * 60 * 1000
 
-export interface LockOwner {
+interface LockOwner {
   host: string
   pid: number
   since: string
 }
 
-export function describeOwner(owner: LockOwner): string {
+function describeOwner(owner: LockOwner): string {
   return `${owner.host}, pid ${owner.pid}, since ${owner.since}`
 }
 

@@ -55,6 +55,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   streams the live image from the old server, deploys it, and records the new server only
   once the app is healthy there. The old server is only read. On the local stand-in the app
   served on the new server with the same env and key in 55 s. (Ragul D)
+- **The watchdog runs every minute rather than drifting.** With systemd's default timer
+  accuracy of a minute, runs on a test server fell at 20:03, 20:05 and 20:06, skipping one;
+  the timer now asks for 10 seconds, and setup rewrites a timer that differs. After the
+  change a frozen app was marked unhealthy by Docker 90 s after it stopped, and restarted by
+  the watchdog 3 minutes later, logged as unhealthy for 3 consecutive checks. (Ragul D)
 - **`doctor` on a vm project** warns that the app runs on one server with no CDN, pointing at
   backup guidance, and warns when the source reads `request.url`, which names the container
   behind Caddy. (Ragul D)
@@ -108,6 +113,12 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Docs
 
+- **The site documents the server target** on a new "Your own server" page, and the CLI
+  reference, requirements and security pages name it, each saying it is not in 1.0.2. (Ragul D)
+- **`design.md` §9.3 records what was verified and what was not.** `e2e.sh` passes in full
+  against a local Ubuntu 24.04 stand-in, and `server add` was also run on Debian 12; a real
+  provider, a real certificate, a real kernel reboot, the disk guard on a full disk, the CI
+  job and Windows are listed as not verified. (Ragul D)
 - **`docs/vm.md`** describes what `server add` changes on a server, step by step, the SSH
   security model including that the `nextship` user is root-equivalent, deploying from
   GitHub Actions with a key loaded into ssh-agent and `--build local` (written, not yet run

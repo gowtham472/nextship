@@ -157,7 +157,7 @@ target that is built, verified live, and actually used. The second target is v1.
 **Explicitly not in v1.0:** AWS, a second compute option, CDN assets, and anything from
 "Beyond v1.0". Shipping one target honestly beats shipping two badly.
 
-## v1.1: any Linux server over SSH (In progress, on `feat/vm-target`)
+## v1.1: any Linux server over SSH (Built on `feat/vm-target`, awaiting live verification)
 
 The second target, decided by Ragul D: **one generic target for any Ubuntu or Debian server
 reached over SSH**, instead of a driver per managed cloud. It covers Hetzner, a Hostinger
@@ -185,10 +185,27 @@ stays identical.
 | 2 | VM driver: remote or local builds, zero-downtime release behind Caddy, rollback, the Server Actions key kept on the server | **Done.** Verified on the local stand-in: streaming through Caddy, no failed request across a deployment, a failed startup leaving the previous deployment serving, and rollback. Not yet on a provider |
 | 3 | Day-two commands on a server: env, domains, logs with history, images, destroy, `server status`, a disk guard | **Done.** Verified on the local stand-in, including two apps on one server and destroying one. A real certificate being issued is not verified |
 | 4 | Reboot resilience, `server move`, GitHub Actions usage, VM checks in `doctor` | **Done.** `server reboot` and `server move` verified on the local stand-in, where a reboot restarts a container rather than a kernel. The GitHub Actions workflow in `vm.md` has not run |
-| 5 | A CI job and `conformance/vm/e2e.sh` that run all of it against a real SSH server, docs | Planned |
+| 5 | A CI job and `conformance/vm/e2e.sh` that run all of it against a real SSH server, docs | **Done.** `e2e.sh` passes in full against a fresh local stand-in. The CI job has not run, since the branch is not pushed |
 
-**Not claimed until run on real providers:** the live checklist on a Hetzner arm64 VM and an
-amd64 VM from another provider. Anything not run is recorded as not run.
+**Not claimed until run on real providers.** Before release, record each result or "not
+done" in the pull request and in `design.md` §9.3:
+
+1. A Hetzner arm64 VM and an amd64 VM from another provider, both Ubuntu 24.04
+2. `server add` twice on each (the second changes nothing), and once on Debian 12
+3. `conformance/vm/e2e.sh` against a real server
+4. `domain add` with a real domain: the certificate is issued and `domain` reports it live
+5. No failed request during a deployment under a request loop
+6. `server reboot --yes`: every app comes back healthy
+7. A killed app process restarts; a hung one is restarted by the watchdog
+8. Deploy refuses with under 3 GB free
+9. `server move` to a fresh VM keeps the Server Actions key and env
+10. Two projects on one server with their own domains, and `destroy` on one leaves the other
+11. A deployment from the GitHub Actions workflow in `vm.md` with `--build local`
+
+Items 2 (on the stand-in), 3, 5, 6, 7, 9 and 10 passed on the local stand-in, which is not a
+provider. The regression check on DigitalOcean before merge: `deploy --yes`, `rollback
+--yes`, `logs --follow`, `env push --yes`, `domain` and `images` behave as on `main`, against
+a live app.
 
 ## AWS: on demand, after the Lightsail streaming experiment
 

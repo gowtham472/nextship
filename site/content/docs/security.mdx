@@ -27,6 +27,8 @@ server, nothing is collected, and there is no telemetry.
 | Env files | Mounted as BuildKit secrets, excluded from image layers and from the build cache key. Never copied into the image |
 | Server Actions encryption key | Stored in `.nextship/secrets.local.json`, which nextship gitignores on creation so it cannot be committed |
 | Log stream URLs | These carry an embedded access token, so they are treated as secrets: never printed, never logged, never in an error message |
+| Server host keys | Pinned in `nextship.json` after the fingerprint is shown. Every connection checks strictly against the pinned key, so a changed key is refused rather than prompted about |
+| SSH connections | Your own `ssh`, in batch mode with no passwords, started without a shell. nextship never reads a private key |
 | Values pushed by `env push` | Redacted from any error message before it is shown, because an API validation error can quote the field it rejected |
 
 ## Known exposures, stated plainly

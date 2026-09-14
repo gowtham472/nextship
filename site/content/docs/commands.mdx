@@ -21,6 +21,10 @@ nextship domain rm     Detach a domain
 nextship images        List the images pushed for this project
 nextship images prune  Remove old images, keeping the recent ones
 nextship destroy       Destroy the app this project created
+nextship server add    Prepare a Linux server and record it as this project's target
+nextship server status The server, every app on it, and what needs attention
+nextship server reboot Reboot the server and wait for every app to come back healthy
+nextship server move   Move this project's app to another server
 
   -h, --help           Show usage
   -v, --version        Show the version
@@ -96,8 +100,8 @@ in `node_modules` that nothing declares: that one fails the build, and is a bloc
 
 ## Cloud commands
 
-These need `DIGITALOCEAN_TOKEN`, and each acts only on the app recorded in
-`nextship.json`.
+Each acts only on the app recorded in `nextship.json`. On DigitalOcean they need
+`DIGITALOCEAN_TOKEN`; on your own server they need SSH access, and no token.
 
 - [deploy](/docs/deploying)
 - [rollback and logs](/docs/rollbacks-and-logs)
@@ -117,6 +121,18 @@ alone leaves the manifest and its layers behind and reclaims nothing.
 
 On a real registry this took storage from 390.2 MiB to 286.1 MiB, freeing 104.2 MiB across
 7 blobs.
+
+### server
+
+```bash
+nextship server add root@203.0.113.10 --yes   # set a server up and record it
+nextship server status                        # the server and every app on it
+nextship server reboot --yes                  # reboot and wait for every app
+nextship server move root@198.51.100.7 --yes  # move this app to another server
+```
+
+The server target is not in 1.0.2; see [Your own server](/docs/vm). `deploy` on a server also
+takes `--build remote|local` and `--memory`, and `logs` takes `--deployment <id>`.
 
 ### destroy
 

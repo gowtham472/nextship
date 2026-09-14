@@ -22,7 +22,7 @@ import { NextshipError } from '../../errors.js'
 
 export const KEY_ENV = 'NEXT_SERVER_ACTIONS_ENCRYPTION_KEY'
 
-export interface KeyInputs {
+interface KeyInputs {
   /** `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` in this process's environment. */
   environment: string | undefined
   /** The key stored on the server, or null when it has none. */
@@ -31,7 +31,7 @@ export interface KeyInputs {
   local: string | null
 }
 
-export type KeyDecision =
+type KeyDecision =
   /** Use this key. `warning` is printed when it overrides a different stored one. */
   | { action: 'use'; key: string; source: 'environment' | 'server'; warning: string | null }
   /** Upload the local key, so the server holds the one this machine already built with. */

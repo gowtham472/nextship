@@ -338,11 +338,33 @@ apply_firewall() {
 # ------------------------------------------------------------------- watchdog
 
 WATCHDOG=/usr/local/lib/nextship/watchdog.sh
+WATCHDOG_SERVICE="[Unit]
+Description=Restart nextship containers that stay unhealthy
+
+[Service]
+Type=oneshot
+ExecStart=$WATCHDOG
+"
+# AccuracySec because systemd's default of a minute let runs drift to two minutes
+# apart, measured on a test server, which stretched "three checks" to six minutes.
+WATCHDOG_TIMER="[Unit]
+Description=Run the nextship watchdog every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
+"
 
 check_watchdog() {
   local expected=""
   [ -n "${NEXTSHIP_WATCHDOG_B64:-}" ] && expected="$(printf '%s' "$NEXTSHIP_WATCHDOG_B64" | base64 -d)"
-  if [ ! -f "$WATCHDOG" ] || [ "$(cat "$WATCHDOG")" != "$expected" ]; then
+  if [ ! -f "$WATCHDOG" ] || [ "$(cat "$WATCHDOG")" != "$expected" ] ||
+    [ "$(cat /etc/systemd/system/nextship-watchdog.timer 2> /dev/null)" != "$(printf '%s' "$WATCHDOG_TIMER")" ] ||
+    [ "$(cat /etc/systemd/system/nextship-watchdog.service 2> /dev/null)" != "$(printf '%s' "$WATCHDOG_SERVICE")" ]; then
     result change "install a watchdog that restarts containers unhealthy for 3 checks in a row"
     return
   fi
@@ -353,12 +375,11 @@ apply_watchdog() {
   install -d -m 0755 /usr/local/lib/nextship
   printf '%s' "$NEXTSHIP_WATCHDOG_B64" | base64 -d > "$WATCHDOG"
   chmod 0755 "$WATCHDOG"
-  printf '[Unit]\nDescription=Restart nextship containers that stay unhealthy\n\n[Service]\nType=oneshot\nExecStart=%s\n' "$WATCHDOG" \
-    > /etc/systemd/system/nextship-watchdog.service
-  printf '[Unit]\nDescription=Run the nextship watchdog every minute\n\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=1min\n\n[Install]\nWantedBy=timers.target\n' \
-    > /etc/systemd/system/nextship-watchdog.timer
+  printf '%s' "$WATCHDOG_SERVICE" > /etc/systemd/system/nextship-watchdog.service
+  printf '%s' "$WATCHDOG_TIMER" > /etc/systemd/system/nextship-watchdog.timer
   systemctl daemon-reload
-  systemctl enable --now nextship-watchdog.timer > /dev/null 2>&1
+  systemctl enable nextship-watchdog.timer > /dev/null 2>&1
+  systemctl restart nextship-watchdog.timer
 }
 
 # -------------------------------------------------------------- ssh-hardening
