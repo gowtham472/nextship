@@ -208,7 +208,7 @@ export async function listImages(project: ProjectInfo): Promise<void> {
   }
 
   const bytes = await app.target.storageBytes()
-  if (bytes !== null) detail(`storage    ${megabytes(bytes)} used in the registry, across every repository`)
+  if (bytes !== null) detail(`storage    ${megabytes(bytes)} ${app.target.storage.usage}`)
   ok(`${tagged.length} image(s).`)
 }
 

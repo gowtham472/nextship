@@ -35,9 +35,10 @@ import { existsSync } from 'node:fs'
 import { hostname } from 'node:os'
 import path from 'node:path'
 import { connect as tlsConnect } from 'node:tls'
-import { lookup } from 'node:dns/promises'
+import { lookup, resolve4 } from 'node:dns/promises'
 import { connect as netConnect, createServer } from 'node:net'
 import { NextshipError } from '../../errors.js'
+import { docsUrl } from '../../links.js'
 import type { ProjectConfig, ServerRecord } from '../../config.js'
 import { DEFAULT_KEEP } from '../../images.js'
 import { pipeline } from '../../util/exec.js'
@@ -55,6 +56,7 @@ import type {
   PhaseReporter,
   ReclaimOutcome,
   ReleaseRequest,
+  DestroyPlan,
   StorageWording,
   Target,
 } from '../target.js'
@@ -282,6 +284,71 @@ export function withoutDomain(domains: SiteDomain[], domain: string): SiteDomain
 
 const q = shellQuote
 
+/** What `server status` reports about the server itself. */
+export interface ServerStatus {
+  os: string
+  arch: string
+  uptime: string
+  rebootRequired: boolean
+  load: string
+  memTotalMib: number
+  memAvailableMib: number
+  diskTotalMib: number
+  diskFreeMib: number
+  docker: string
+  caddy: string
+  setupVersion: number | null
+  /** Containers other than Caddy that publish a port, which bypasses Caddy and ufw. */
+  publishedPorts: string[]
+  apps: AppStatus[]
+}
+
+export interface AppStatus {
+  name: string
+  live: string | null
+  state: string
+  restarts: number
+  memory: string
+  domains: string[]
+}
+
+/** Reads the `key=value` lines the status script prints. Keys may repeat. */
+export function parseStatusLines(output: string): Map<string, string[]> {
+  const values = new Map<string, string[]>()
+  for (const line of output.split('\n')) {
+    const separator = line.indexOf('=')
+    if (separator < 1) continue
+    const key = line.slice(0, separator)
+    values.set(key, [...(values.get(key) ?? []), line.slice(separator + 1)])
+  }
+  return values
+}
+
+/** What `server status` warns about. Thresholds are the ones deploy and setup enforce. */
+export function statusWarnings(status: ServerStatus, cliSetupVersion: number): string[] {
+  const warnings: string[] = []
+  if (status.diskFreeMib < MIN_FREE_DISK_MIB) {
+    warnings.push(
+      `Only ${(status.diskFreeMib / 1024).toFixed(1)} GB is free, so deploy will refuse. \`nextship images prune --yes\` removes old images.`
+    )
+  }
+  if (status.publishedPorts.length > 0) {
+    warnings.push(
+      `${status.publishedPorts.join(', ')} publish ports of their own, which Docker opens past ufw and Caddy. nextship never publishes app ports.`
+    )
+  }
+  if (status.setupVersion === null || status.setupVersion < cliSetupVersion) {
+    warnings.push(
+      `Server setup is version ${status.setupVersion ?? 'unknown'}, older than this nextship's ${cliSetupVersion}. Run \`nextship server add\` with --yes to update it.`
+    )
+  }
+  if (status.rebootRequired) warnings.push('The server needs a reboot to finish installing updates.')
+  for (const app of status.apps) {
+    if (app.live && app.state !== 'running healthy') warnings.push(`${app.name} is ${app.state}, not running healthy.`)
+  }
+  return warnings
+}
+
 // ----------------------------------------------------------------- driver
 
 export class VmTarget implements Target {
@@ -309,9 +376,25 @@ export class VmTarget implements Target {
     secret: 'stored in a 0600 file on the server, readable by its root and nextship users',
     plain: 'stored on the server, and already public in the browser',
     notice: 'These values leave your machine and are stored on your server, in a file only root and the nextship user can read.',
+    listedSecret: 'secret, readable only on the server',
+    listedPlain: 'public, compiled into the browser bundle',
+    removal: 'The value is deleted from the env file on the server, and nextship keeps no copy. Have one before you continue.',
+    unchanged: 'Every variable in this push is already set. This starts a new container with the file either way.',
   }
 
-  readonly storage: StorageWording = { reclaimWarning: null, heldUntilReclaimed: null }
+  readonly storage: StorageWording = {
+    reclaimWarning: null,
+    heldUntilReclaimed: null,
+    usage: 'used by Docker on the server, across every app and the build cache',
+  }
+
+  /** A server has no hostname of its own that could be mistaken for a custom domain. */
+  readonly platformSuffixes: string[] = []
+
+  readonly emptyLogs = [
+    'The running container has written nothing yet.',
+    'Earlier deployments keep their output in the journal: `nextship logs --deployment <id>`.',
+  ]
 
   readonly rollbackNotes = [
     'the current env file is used, not the one that deployment ran with: variables changed since then keep their new values',
@@ -719,7 +802,7 @@ export class VmTarget implements Target {
       // 30 s matches the time a request is allowed to finish: Next.js exits on
       // SIGTERM once in-flight responses and after() callbacks complete.
       await this.run(`docker stop -t 30 ${previous.map(q).join(' ')}`, 'stop the previous container')
-      onPhase(`stopped ${previous.join(', ')}, kept until its image is pruned`)
+      onPhase(`stopped ${previous.join(', ')}`)
     }
     const after = (await this.run(`docker inspect -f '{{.State.Running}}' ${q(container)}`, 'confirm the new container runs')).trim()
     if (after !== 'true') {
@@ -816,6 +899,20 @@ export class VmTarget implements Target {
    * removing an image frees its space at once, and nothing else reads it.
    */
   private async pruneBeyond(history: VmDeployment[], onPhase: PhaseReporter): Promise<void> {
+    // Every env change stops a container of the same image, so stopped containers
+    // would pile up even when no image is pruned. The newest stopped one is kept,
+    // the previous deployment, for anyone who wants to inspect it; its logs stay
+    // in the journal either way.
+    const stopped = (
+      await this.run(
+        `docker ps -a --filter label=sh.nextship.managed=true --filter ${q(`label=sh.nextship.app=${this.name}`)} --filter status=exited --format '{{.Names}}'`,
+        'list the stopped containers'
+      )
+    )
+      .split('\n')
+      .filter(Boolean)
+    if (stopped.length > 1) await this.run(`docker rm ${stopped.slice(1).map(q).join(' ')} > /dev/null`, 'remove old stopped containers')
+
     const keep = imagesToKeep(history, DEFAULT_KEEP)
     const images = await this.images(this.name)
     const remove = images.filter((image) => !image.tags.some((tag) => keep.has(tag)))
@@ -979,6 +1076,17 @@ export class VmTarget implements Target {
     await this.changeDomains(appId, (domains) => withoutDomain(domains, domain))
   }
 
+  async domainWarnings(_appId: string, domain: string): Promise<string[]> {
+    const expected = await serverAddress(this.server.host)
+    let resolved: string[] | null
+    try {
+      resolved = await resolve4(domain)
+    } catch {
+      resolved = null
+    }
+    return dnsWarnings(domain, resolved, expected)
+  }
+
   private async changeDomains(appId: string, change: (domains: SiteDomain[]) => SiteDomain[]): Promise<void> {
     await this.lock()
     try {
@@ -1087,6 +1195,30 @@ export class VmTarget implements Target {
     return this.run(`docker logs --tail 500 ${q(await this.liveContainer())} 2>&1`, 'read the logs')
   }
 
+  /**
+   * Plans and listings name a deployment by its image tag, so that is accepted
+   * as well as a deployment id, and means the newest deployment of that image.
+   */
+  async deploymentLogs(appId: string, deploymentId: string): Promise<string> {
+    await this.appRecord(appId)
+    const history = await this.readDeployments()
+    const entry = history.find((record) => record.id === deploymentId) ?? history.find((record) => record.imageTag === deploymentId)
+    if (!entry) {
+      throw new NextshipError(
+        `Deployment ${deploymentId} is not in this app's history.`,
+        'Run `nextship rollback` or `nextship images` to see the deployments on record.'
+      )
+    }
+    deploymentId = entry.id
+    // Docker's journald driver records the container name on every entry, so a
+    // replaced deployment's output is still there until the journal rotates it
+    // out, which server setup limits to 500M.
+    return this.run(
+      `journalctl ${q(`CONTAINER_NAME=${this.name}-${assertDeploymentId(deploymentId)}`)} -o cat --no-pager -n 1000`,
+      'read the deployment\'s logs from the journal'
+    )
+  }
+
   async followLogs(appId: string, write: (text: string) => void, signal: AbortSignal): Promise<string | null> {
     await this.appRecord(appId)
     const container = await this.liveContainer()
@@ -1097,7 +1229,114 @@ export class VmTarget implements Target {
       : `The log stream ended with exit code ${code}. Run the command again to reconnect.`
   }
 
+  // ---------------------------------------------------------------- status
+
+  async status(): Promise<ServerStatus> {
+    const server = parseStatusLines(
+      await this.run(
+        [
+          '. /etc/os-release; echo "os=$PRETTY_NAME"',
+          'echo "arch=$(uname -m)"',
+          'echo "uptime=$(uptime -p)"',
+          'if [ -f /var/run/reboot-required ]; then echo reboot=yes; else echo reboot=no; fi',
+          "echo \"load=$(cut -d ' ' -f 1-3 /proc/loadavg)\"",
+          "awk '/^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 } END { print \"mem=\" int(t / 1024) \" \" int(a / 1024) }' /proc/meminfo",
+          "df -Pk / | awk 'NR == 2 { print \"disk=\" int($2 / 1024) \" \" int($4 / 1024) }'",
+          "echo \"docker=$(docker version --format '{{.Server.Version}}')\"",
+          "echo \"caddy=$(docker exec nextship-caddy caddy version 2> /dev/null | cut -d ' ' -f 1)\"",
+          `echo "setup=$(sed -n 's/.*"setupVersion":\\([0-9]*\\).*/\\1/p' ${ETC}/server.json 2> /dev/null)"`,
+          "docker ps --format 'port={{.Names}} {{.Ports}}'",
+        ].join('; '),
+        'read the server status'
+      )
+    )
+    const one = (key: string): string => server.get(key)?.[0] ?? ''
+    const [memTotal, memAvailable] = one('mem').split(' ').map(Number)
+    const [diskTotal, diskFree] = one('disk').split(' ').map(Number)
+
+    const apps: AppStatus[] = []
+    const listing = await this.run(
+      `for d in ${ETC}/apps/*/; do [ -f "$d/app.json" ] || continue; echo "app=$(cat "$d/app.json")"; echo "deployments=$(tr -d '\n' < "$d/deployments.json" 2> /dev/null)"; done; true`,
+      'list the apps on the server'
+    )
+    const records = parseStatusLines(listing)
+    const stats = parseStatusLines(
+      await this.run("docker stats --no-stream --format 'mem={{.Name}} {{.MemUsage}}'", 'read container memory')
+    )
+    for (const [index, raw] of (records.get('app') ?? []).entries()) {
+      const record = JSON.parse(raw) as AppRecord
+      const history = parseDeployments(records.get('deployments')?.[index] ?? '')
+      const live = history.find((entry) => entry.live) ?? null
+      const container = live ? `${record.name}-${live.id}` : null
+      let state = 'not deployed'
+      let restarts = 0
+      if (container) {
+        const inspected = await this.exec(
+          `docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}|{{.RestartCount}}' ${q(container)}`
+        )
+        const [stateText, count] = inspected.stdout.trim().split('|')
+        state = inspected.code === 0 ? stateText.trim() : 'missing'
+        restarts = Number(count) || 0
+      }
+      const memory = (stats.get('mem') ?? []).find((line) => line.startsWith(`${container} `))?.slice(`${container} `.length) ?? 'n/a'
+      const domains = await Promise.all(
+        (record.domains ?? []).map(async (entry) => {
+          const certificate = await certificateState(this.server.host, entry.domain)
+          return `${entry.domain} (${certificate.live ? 'certificate live' : certificate.detail})`
+        })
+      )
+      apps.push({ name: record.name, live: live?.id ?? null, state, restarts, memory, domains })
+    }
+
+    return {
+      os: one('os'),
+      arch: one('arch'),
+      uptime: one('uptime'),
+      rebootRequired: one('reboot') === 'yes',
+      load: one('load'),
+      memTotalMib: memTotal || 0,
+      memAvailableMib: memAvailable || 0,
+      diskTotalMib: diskTotal || 0,
+      diskFreeMib: diskFree || 0,
+      docker: one('docker'),
+      caddy: one('caddy'),
+      setupVersion: one('setup') ? Number(one('setup')) : null,
+      publishedPorts: (server.get('port') ?? [])
+        .filter((line) => !line.startsWith('nextship-caddy ') && line.includes('->'))
+        .map((line) => line.split(' ')[0]),
+      apps,
+    }
+  }
+
   // --------------------------------------------------------------- destroy
+
+  async destroyPlan(appId: string, options: { images: boolean; imageCount: number }): Promise<DestroyPlan> {
+    const address = await this.address(appId)
+    const domains = address?.domains ?? []
+    return {
+      lines: [
+        address?.platformUrl
+          ? `address    ${address.platformUrl} stops serving; the next app deployed to this server answers it`
+          : 'address    none, this app answers only on its domains',
+        ...domains.map((domain) => `domain     ${domain.domain} stops serving this app`),
+        `containers remove every container of this app, its cache volumes and ${this.appDir()}`,
+        options.images && options.imageCount > 0
+          ? `images     remove all ${options.imageCount} image(s) of this app from the server`
+          : options.images
+            ? 'images     none on the server, nothing to remove'
+            : 'images     kept on the server; run `nextship images prune --yes` first, or add --images, if you want them gone',
+        `server     kept, with Caddy and every other app on ${this.server.host}`,
+        'DNS        untouched, nextship did not create your records',
+      ],
+      warnings:
+        domains.length > 0
+          ? [
+              `The DNS records for ${domains.map((domain) => domain.domain).join(', ')} keep pointing at ${this.server.host}, ` +
+                "which stops serving this app on them: the server's default app, if any, answers them over plain HTTP. Remove or repoint them.",
+            ]
+          : [],
+    }
+  }
 
   async destroyApp(appId: string): Promise<void> {
     await this.lock()
@@ -1147,6 +1386,24 @@ async function canConnect(port: number): Promise<boolean> {
     })
     socket.once('error', () => resolve(false))
   })
+}
+
+/**
+ * What a `domain add` plan should warn about DNS. Only a warning: the record is
+ * often created after attaching, and Caddy retries the certificate once it
+ * resolves. But a domain that resolves somewhere else will never get one here.
+ */
+export function dnsWarnings(domain: string, resolved: string[] | null, expected: string): string[] {
+  if (resolved === null || resolved.length === 0) {
+    return [`${domain} does not resolve yet. Caddy cannot get a certificate for it until an A record points at ${expected}.`]
+  }
+  if (!resolved.includes(expected)) {
+    return [
+      `${domain} resolves to ${resolved.join(', ')}, not to this server (${expected}). ` +
+        `Caddy cannot get a certificate for it until the record is changed. If a proxy such as Cloudflare sits in front, that is expected; see ${docsUrl('vm.md')}.`,
+    ]
+  }
+  return []
 }
 
 /** The IPv4 address a DNS record should point at, resolving a hostname the server was added by. */

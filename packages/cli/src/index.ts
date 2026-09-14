@@ -22,7 +22,7 @@ import { listEnv, pushEnv, removeEnv } from './env.js'
 import { addDomain, listDomains, removeDomain, DEFAULT_MIN_TLS } from './domain.js'
 import { listImages, pruneImages, DEFAULT_KEEP } from './images.js'
 import { destroy } from './destroy.js'
-import { addServer, OPT_OUT_FLAGS } from './server.js'
+import { addServer, serverStatus, OPT_OUT_FLAGS } from './server.js'
 import { rollback } from './rollback.js'
 import { logs } from './logs.js'
 import { logoDepth, renderLogo } from './logo.js'
@@ -66,6 +66,7 @@ Usage
   nextship images prune  Remove old images, keeping the recent ones
   nextship destroy <name>  Destroy the app this project created
   nextship server add <user@host[:port]>  Prepare a Linux server and record it as this project's target
+  nextship server status  The server, every app on it, and what needs attention
 
 Options
   -h, --help          Show this message
@@ -93,6 +94,7 @@ Rollback options
 
 Log options
   --follow            Stream new output as it arrives instead of printing a snapshot
+  --deployment <id>   vm target: the logs of one deployment, including a replaced one
 
 Env options
   --yes               Execute the plan. Without it, env only prints the plan
@@ -352,9 +354,13 @@ async function runEnv(argv: string[]): Promise<void> {
 }
 
 async function runLogs(argv: string[]): Promise<void> {
-  const flags = parseFlags(argv, ['follow'])
+  const flags = parseFlags(argv, ['follow', 'deployment'])
+  const deployment = stringFlag(flags, 'deployment')
+  if (deployment && flags.get('follow') === true) {
+    throw new NextshipError('--follow and --deployment cannot be combined.', 'A replaced deployment writes nothing new. Use one or the other.')
+  }
   const project = await detectProject(process.cwd())
-  await logs(project, { follow: flags.get('follow') === true })
+  await logs(project, { follow: flags.get('follow') === true, deployment })
 }
 
 /**
@@ -463,10 +469,14 @@ async function runDomain(argv: string[]): Promise<void> {
 /** `server add` takes the server address as its one argument. */
 async function runServer(argv: string[]): Promise<void> {
   const subcommand = argv.length > 0 && !argv[0].startsWith('--') ? argv[0] : null
+  if (subcommand === 'status') {
+    parseFlags(argv.slice(1), [])
+    return serverStatus(await detectProject(process.cwd()))
+  }
   if (subcommand !== 'add') {
     throw new NextshipError(
       subcommand === null ? 'No server subcommand was given.' : `Unknown server subcommand \`${subcommand}\`.`,
-      'Use `nextship server add <user@host>`.'
+      'Use `nextship server add <user@host>` or `nextship server status`.'
     )
   }
 

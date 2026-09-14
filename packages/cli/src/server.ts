@@ -30,6 +30,8 @@ import { readConfig, writeConfig, type ProjectConfig, type ServerRecord } from '
 import { MIN_DOCKER_MAJOR } from './docker.js'
 import { fingerprint, parseKeyLine, scanHostKey, type HostKey } from './targets/vm/host-key.js'
 import { Ssh, assertHost, assertUser, shellQuote } from './targets/vm/ssh.js'
+import { client } from './owned-app.js'
+import { statusWarnings, type VmTarget } from './targets/vm/vm-target.js'
 import { detail, ok, step, warn } from './util/log.js'
 
 /** The user every later command connects as. Created by the `user` step. */
@@ -219,6 +221,45 @@ export function setupCommand(user: string, port: number, args: string[]): string
   const run = ['env', ...environment, 'bash', '-s', '--', ...args].map(shellQuote).join(' ')
   // As root there may be no sudo at all, and nothing to gain from it.
   return user === 'root' ? run : `sudo -n ${run}`
+}
+
+// --------------------------------------------------------------- status
+
+/** `nextship server status`: the server, and every app on it, with what needs attention. */
+export async function serverStatus(project: ProjectInfo): Promise<void> {
+  const config = await readConfig(project.root)
+  if (config?.target !== 'vm') {
+    throw new NextshipError(
+      'This project does not deploy to a server.',
+      'Run `nextship server add user@host` first. `server status` reads the server recorded in nextship.json.'
+    )
+  }
+  const target = client(config) as VmTarget
+  const status = await target.status()
+  const gib = (mib: number): string => `${(mib / 1024).toFixed(1)} GB`
+
+  step(`Server ${config.server?.host}`)
+  detail(`os         ${status.os}, ${status.arch}, ${status.uptime}`)
+  detail(`reboot     ${status.rebootRequired ? 'REQUIRED to finish installing updates' : 'not required'}`)
+  detail(`load       ${status.load}`)
+  detail(`memory     ${status.memAvailableMib} MiB available of ${status.memTotalMib} MiB`)
+  detail(`disk       ${gib(status.diskFreeMib)} free of ${gib(status.diskTotalMib)}`)
+  detail(`docker     ${status.docker}`)
+  detail(`caddy      ${status.caddy || 'not running'}`)
+  detail(`setup      version ${status.setupVersion ?? 'unknown'}`)
+
+  step(`Apps on ${config.server?.host}`)
+  if (status.apps.length === 0) detail('none yet')
+  for (const app of status.apps) {
+    detail(`${app.name}${app.name === config.name ? '  (this project)' : ''}`)
+    detail(`  live       ${app.live ?? 'none'}`)
+    detail(`  container  ${app.state}, ${app.restarts} restart(s), memory ${app.memory}`)
+    detail(`  domains    ${app.domains.length > 0 ? app.domains.join(', ') : 'none'}`)
+  }
+
+  const warnings = statusWarnings(status, await setupVersion())
+  for (const warning of warnings) warn(warning)
+  if (warnings.length === 0) ok('Nothing needs attention.')
 }
 
 // --------------------------------------------------------------- command

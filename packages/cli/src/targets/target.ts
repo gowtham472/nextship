@@ -137,6 +137,8 @@ export interface StorageWording {
   reclaimWarning: string | null
   /** Printed when images are removed without reclaiming, or null when removal alone frees the space. */
   heldUntilReclaimed: string | null
+  /** What `storageBytes` measures, after the figure: "used in the registry, across every repository". */
+  usage: string
 }
 
 /** How `env push` describes where values end up. */
@@ -146,6 +148,21 @@ export interface EnvStorageWording {
   plain: string
   /** Warned once per push. */
   notice: string
+  /** How `nextship env` describes a stored variable, by whether it is secret. */
+  listedSecret: string
+  listedPlain: string
+  /** Warned before `env rm`, about getting a removed value back. */
+  removal: string
+  /** Warned when a push names only keys already set, about whether anything differs. */
+  unchanged: string
+}
+
+/** What `destroy` plans to remove and leave, in the target's terms. */
+export interface DestroyPlan {
+  /** Plan lines after the app line: addresses, domains, images, and what is kept. */
+  lines: string[]
+  /** Warnings after "This cannot be undone". */
+  warnings: string[]
 }
 
 /** What a deploy plan needs a driver to describe. */
@@ -349,6 +366,12 @@ export interface Target {
   /** Detaches a domain. DNS records are the owner's and are never touched. */
   detachDomain(appId: string, domain: string): Promise<void>
 
+  /** Hostnames the target manages itself, which cannot be attached as custom domains. */
+  readonly platformSuffixes: string[]
+
+  /** Anything a `domain add` plan should warn about for this domain before it is attached. */
+  domainWarnings(appId: string, domain: string): Promise<string[]>
+
   // ---------------------------------------------------------------- images
 
   /** Images in this project's repository, newest first. */
@@ -371,6 +394,15 @@ export interface Target {
   /** What the running container has buffered. */
   readLogs(appId: string): Promise<string>
 
+  /** Printed when `readLogs` returns nothing, saying what that does and does not mean on this target. */
+  readonly emptyLogs: string[]
+
+  /**
+   * The logs one deployment wrote, including a deployment that has been
+   * replaced. Refused where the target keeps no history.
+   */
+  deploymentLogs(appId: string, deploymentId: string): Promise<string>
+
   /**
    * Streams new output to `write` until `signal` aborts or the target ends the
    * stream. Resolves with a note to print when the target ended it, so a stream
@@ -383,4 +415,7 @@ export interface Target {
 
   /** Removes the app and everything the platform runs for it. */
   destroyApp(appId: string): Promise<void>
+
+  /** What destroying the app removes and keeps, for the plan. `imageCount` is how many images `--images` would remove. */
+  destroyPlan(appId: string, options: { images: boolean; imageCount: number }): Promise<DestroyPlan>
 }

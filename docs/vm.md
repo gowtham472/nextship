@@ -77,3 +77,35 @@ does not protect any port you publish from another container yourself.
   owner, not to limit what that owner can do.
 - **What is never touched:** containers without nextship's labels, the Docker daemon's
   configuration, and DNS.
+
+## 5. Deploying and running an app
+
+`nextship deploy` builds on the server by default, through an SSH forward of its Docker
+socket, and switches Caddy to the new container only once it is healthy. See the README
+for the plan and the flags. What it keeps on the server:
+
+| Where | What |
+|---|---|
+| `/etc/nextship/apps/<name>/app.json` | The app's id and its domains. The id is what `nextship.json` records; a directory with another id is refused |
+| `/etc/nextship/apps/<name>/deployments.json` | The deployment history rollback chooses from |
+| `/etc/nextship/apps/<name>/env` | Runtime variables, mode 0600, in Docker's env file format |
+| `/etc/nextship/apps/<name>/secrets` | The Server Actions key, mode 0600 |
+| `/etc/nextship/caddy/sites/<name>.caddy` | The app's Caddy site, regenerated on every change |
+| `/etc/nextship/default-app` | The app that answers `http://<server>` |
+| Containers `<name>-r<time>-<random>` | One per deployment. The live one runs; the previous one is kept stopped |
+| Volumes `nextship-<name>-build-<image>`, `nextship-<name>-cache` | Regenerated ISR pages per image, optimized images and the fetch cache per app |
+
+`nextship server status` shows the server and every app on it, and says what needs
+attention.
+
+**Memory.** Each container is limited to an even share of 80% of the server's RAM across
+the apps on it at the time it starts, at least 256 MiB. `--memory` overrides it. Adding an
+app does not shrink the limits of containers already running until they are deployed
+again.
+
+**Recovering.** A container that exits is restarted by Docker. A container that stays up
+but stops answering its health check is restarted by the watchdog after three failed
+minutes, and the journal says so under `nextship-watchdog`. A lock left by a deployment
+that was killed is reported with its owner after 30 minutes and never removed
+automatically: confirm nothing is running, then remove
+`/etc/nextship/apps/<name>/lock` as the `nextship` user.

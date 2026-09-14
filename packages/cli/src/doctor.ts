@@ -80,7 +80,7 @@ export async function diagnose(project: ProjectInfo, target: TargetId): Promise<
   findings.push(...(await vercelConfigFindings(project.root, target)))
   findings.push(...(await sourceFindings(project.root, target)))
   findings.push(...(await undeclaredPackageFindings(project)))
-  findings.push(...runtimeFindings(project))
+  findings.push(...runtimeFindings(project, target))
 
   const order: Record<FindingLevel, number> = { blocker: 0, warning: 1, note: 2 }
   return findings.sort((a, b) => order[a.level] - order[b.level])
@@ -232,7 +232,7 @@ async function sourceFindings(root: string, target: TargetId): Promise<Finding[]
   return findings
 }
 
-function runtimeFindings(project: ProjectInfo): Finding[] {
+function runtimeFindings(project: ProjectInfo, target: TargetId): Finding[] {
   const findings: Finding[] = []
 
   if (!project.lockfile) {
@@ -245,13 +245,23 @@ function runtimeFindings(project: ProjectInfo): Finding[] {
     })
   }
 
-  findings.push({
-    level: 'note',
-    title: 'The ISR cache does not survive a restart',
-    consequence:
-      'Cached pages and optimized images live inside the container, so every restart or redeploy starts cold.',
-    action: `Expected for a single instance. See ${docsUrl('design.md', '12-known-limitations')}.`,
-  })
+  findings.push(
+    target === 'vm'
+      ? {
+          level: 'note',
+          title: 'Regenerated pages survive a restart, and a new build starts with its own',
+          consequence:
+            'On a server, ISR pages live in a volume per image and optimized images in a volume per app, so a restart keeps both. A deployment of a new build serves that build\'s own pages.',
+          action: `Expected. See ${docsUrl('vm.md')}.`,
+        }
+      : {
+          level: 'note',
+          title: 'The ISR cache does not survive a restart',
+          consequence:
+            'Cached pages and optimized images live inside the container, so every restart or redeploy starts cold.',
+          action: `Expected for a single instance. See ${docsUrl('design.md', '12-known-limitations')}.`,
+        }
+  )
 
   return findings
 }

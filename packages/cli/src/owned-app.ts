@@ -82,7 +82,11 @@ export function client(config: ProjectConfig | null, requested?: string): Target
       'Run `nextship deploy`, which records both.'
     )
   }
-  return new DigitalOceanTarget(new DigitalOcean(token), { region: config.region, registry: config.registry })
+  return new DigitalOceanTarget(new DigitalOcean(token), {
+    region: config.region,
+    registry: config.registry,
+    name: config.name,
+  })
 }
 
 /**

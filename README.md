@@ -382,6 +382,7 @@ web 2026-09-08T09:08:32.233725936Z Ready in 0ms
 | Option | Default | Meaning |
 |---|---|---|
 | `--follow` | off | Stream new output as it arrives instead of printing a snapshot and exiting |
+| `--deployment <id>` | the running one | Server only: the logs of one deployment, including one that has been replaced. Takes a deployment id or the image tag plans show |
 
 Without `--follow` this is a snapshot: what the container has buffered, then it exits.
 With `--follow` it streams until you press Ctrl+C, which stops it cleanly rather than
@@ -392,6 +393,10 @@ deployment that has been replaced takes its output with it. When there is nothin
 buffered, `logs` says so rather than implying the app printed nothing. Retaining
 history means forwarding to an external service, which is not built: it needs a
 destination and credentials that are yours to choose, so nextship would be guessing.
+
+On a server, containers log to the journal, so history is kept:
+`nextship logs --deployment dpl-1a2b3c4d5e6f-0a1b2c3d` reads a replaced deployment's
+output until the journal, limited to 500M by `server add`, rotates it out.
 
 ### `nextship env`
 
@@ -652,6 +657,45 @@ in as `nextship` controls the server.
 
 Then `nextship deploy` deploys to that server. See [Deploying to a server](#deploying-to-a-server).
 
+### Day-two commands on a server
+
+`env`, `domain`, `images`, `logs`, `rollback` and `destroy` work on a server project with
+the same flags and plans, and differ where a server does:
+
+| Command | On a server |
+|---|---|
+| `env push`, `env rm` | Rewrite `/etc/nextship/apps/<name>/env` (mode 0600) over SSH stdin, then start the live image again with the zero-downtime sequence. Values are readable by the server's root and `nextship` users, and the plan says so. A value with a line break is refused |
+| `domain add` | Records the domain, regenerates the app's Caddy site (validated, restored if the reload fails), and prints an `A` record for the server's address, plus an `AAAA` note when the server has IPv6. The plan warns when the domain does not resolve to the server yet. Caddy requests the certificate once it does, and `nextship domain` reports it live only when the server presents a valid certificate for it |
+| `images`, `images prune` | Images on the server, removed with their stopped containers and cache volumes; the live one is always kept. After every successful deployment images beyond the newest five served deployments are pruned automatically, since removing an image frees its space at once. `--gc` trims Docker's build cache to 5 GB |
+| `destroy` | Removes the app's containers, volumes, Caddy site and `/etc/nextship/apps/<name>`, and with `--images` its images. The server, Caddy, every other app and DNS are kept |
+| `deploy` | Refuses when the server has under 3 GB free, naming `images prune` and `server status` |
+
+### `nextship server status`
+
+Reports the server and every app on it, from any project recorded on that server.
+
+```
+> Server 203.0.113.10
+  os         Ubuntu 24.04.4 LTS, aarch64, up 1 hour, 6 minutes
+  reboot     not required
+  load       0.50 0.76 0.74
+  memory     6124 MiB available of 7836 MiB
+  disk       821.1 GB free of 910.7 GB
+  docker     29.8.0
+  caddy      v2.10.2
+  setup      version 1
+> Apps on 203.0.113.10
+  acme-web  (this project)
+    live       r20260914-193222-9696df
+    container  running healthy, 0 restart(s), memory 110.2MiB / 6.121GiB
+    domains    app.example.com (certificate live)
+v Nothing needs attention.
+```
+
+It warns when the server has under 3 GB free, when a container other than Caddy publishes
+a port (which Docker opens past ufw), when setup is older than this nextship's, when a
+reboot is needed, and when a live app is not running healthy.
+
 ### Planned
 
 v1.0 is complete. Next is v1.1, one target for any Ubuntu or Debian server reached over SSH,
@@ -851,10 +895,12 @@ The full table with consequences and status is
 [`docs/design.md`](./docs/design.md) §12. The ones worth knowing before you
 deploy:
 
-- **The ISR cache does not survive a restart.** It lives inside the container, so
-  every restart, redeploy and rescheduling starts cold. Optimized images share that
-  directory and are re-generated too. Single-instance ISR is correct per process,
-  which is not the same as durable.
+- **On App Platform, the ISR cache does not survive a restart.** It lives inside the
+  container, so every restart, redeploy and rescheduling starts cold. Optimized images
+  share that directory and are re-generated too. Single-instance ISR is correct per
+  process, which is not the same as durable. On a server it does survive: regenerated
+  pages are kept in a volume per image and optimized images in a volume per app, so a
+  restart keeps both and a new build starts with its own pages.
 - **App Platform's CDN keeps fully static pages.** Next.js marks a page with no
   revalidate time cacheable for a year, and App Platform's Cloudflare edge honours it, so
   `revalidatePath` and `revalidateTag` update the container while visitors keep the old
@@ -867,9 +913,22 @@ deploy:
   makes it relative. Any other absolute URL built from it does not, such as a link in a
   response body or a callback URL handed to an OAuth provider: build those from your
   site's configured URL instead.
-- **Logs are not history.** `--follow` streams live output, but a replaced deployment
-  still takes its past output with it. Retaining it needs forwarding to an external
-  service, which is not built.
+- **On App Platform, logs are not history.** `--follow` streams live output, but a
+  replaced deployment still takes its past output with it. Retaining it needs forwarding
+  to an external service, which is not built. On a server, output goes to the journal, so
+  `logs --deployment` reads a replaced deployment's logs until the journal's 500M limit
+  rotates them out.
+- **A server is one server.** No failover: if it is down, every app on it is down. There
+  is no CDN in front unless you add one, the operating system is yours to keep patched
+  and rebooted, and backups are yours. The `nextship` user is root-equivalent. See
+  [`docs/vm.md`](./docs/vm.md).
+- **On a server, rollback uses the current env file.** Rolling back code does not roll
+  back a variable changed since, which App Platform does.
+- **On a server, only the first app deployed answers `http://<server>`.** Every other app
+  answers only on the domains attached to it.
+- **A server's env file cannot hold a value with a line break.** Docker reads it one line
+  per variable, so `env push` refuses such a value rather than truncating it. Encode it,
+  for example as base64.
 - **Two changes written in the same instant can both be accepted.** Every command that
   changes the app refuses while a deployment is in progress, but two that write at
   exactly the same moment can both pass that check, and App Platform then keeps the

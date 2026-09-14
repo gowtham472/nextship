@@ -32,27 +32,31 @@ function rejects(run: () => unknown, fragment: string): void {
 
 // ------------------------------------------------------------------ validation
 
+// What the DigitalOcean driver refuses; each driver names its own.
+const SUFFIXES = ['.ondigitalocean.app', '.awsapprunner.com', '.amazonaws.com']
+
 test('a hostname is accepted', () => {
-  validateDomain('app.example.com')
-  validateDomain('example.com')
+  validateDomain('app.example.com', SUFFIXES)
+  validateDomain('example.com', SUFFIXES)
 })
 
 test('a pasted URL is rejected by name, because it is the common mistake', () => {
-  rejects(() => validateDomain('https://preview.example.com'), 'looks like a URL')
-  rejects(() => validateDomain('preview.example.com/path'), 'looks like a URL')
+  rejects(() => validateDomain('https://preview.example.com', SUFFIXES), 'looks like a URL')
+  rejects(() => validateDomain('preview.example.com/path', SUFFIXES), 'looks like a URL')
 })
 
-test('a platform domain is refused, whichever target it belongs to', () => {
-  rejects(() => validateDomain('acme-web-a1b2c.ondigitalocean.app'), 'platform domain')
-  rejects(() => validateDomain('abc123.awsapprunner.com'), 'platform domain')
+test('a domain the target names as its own is refused', () => {
+  rejects(() => validateDomain('acme-web-a1b2c.ondigitalocean.app', SUFFIXES), 'platform domain')
+  rejects(() => validateDomain('abc123.awsapprunner.com', SUFFIXES), 'platform domain')
+  validateDomain('acme-web-a1b2c.ondigitalocean.app', [])
 })
 
 test('malformed names are refused', () => {
-  rejects(() => validateDomain('no-dots'), 'not a valid domain')
-  rejects(() => validateDomain('-leading.example.com'), 'not a valid domain')
-  rejects(() => validateDomain('spaces in.example.com'), 'not a valid domain')
-  rejects(() => validateDomain(' preview.example.com'), 'whitespace')
-  rejects(() => validateDomain(''), 'empty')
+  rejects(() => validateDomain('no-dots', SUFFIXES), 'not a valid domain')
+  rejects(() => validateDomain('-leading.example.com', SUFFIXES), 'not a valid domain')
+  rejects(() => validateDomain('spaces in.example.com', SUFFIXES), 'not a valid domain')
+  rejects(() => validateDomain(' preview.example.com', SUFFIXES), 'whitespace')
+  rejects(() => validateDomain('', SUFFIXES), 'empty')
 })
 
 // ----------------------------------------------------------------------- add

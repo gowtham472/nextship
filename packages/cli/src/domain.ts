@@ -33,13 +33,6 @@ export const DEFAULT_MIN_TLS = '1.2'
 
 const ALLOWED_TLS = new Set(['1.2', '1.3'])
 
-/**
- * Domains the targets manage themselves, which cannot be attached as custom ones.
- *
- * Listed here rather than asked of the driver because it is a check on what the
- * user typed, made before any request is sent.
- */
-const PLATFORM_SUFFIXES = ['.ondigitalocean.app', '.awsapprunner.com', '.amazonaws.com']
 
 export interface AddDomainOptions {
   confirmed: boolean
@@ -63,7 +56,7 @@ export interface RemoveDomainOptions {
  * message describes a spec field rather than the thing the user typed. A URL
  * pasted instead of a hostname is the common case and deserves to be named.
  */
-export function validateDomain(domain: string): void {
+export function validateDomain(domain: string, platformSuffixes: string[]): void {
   if (domain !== domain.trim() || domain.length === 0) {
     throw new NextshipError('The domain is empty or has surrounding whitespace.', 'Pass the hostname on its own.')
   }
@@ -73,7 +66,7 @@ export function validateDomain(domain: string): void {
       'Pass just the hostname, for example preview.example.com.'
     )
   }
-  if (PLATFORM_SUFFIXES.some((suffix) => domain.endsWith(suffix))) {
+  if (platformSuffixes.some((suffix) => domain.endsWith(suffix))) {
     throw new NextshipError(
       `${domain} is a platform domain, which the target manages itself.`,
       'It always works and cannot be attached. Add a domain you own instead.'
@@ -96,7 +89,11 @@ export async function listDomains(project: ProjectInfo): Promise<void> {
   const configured = address?.domains ?? []
 
   step(`Domains for ${app.name}`)
-  detail(`platform   ${address?.platformHost ?? 'unknown'}  (always works, managed by ${app.target.displayName})`)
+  detail(
+    address === null || address.platformHost !== null
+      ? `platform   ${address?.platformHost ?? 'unknown'}  (always works, managed by ${app.target.displayName})`
+      : 'platform   none: this app answers only on the domains attached to it'
+  )
 
   if (configured.length === 0) {
     detail('No custom domain is attached.')
@@ -113,7 +110,6 @@ export async function listDomains(project: ProjectInfo): Promise<void> {
 
 /** Attaches a domain to the app and prints the DNS record to create. */
 export async function addDomain(project: ProjectInfo, options: AddDomainOptions): Promise<void> {
-  validateDomain(options.domain)
   if (!ALLOWED_TLS.has(options.minimumTls)) {
     throw new NextshipError(
       `Minimum TLS version "${options.minimumTls}" is not supported.`,
@@ -122,6 +118,7 @@ export async function addDomain(project: ProjectInfo, options: AddDomainOptions)
   }
 
   const app = await ownedApp(project)
+  validateDomain(options.domain, app.target.platformSuffixes)
   const address = await app.target.address(app.appId)
   const existing = address?.domains ?? []
   // The first custom domain becomes primary whatever is asked for, so the plan
@@ -143,6 +140,7 @@ export async function addDomain(project: ProjectInfo, options: AddDomainOptions)
   if (demoted) detail(`demoting   ${demoted.domain} from primary to alias`)
   detail(`keeping    ${existing.length} domain(s) already attached`)
   detail('nextship does not change DNS; the record below is yours to create')
+  for (const warning of await app.target.domainWarnings(app.appId, options.domain)) warn(warning)
 
   if (!options.confirmed) {
     ok('This was a plan only. Nothing changed.')
