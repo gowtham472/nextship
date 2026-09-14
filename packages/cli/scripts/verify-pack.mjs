@@ -23,8 +23,11 @@ import { fileURLToPath } from 'node:url'
 const packageRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const manifest = JSON.parse(readFileSync(path.join(packageRoot, 'package.json'), 'utf8'))
 
-/** The adapter is copied into every build; the rest are the README and what Apache-2.0 requires. */
-const REQUIRED = ['runtime/adapter.mjs', 'README.md', 'LICENSE', 'NOTICE']
+/**
+ * The adapter is copied into every build, and `server add` sends the two VM
+ * scripts to the server; the rest are the README and what Apache-2.0 requires.
+ */
+const REQUIRED = ['runtime/adapter.mjs', 'runtime/vm/setup.sh', 'runtime/vm/watchdog.sh', 'README.md', 'LICENSE', 'NOTICE']
 
 const fail = (message) => {
   throw new Error(message)

@@ -80,6 +80,7 @@ so the next target, any Linux server over SSH, follows as v1.1.
 | **Docker 23 or newer** | Every build runs inside BuildKit, so nothing is compiled on your machine | Yes. nextship queries the daemon and refuses older versions by name |
 | **Next.js 16.2 or newer** | The Deployment Adapter API became stable in 16.2 | Yes, with the reason in the error |
 | **A DigitalOcean API token** | Only for the commands that read or change your account | Yes, the error names the variable |
+| **For a server:** an OpenSSH client, and an Ubuntu 22.04, Ubuntu 24.04 or Debian 12 server you can reach as root or as a user with passwordless sudo | `server add` runs setup over SSH as root | Yes. `server add` refuses any other distribution, under 1 GB of RAM, under 5 GB of free disk, or with ports 80 or 443 already in use, and names which |
 
 Docker must be running. The local commands need nothing else.
 
@@ -566,6 +567,52 @@ warns about this by name before it runs.
 Afterwards `nextship.json` keeps your settings but no longer records an app, so the
 next `deploy` creates a fresh one rather than refusing.
 
+### `nextship server add <user@host[:port]>`
+
+Prepares a Linux server to run this project and records it in `nextship.json` as the
+project's target. It works on any Ubuntu 22.04, Ubuntu 24.04 or Debian 12 server you can
+SSH into: a Hetzner or Hostinger VPS, a DigitalOcean Droplet, EC2, Compute Engine, an
+Azure VM or your own hardware.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--yes` | off | Execute the plan. Without it, `server add` only prints the plan |
+| `--no-firewall` | off | Leave ufw as it is |
+| `--no-auto-updates` | off | Do not enable unattended security updates |
+| `--no-swap` | off | Do not add a 2 GB swap file on a server with under 4 GB of RAM |
+| `--no-ssh-hardening` | off | Leave password logins and root login as they are |
+
+The plan shows the server's host key fingerprint before anything trusts it. Compare it
+with the one your provider shows. From then on the key is pinned in `nextship.json`, and a
+server presenting any other key is refused.
+
+```
+> Plan
+  server        root@203.0.113.10:22
+  host key      ssh-ed25519 SHA256:YrbhoPLtpPr48BI8g70C+hbCmMMSZBOCv009n/FJyiY, trusted from now on if you continue
+  os            ok     ubuntu 24.04
+  arch          ok     arm64
+  resources     ok     7836 MiB RAM, 1023 MiB swap, 827 GB free
+  ports         ok     80 and 443 are free for Caddy
+  docker        CHANGE install Docker CE from Docker's apt repository
+  user          CHANGE create the nextship user in the docker and systemd-journal groups
+  ...
+  ssh-hardening CHANGE turn off password logins and allow root by key only
+```
+
+With `--yes` it installs Docker CE if the server has none, creates a `nextship` user and
+proves a login as that user from your machine, runs Caddy on ports 80 and 443, limits the
+journal, enables security updates and ufw, installs a watchdog for containers that stay
+unhealthy, and turns off SSH password logins last. Every later command connects as
+`nextship`. Running it again against a server that is set up changes nothing; running it
+from a second project records the same server for that project. Each step is described in
+[`docs/vm.md`](./docs/vm.md).
+
+Membership of the `docker` group is root-equivalent, and the plan says so: whoever can log
+in as `nextship` controls the server.
+
+Deploying to a server is not built yet. It is the next phase of v1.1.
+
 ### Planned
 
 v1.0 is complete. Next is v1.1, one target for any Ubuntu or Debian server reached over SSH,
@@ -618,6 +665,21 @@ structural rather than advisory:
 - **Log proxy URLs are treated as secrets**, because they embed an access token. They
   never appear in output or in an error message.
 
+On a server:
+
+- **`server add` changes nothing without `--yes`**, and its plan lists every step that
+  would change.
+- **The host key is pinned.** Its fingerprint is shown before it is trusted, and every
+  later connection uses strict checking against the key in `nextship.json`. A changed key
+  is a hard error with instructions to re-verify it through your provider, never a prompt.
+- **SSH runs in batch mode, without passwords, through your own `ssh`.** nextship never
+  reads a private key, and no command string is interpreted by a shell on your machine.
+  Every value placed in a remote command is validated or quoted.
+- **You cannot be locked out by setup.** A login as the new `nextship` user is proven from
+  your machine before anything depends on it, and SSH hardening runs last, after that.
+- **Setup refuses rather than overrides.** An unsupported distribution, a Docker older than
+  23, too little memory or disk, or another process on ports 80 or 443 stops it by name.
+
 ## Configuration
 
 ### `nextship.json`
@@ -632,6 +694,24 @@ Written by `deploy`, committed to your repository, and holding no secrets:
   "name": "acme-web",
   "registry": "acme-registry",
   "appId": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+}
+```
+
+For a project on a server, `server add` writes version 2 of the file, with the server and
+its pinned host key. A DigitalOcean project stays at version 1:
+
+```json
+{
+  "version": 2,
+  "target": "vm",
+  "name": "acme-web",
+  "server": {
+    "host": "203.0.113.10",
+    "port": 22,
+    "user": "nextship",
+    "hostKey": "203.0.113.10 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOAcvH/9nWZZCMAtztAmv9Rm8tknstGlFBaWtrS+QjI1",
+    "arch": "arm64"
+  }
 }
 ```
 
@@ -665,6 +745,24 @@ nextship.json             committed, no secrets
 ```
 
 Nothing else in your project is modified. `next.config.js` is never touched.
+
+On a server, `server add` creates:
+
+```
+/etc/nextship/                          owned by nextship, mode 0700
+  server.json                           the setup version that last ran
+  apps/                                 one directory per app, written by deploy
+  caddy/Caddyfile                       imports sites/*.caddy
+  caddy/sites/                          one Caddy site per app
+/usr/local/lib/nextship/watchdog.sh     restarts containers unhealthy for 3 checks in a row
+/etc/systemd/system/nextship-watchdog.* the timer that runs it every minute
+/etc/systemd/journald.conf.d/nextship.conf   SystemMaxUse=500M, only if no limit was set
+/etc/ssh/sshd_config.d/10-nextship.conf      unless --no-ssh-hardening
+/etc/apt/apt.conf.d/20auto-upgrades          unless --no-auto-updates
+/swapfile                                    2 GB, only under 4 GB of RAM, unless --no-swap
+user nextship, Docker network nextship, container nextship-caddy,
+volumes nextship-caddy-data and nextship-caddy-config
+```
 
 `secrets.local.json` is not committed, so another machine or a CI runner will generate
 a different key and break Server Actions for clients served by builds from here.

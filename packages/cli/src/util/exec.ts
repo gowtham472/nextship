@@ -143,3 +143,56 @@ function signalExitCode(signal: NodeJS.Signals | null): number {
   const numbers: Partial<Record<NodeJS.Signals, number>> = { SIGINT: 2, SIGTERM: 15, SIGKILL: 9, SIGHUP: 1 }
   return 128 + (signal ? (numbers[signal] ?? 0) : 0)
 }
+
+/**
+ * Runs `a | b` without a shell, and throws if either side fails.
+ *
+ * Used to stream an image into a server with `docker save | ssh docker load`.
+ * A shell pipeline reports only the last command's status by default, so a
+ * `docker save` that died half way through would look like a successful load of
+ * a truncated image. Both exit codes are checked here, and the side that failed
+ * is the one named.
+ *
+ * When `b` exits early, `a` is writing into a closed pipe; that EPIPE is
+ * expected and is reported as `b`'s failure, which is the cause. A side killed
+ * by a signal, such as Ctrl+C reaching the whole process group, surfaces as
+ * 128 plus the signal number, the same as `run`.
+ */
+export async function pipeline(
+  a: [string, string[]],
+  b: [string, string[]],
+  options: { cwd: string; env?: NodeJS.ProcessEnv }
+): Promise<void> {
+  const env = { ...process.env, ...options.env }
+  const first = spawn(a[0], a[1], { cwd: options.cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
+  const second = spawn(b[0], b[1], { cwd: options.cwd, env, stdio: ['pipe', 'inherit', 'pipe'] })
+
+  const collect = (child: ReturnType<typeof spawn>, other: ReturnType<typeof spawn>): Promise<{ code: number; stderr: string }> =>
+    new Promise((resolve, reject) => {
+      let stderr = ''
+      child.stderr?.on('data', (chunk: Buffer) => (stderr += chunk.toString()))
+      child.on('error', (error: NodeJS.ErrnoException) => {
+        // The other side would otherwise wait forever on a pipe nobody feeds or reads.
+        other.kill()
+        reject(describeSpawnFailure(String(child.spawnfile), error))
+      })
+      child.on('close', (exitCode, signal) => resolve({ code: exitCode ?? signalExitCode(signal), stderr }))
+    })
+
+  // A closed pipe on either end is a consequence of the other side exiting, and
+  // that side's own exit code carries the real cause.
+  first.stdout?.on('error', () => {})
+  second.stdin?.on('error', () => {})
+  first.stdout?.pipe(second.stdin as NodeJS.WritableStream)
+  // Once the receiver is gone nothing reads the sender's output, and a sender
+  // blocked on a full pipe never exits. Closing our end gives it EPIPE instead.
+  second.on('close', () => first.stdout?.destroy())
+
+  const [left, right] = await Promise.all([collect(first, second), collect(second, first)])
+
+  const describe = (side: [string, string[]], outcome: { code: number; stderr: string }) =>
+    `\`${[side[0], ...side[1]].join(' ')}\` exited with code ${outcome.code}: ${outcome.stderr.trim() || 'no output'}`
+
+  if (right.code !== 0) throw new NextshipError(describe(b, right), 'Check the error above. Nothing was changed on the receiving side.')
+  if (left.code !== 0) throw new NextshipError(describe(a, left), 'Check the error above. The receiving side may hold a partial result, which the next attempt replaces.')
+}
