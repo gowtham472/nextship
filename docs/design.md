@@ -574,7 +574,7 @@ allowed; `sshd -T` reported `passwordauthentication no`; a key swapped into `nex
 was refused with both fingerprints named. The same stand-in cannot exercise swap (a
 container may not `swapon`). Running it on real providers is on the v1.1 checklist.
 
-#### Server layout (Designed)
+#### Server layout (Implemented)
 
 `server add` records the server in `nextship.json`
 (version 2: `target: "vm"`, `server { host, port, user, hostKey, arch }`, `build`).
@@ -586,7 +586,9 @@ Everything nextship keeps on the server lives in a few places:
 | `/etc/nextship/apps/<name>/app.json` | `{ id, name, createdAt, domains }`: the ownership record. A directory whose id differs from `nextship.json` is refused, never adopted |
 | `/etc/nextship/apps/<name>/deployments.json` | Deployment history, newest first: `{ id, imageTag, createdAt, cause, served, live }` |
 | `/etc/nextship/apps/<name>/env`, `secrets` | Runtime variables and the Server Actions key, mode 0600, written from SSH stdin |
-| `/etc/nextship/apps/<name>/lock` | A directory created with `mkdir`, so two deployments cannot interleave |
+| `/etc/nextship/apps/<name>/lock` | A directory created with `mkdir`, so two deployments cannot interleave, holding an owner file |
+| `/etc/nextship/default-app` | The app that answers `http://<server>`: the first one to deploy |
+| Volumes `nextship-<name>-build-<image>`, `nextship-<name>-cache` | What Next.js writes at runtime, kept across restarts (below) |
 | `/etc/nextship/caddy/sites/<name>.caddy` | The Caddy site for the app |
 | Docker network `nextship` | Caddy and every app container; no app publishes a port |
 | Container `nextship-caddy` | Caddy 2 on ports 80 and 443, certificates in named volumes so they are not reissued |
@@ -595,7 +597,7 @@ The server runs a `nextship` user in the `docker` group. **Membership of the `do
 group is root-equivalent**, and the docs say so rather than implying the user is
 unprivileged.
 
-#### Build and delivery (Designed)
+#### Build and delivery (Implemented)
 
 The default build mode is **remote**: the image is built by the server's own Docker daemon,
 reached through `ssh -L` forwarding a local socket to `/var/run/docker.sock`. That keeps the
@@ -603,9 +605,19 @@ pinned host key in force, which `DOCKER_HOST=ssh://` would bypass, builds for th
 own architecture natively, and sends only the build context rather than a finished image.
 A server under 2 GB of RAM is refused for remote builds with `--build local` as the action.
 `--build local` builds here for the server's platform and streams
-`docker save | ssh docker load`.
+`docker save | ssh docker load`, checking both exit codes so a sender that died part way
+cannot pass as a successful load. On a shared daemon the Next.js build cache is named by
+the app and server rather than by this machine's path, so a laptop and a CI runner warm
+one cache there.
 
-#### Release sequence (Designed)
+The Server Actions key lives on the server (`secrets`), so every machine that deploys
+builds with the same one. The decision is a table, tested row by row in
+`targets/vm/actions-key.ts`: `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` wins, with a warning when
+it differs from the server's; the server's key is used when this machine has no local
+file; a local key the server lacks is uploaded rather than replaced; different keys on
+both sides are refused; with none anywhere, one is generated and stored only on the server.
+
+#### Release sequence (Implemented)
 
 1. Take the app lock. A lock older than 30 minutes is reported, never broken automatically.
 2. Create `app.json` on a first deployment, or verify its id matches.
@@ -620,7 +632,47 @@ A server under 2 GB of RAM is refused for remote builds with `--build local` as 
    `deployments.json`.
 
 Rollback runs steps 3 to 6 with an earlier deployment's image. **It uses the current env
-file**, which differs from App Platform, where a rollback restores the old spec.
+file**, which differs from App Platform, where a rollback restores the old spec. `env push`,
+`env rm` and a domain change run the same sequence with the live image. After a deployment
+goes live, images beyond the newest five served deployments are removed with their
+stopped containers, which is safe on a server where removing an image frees its space at
+once.
+
+Two details were decided by what went wrong. Docker's restart policy restarts a container
+that exits on start in a loop, reported as `restarting` rather than `exited`, so that
+status fails a deployment at once instead of waiting for its health check to give up. And
+the previous containers are listed by name: an early version listed them with
+`docker ps -q --format '{{.Names}}'`, where `-q` prints ids, and stopped the new container
+along with the old one. The listing is a tested function now, and the new container is
+confirmed running after the old ones stop.
+
+Measured against the local stand-in with the streaming fixture, arm64, Docker 29.8.0:
+`measure.mjs` through Caddy, first byte 66 ms against a 2067 ms total; `/edge` answered
+from the Edge runtime; a new build deployed while `/` was requested every 100 ms returned
+153 of 153 responses 200, and 249 of 249 in a second run with two second `/stream`
+responses open across the switch, all 63 complete; a build whose server exits on start
+failed its deployment while 123 of 123 requests to the previous one returned 200; and
+`rollback --yes` moved Caddy to a new container of the previous image. A warm remote
+build and deployment took 16.5 s; `--build local` from an M3 Max took 60 s.
+
+#### Runtime writes (Implemented)
+
+Measured with `docker diff` in a deployed container after exercising each feature:
+time-based and on-demand ISR rewrite prerendered files under `.next/server/app`
+(`isr.html`, `isr.rsc`, `isr.meta` and the segment files), the image optimizer writes
+`.next/cache/images`, and `after()` writes nothing. So two named volumes are mounted:
+
+| Volume | Mounted at | Why |
+|---|---|---|
+| `nextship-<name>-build-<image>` | `.next` | Regenerated pages sit beside the build's own files and are valid only for that build. Per image, so a new build never serves an old one's pages, while a restart, an env change or a rollback to that image keeps them. Removed with its image |
+| `nextship-<name>-cache` | `.next/cache` | Optimized images and the fetch cache, shared across deployments as Next.js shares `.next/cache` across builds |
+
+Named volumes rather than bind mounts, because Docker fills an empty named volume from the
+image with the image's ownership, and the image's `app` user has no fixed uid.
+`.next/cache/images` is not mounted directly: it does not exist in the image, so its volume
+would be owned by root. After a restart with both volumes, a page regenerated by
+`revalidatePath` kept its content, the optimized image stayed cached, and `docker diff`
+reported no writes to the container layer.
 
 #### Security (Implemented for SSH and setup)
 

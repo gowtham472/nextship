@@ -17,6 +17,26 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   23, too little memory or disk, and anything else on ports 80 or 443, by name. A second
   run changes nothing. Verified against a local Ubuntu 24.04 arm64 stand-in over SSH, from
   a fresh install and again with the CI flags; not yet on a provider. (Ragul D)
+- **`nextship deploy` to a server.** For a project `server add` recorded, a deployment
+  starts a new container with no published port, waits for Docker to report it healthy,
+  points Caddy at it (validated first, restored if the reload fails), then stops the
+  previous one. A deployment that fails leaves the previous one serving and prints the new
+  container's last log lines. `--build remote` (the default) builds on the server's Docker
+  through an SSH forward that keeps the pinned host key; `--build local` builds here and
+  streams the image over SSH. `--memory` sets the container limit. Checked on the local
+  stand-in: streaming through Caddy with first byte 66 ms against 2067 ms, no failed request
+  in 249 during a deployment with two second streams open across the switch, a build whose
+  server exits on start refused while the previous one kept serving, and rollback. (Ragul D)
+- **The Server Actions key lives on the server for a VM project,** so a laptop and a CI
+  runner build with the same key. A local key is uploaded rather than replaced, and a
+  server and local file that disagree are refused rather than one being chosen. (Ragul D)
+- **`rollback` on a server** starts an earlier deployment's image again through the same
+  sequence, and its plan says the current env file is used. (Ragul D)
+- **What Next.js writes at runtime survives a restart on a server.** Measured with
+  `docker diff`: ISR rewrites files under `.next/server/app`, the image optimizer writes
+  `.next/cache/images`. A per-image volume over `.next` and a per-app volume over
+  `.next/cache` keep both; after a restart a revalidated page and an optimized image were
+  still served from them. (Ragul D)
 - **An SSH layer that pins the host key.** Connections use the system `ssh` in batch mode
   with no passwords and strict checking against the key recorded in `nextship.json`, so a
   changed key is a hard error that says how to re-verify it. Values placed in a remote

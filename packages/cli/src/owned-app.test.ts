@@ -55,3 +55,22 @@ test('--target that disagrees with nextship.json is refused', () => {
     (error: unknown) => error instanceof NextshipError && /deploys to digitalocean/.test(error.message)
   )
 })
+
+test('a vm project gets the vm driver and never asks for a DigitalOcean token', () => {
+  const vm: ProjectConfig = {
+    version: 2,
+    target: 'vm',
+    name: 'demo',
+    server: { host: '203.0.113.10', port: 22, user: 'nextship', hostKey: '203.0.113.10 ssh-ed25519 AAAA', arch: 'arm64' },
+  }
+  const target = withToken(undefined, () => client(vm))
+  assert.equal(target.id, 'vm')
+  assert.equal(target.appScope, 'on this server')
+})
+
+test('--target vm with no server on record says to add one', () => {
+  assert.throws(
+    () => withToken(undefined, () => client(null, 'vm')),
+    (error: unknown) => error instanceof NextshipError && /server add/.test(error.action)
+  )
+})

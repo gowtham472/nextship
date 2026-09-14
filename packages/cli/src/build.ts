@@ -46,11 +46,19 @@ export interface BuildResult {
   placement: BuildPlacement
 }
 
-export async function buildProject(project: ProjectInfo, placement: BuildPlacement): Promise<BuildResult> {
+/**
+ * `serverKey` is the Server Actions key a target holds for the app, which takes
+ * the place of the local key file when given. See `Target.actionsKey`.
+ */
+export async function buildProject(
+  project: ProjectInfo,
+  placement: BuildPlacement,
+  serverKey: string | null
+): Promise<BuildResult> {
   await assertDockerAvailable(placement)
 
   const context = await prepareContext(project)
-  const encryptionKey = await resolveEncryptionKey(project.root)
+  const encryptionKey = serverKey ?? (await resolveEncryptionKey(project.root))
   const digest = await computeDigest(project, context, encryptionKey)
   const { deploymentId, ephemeral } = await resolveDeploymentId(project.root, digest)
   const identity: BuildIdentity = {
@@ -124,6 +132,11 @@ export async function resolveEncryptionKey(root: string): Promise<string> {
       'NEXT_SERVER_ACTIONS_ENCRYPTION_KEY wherever else you build.'
   )
   return generated
+}
+
+/** The key in the local file, or null when there is none. A file that exists but cannot be read throws. */
+export async function storedEncryptionKey(root: string): Promise<string | null> {
+  return readStoredKey(path.join(root, SECRETS_FILE))
 }
 
 /**

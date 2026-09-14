@@ -16,7 +16,8 @@ import { packageImage } from './packaging.js'
 import { runImage } from './run.js'
 import { diagnose, type Finding } from './doctor.js'
 import { deploy } from './deploy.js'
-import { readConfig } from './config.js'
+import { closeTargets } from './owned-app.js'
+import { readConfig, type BuildMode } from './config.js'
 import { listEnv, pushEnv, removeEnv } from './env.js'
 import { addDomain, listDomains, removeDomain, DEFAULT_MIN_TLS } from './domain.js'
 import { listImages, pruneImages, DEFAULT_KEEP } from './images.js'
@@ -72,12 +73,19 @@ Options
 
 Deploy options
   --yes               Execute the plan. Without it, deploy only prints the plan
-  --target <id>       digitalocean. Chooses only for a project with no nextship.json
+  --target <id>       digitalocean or vm. Chooses only for a project with no nextship.json;
+                      a vm project is chosen by \`nextship server add\`
 
 Deploy options, digitalocean target
   --region <slug>     Region (default ${DEFAULT_REGION})
   --size <slug>       App Platform instance size (default ${DEFAULT_INSTANCE_SIZE})
   --registry <name>   Registry name, unique across all of DigitalOcean
+
+Deploy options, vm target
+  --build <mode>      remote builds on the server (default), local builds here and
+                      streams the image over SSH. Recorded in nextship.json
+  --memory <size>     Container memory limit, such as 512m (default: an even share
+                      of 80% of the server's RAM across its apps)
 
 Rollback options
   --yes               Execute the plan. Without it, rollback only prints the plan
@@ -202,11 +210,11 @@ async function runDetect(): Promise<void> {
  * Where `build`, `package` and `run` build: the local daemon, for the default
  * platform. Only `deploy` asks a target, because only it knows where the image goes.
  */
-const LOCAL_BUILD: BuildPlacement = { platform: DEFAULT_PLATFORM, dockerHost: null }
+const LOCAL_BUILD: BuildPlacement = { platform: DEFAULT_PLATFORM, dockerHost: null, cacheScope: null }
 
 async function runBuild(): Promise<void> {
   const project = await detectProject(process.cwd())
-  const build = await buildProject(project, LOCAL_BUILD)
+  const build = await buildProject(project, LOCAL_BUILD, null)
 
   ok(`Built ${build.manifest.framework.name} ${build.manifest.framework.version}`)
   detail(`build      ${build.manifest.buildId}`)
@@ -215,7 +223,7 @@ async function runBuild(): Promise<void> {
 
 async function runPackage(): Promise<void> {
   const project = await detectProject(process.cwd())
-  const build = await buildProject(project, LOCAL_BUILD)
+  const build = await buildProject(project, LOCAL_BUILD, null)
   const image = await packageImage(project, build)
 
   ok(`Image ready: ${image.tag}`)
@@ -282,7 +290,7 @@ function parseFlags(argv: string[], allowed: string[]): Map<string, string | tru
 }
 
 async function runDeploy(argv: string[]): Promise<void> {
-  const flags = parseFlags(argv, ['yes', 'target', 'region', 'size', 'registry'])
+  const flags = parseFlags(argv, ['yes', 'target', 'region', 'size', 'registry', 'build', 'memory'])
   const project = await detectProject(process.cwd())
 
   await deploy(project, {
@@ -291,6 +299,8 @@ async function runDeploy(argv: string[]): Promise<void> {
     region: stringFlag(flags, 'region'),
     instanceSize: stringFlag(flags, 'size'),
     registry: stringFlag(flags, 'registry'),
+    build: stringFlag(flags, 'build') as BuildMode | undefined,
+    memory: stringFlag(flags, 'memory'),
   })
 }
 
@@ -493,13 +503,15 @@ async function runRollback(argv: string[]): Promise<void> {
 
 async function runLocally(): Promise<void> {
   const project = await detectProject(process.cwd())
-  const build = await buildProject(project, LOCAL_BUILD)
+  const build = await buildProject(project, LOCAL_BUILD, null)
   const image = await packageImage(project, build)
 
   await runImage(project, image)
 }
 
-main(process.argv.slice(2)).catch((error: unknown) => {
+main(process.argv.slice(2))
+  .finally(closeTargets)
+  .catch((error: unknown) => {
   if (error instanceof NextshipError) {
     fail(error.message, error.action)
   } else {

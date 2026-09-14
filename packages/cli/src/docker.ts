@@ -24,6 +24,8 @@ export interface BuildPlacement {
   platform: string
   /** A `DOCKER_HOST` for a daemon other than the local one, or null. */
   dockerHost: string | null
+  /** Names the Next.js build cache on a shared daemon, or null to name it by this machine's path. */
+  cacheScope: string | null
 }
 
 export interface DockerBuildOptions {
@@ -62,7 +64,7 @@ export function buildArguments(
     '--build-arg',
     `NEXTSHIP_DEPLOYMENT_ID=${identity.deploymentId}`,
     '--build-arg',
-    `NEXTSHIP_NEXT_CACHE_ID=${nextCacheId(project)}`,
+    `NEXTSHIP_NEXT_CACHE_ID=${nextCacheId(project, placement.cacheScope)}`,
     // Read from the child's environment rather than a file on disk, so the key
     // is never written anywhere the CLI does not already keep it.
     '--secret',
@@ -93,9 +95,13 @@ export function buildArguments(
  * The Next.js build cache a project uses: its name for recognition, and a hash of
  * where it lives so two projects with the same name, or none, never share one.
  * The same project in the same place keeps its cache from build to build.
+ *
+ * On a daemon several machines build against, such as a server's, the path on
+ * this machine would give every machine its own cold cache there. A target names
+ * the scope instead, which identifies the app on that daemon.
  */
-export function nextCacheId(project: ProjectInfo): string {
-  const location = createHash('sha256').update(`${project.contextRoot}\0${project.appDir}`).digest('hex')
+export function nextCacheId(project: ProjectInfo, scope: string | null): string {
+  const location = createHash('sha256').update(scope ?? `${project.contextRoot}\0${project.appDir}`).digest('hex')
   return `nextship-next-${project.name}-${location.slice(0, 12)}`
 }
 

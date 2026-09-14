@@ -182,7 +182,7 @@ stays identical.
 |---|---|---|
 | 0 | Commands target-agnostic, `nextship.json` version 2, the build platform and Docker daemon chosen by the target, and this design | **Done.** DigitalOcean plan output checked byte for byte against recorded API responses before and after |
 | 1 | SSH layer with a pinned host key, and `nextship server add` | **Done.** Verified end to end against a local Ubuntu 24.04 arm64 stand-in over SSH, not yet on a provider. The CI job exists but has not run, since the branch is not pushed |
-| 2 | VM driver: remote or local builds, zero-downtime release behind Caddy, rollback, the Server Actions key kept on the server | Planned |
+| 2 | VM driver: remote or local builds, zero-downtime release behind Caddy, rollback, the Server Actions key kept on the server | **Done.** Verified on the local stand-in: streaming through Caddy, no failed request across a deployment, a failed startup leaving the previous deployment serving, and rollback. Not yet on a provider |
 | 3 | Day-two commands on a server: env, domains, logs with history, images, destroy, `server status`, a disk guard | Planned |
 | 4 | Reboot resilience, `server move`, GitHub Actions usage, VM checks in `doctor` | Planned |
 | 5 | A CI job and `conformance/vm/e2e.sh` that run all of it against a real SSH server, docs | Planned |
