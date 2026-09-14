@@ -556,9 +556,27 @@ against (`builder`) and how to get the image to where it runs (`planDelivery`,
 output is unchanged by this: the same plan was printed byte for byte against recorded API
 responses before and after the move.
 
-#### Server layout
+#### Server setup (Implemented)
 
-`nextship server add user@host` prepares a server once and records it in `nextship.json`
+`nextship server add user@host` prepares a server once, through `runtime/vm/setup.sh` sent
+over SSH and run as root. Every step is a check and an apply, so `setup.sh plan` changes
+nothing and a second `server add` against a set-up server reports every step `ok`. The
+order is what keeps a user from being locked out: steps up to creating the `nextship` user
+apply first, a login as that user is then proven from the user's machine, and SSH
+hardening applies alone and last. The steps and their opt-out flags are listed in
+[`vm.md`](./vm.md) §3.
+
+Verified against a local stand-in, not yet a provider: a privileged Ubuntu 24.04.4 arm64
+container running systemd and sshd, reached over SSH on a forwarded port. From a fresh
+container, `server add --yes` installed Docker 29.8.0 and applied every step except swap
+in 46 s; a second run reported every step `ok`; ufw was active with SSH, 80 and 443
+allowed; `sshd -T` reported `passwordauthentication no`; a key swapped into `nextship.json`
+was refused with both fingerprints named. The same stand-in cannot exercise swap (a
+container may not `swapon`). Running it on real providers is on the v1.1 checklist.
+
+#### Server layout (Designed)
+
+`server add` records the server in `nextship.json`
 (version 2: `target: "vm"`, `server { host, port, user, hostKey, arch }`, `build`).
 Everything nextship keeps on the server lives in a few places:
 
@@ -577,7 +595,7 @@ The server runs a `nextship` user in the `docker` group. **Membership of the `do
 group is root-equivalent**, and the docs say so rather than implying the user is
 unprivileged.
 
-#### Build and delivery
+#### Build and delivery (Designed)
 
 The default build mode is **remote**: the image is built by the server's own Docker daemon,
 reached through `ssh -L` forwarding a local socket to `/var/run/docker.sock`. That keeps the
@@ -587,7 +605,7 @@ A server under 2 GB of RAM is refused for remote builds with `--build local` as 
 `--build local` builds here for the server's platform and streams
 `docker save | ssh docker load`.
 
-#### Release sequence
+#### Release sequence (Designed)
 
 1. Take the app lock. A lock older than 30 minutes is reported, never broken automatically.
 2. Create `app.json` on a first deployment, or verify its id matches.
@@ -604,7 +622,7 @@ A server under 2 GB of RAM is refused for remote builds with `--build local` as 
 Rollback runs steps 3 to 6 with an earlier deployment's image. **It uses the current env
 file**, which differs from App Platform, where a rollback restores the old spec.
 
-#### Security
+#### Security (Implemented for SSH and setup)
 
 - Nothing changes without `--yes`, and a plan is printed first.
 - The host key is pinned. Every connection uses `StrictHostKeyChecking=yes` against the key

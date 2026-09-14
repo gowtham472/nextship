@@ -4,7 +4,27 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
-### Changed
+### Added
+
+- **`nextship server add <user@host[:port]>`** prepares an Ubuntu 22.04, Ubuntu 24.04 or
+  Debian 12 server for the VM target and records it in `nextship.json`. The plan shows the
+  server's host key fingerprint and every setup step before anything changes. With `--yes`
+  it installs Docker CE when missing, creates a `nextship` user and proves a login as it,
+  runs Caddy on 80 and 443, limits the journal, enables security updates and ufw, installs
+  a watchdog for containers that stay unhealthy, and turns off SSH password logins last,
+  so setup cannot lock you out. `--no-firewall`, `--no-auto-updates`, `--no-swap` and
+  `--no-ssh-hardening` opt out. It refuses an unsupported distribution, a Docker older than
+  23, too little memory or disk, and anything else on ports 80 or 443, by name. A second
+  run changes nothing. Verified against a local Ubuntu 24.04 arm64 stand-in over SSH, from
+  a fresh install and again with the CI flags; not yet on a provider. (Ragul D)
+- **An SSH layer that pins the host key.** Connections use the system `ssh` in batch mode
+  with no passwords and strict checking against the key recorded in `nextship.json`, so a
+  changed key is a hard error that says how to re-verify it. Values placed in a remote
+  command are validated or quoted, which is tested by running hostile values through a
+  real shell. (Ragul D)
+- **A `vm` CI job and `conformance/vm/e2e.sh`,** which set the runner up over `ssh
+  localhost` and check a second `server add` changes nothing. The script ran against the
+  local stand-in; the job has not run yet. (Ragul D)
 
 - **Commands no longer carry DigitalOcean wording or choices.** The deploy plan's target
   lines, where an image is built and for which platform, how it reaches the target, how
@@ -37,6 +57,9 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Docs
 
+- **`docs/vm.md`** describes what `server add` changes on a server, step by step, and the
+  SSH security model, including that the `nextship` user is root-equivalent. `SECURITY.md`
+  gains what nextship uses on a server. (Ragul D)
 - **v1.1 is now any Linux server over SSH, not AWS.** `docs/design.md` §9.3 designs one
   generic target for Ubuntu and Debian servers reached over SSH: the server layout, the
   release sequence behind Caddy, the security model and its limitations. `docs/roadmap.md`

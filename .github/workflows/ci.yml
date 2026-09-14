@@ -95,6 +95,45 @@ jobs:
       # Edge route answers from the Edge runtime.
       - run: bash conformance/streaming/run.sh
 
+  vm:
+    name: VM target over SSH
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Install the streaming fixture
+        working-directory: conformance/streaming/app
+        run: npm ci --no-audit --no-fund
+
+      # The runner is the server: nextship reaches it over SSH on localhost exactly
+      # as it reaches a VPS, with a key it authorised for itself. The runner already
+      # has Docker, so setup finds it rather than installing one. The firewall, SSH
+      # hardening, swap and automatic updates are left alone because this machine is
+      # GitHub's, not ours, and is thrown away afterwards.
+      - name: Serve SSH on the runner
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q openssh-server
+          sudo systemctl start ssh
+          mkdir -p ~/.ssh
+          ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/id_ed25519
+          cat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys
+          chmod 700 ~/.ssh
+          chmod 600 ~/.ssh/authorized_keys
+
+      - run: bash conformance/vm/e2e.sh "$USER@localhost" --no-firewall --no-ssh-hardening --no-swap --no-auto-updates
+
   site:
     name: Site
     runs-on: ubuntu-latest

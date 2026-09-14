@@ -21,6 +21,7 @@ import { listEnv, pushEnv, removeEnv } from './env.js'
 import { addDomain, listDomains, removeDomain, DEFAULT_MIN_TLS } from './domain.js'
 import { listImages, pruneImages, DEFAULT_KEEP } from './images.js'
 import { destroy } from './destroy.js'
+import { addServer, OPT_OUT_FLAGS } from './server.js'
 import { rollback } from './rollback.js'
 import { logs } from './logs.js'
 import { logoDepth, renderLogo } from './logo.js'
@@ -63,6 +64,7 @@ Usage
   nextship images     List the images pushed for this project
   nextship images prune  Remove old images, keeping the recent ones
   nextship destroy <name>  Destroy the app this project created
+  nextship server add <user@host[:port]>  Prepare a Linux server and record it as this project's target
 
 Options
   -h, --help          Show this message
@@ -97,6 +99,13 @@ Image options
   --yes               Execute the plan. Without it, prune only prints the plan
   --keep <n>          Images to keep (default ${DEFAULT_KEEP}); the deployed one is always kept
   --gc                Start garbage collection, which is what reclaims storage
+
+Server add options
+  --yes               Execute the plan. Without it, server add only prints the plan
+  --no-firewall       Leave ufw as it is
+  --no-auto-updates   Do not enable unattended security updates
+  --no-swap           Do not add a swap file on a server under 4 GB of RAM
+  --no-ssh-hardening  Leave password logins and root login as they are
 
 Domain options
   --yes               Execute the plan. Without it, domain only prints the plan
@@ -165,6 +174,8 @@ async function main(argv: string[]): Promise<void> {
       return runImages(argv.slice(1))
     case 'destroy':
       return runDestroy(argv.slice(1))
+    case 'server':
+      return runServer(argv.slice(1))
     default:
       throw new NextshipError(`Unknown command \`${command}\`.`, 'Run `nextship --help` to see the available commands.')
   }
@@ -436,6 +447,37 @@ async function runDomain(argv: string[]): Promise<void> {
     domain: positional[0],
     primary: flags.get('primary') === true,
     minimumTls: typeof minTls === 'string' ? minTls : DEFAULT_MIN_TLS,
+  })
+}
+
+/** `server add` takes the server address as its one argument. */
+async function runServer(argv: string[]): Promise<void> {
+  const subcommand = argv.length > 0 && !argv[0].startsWith('--') ? argv[0] : null
+  if (subcommand !== 'add') {
+    throw new NextshipError(
+      subcommand === null ? 'No server subcommand was given.' : `Unknown server subcommand \`${subcommand}\`.`,
+      'Use `nextship server add <user@host>`.'
+    )
+  }
+
+  const rest = argv.slice(1)
+  const positional = rest.filter((token) => !token.startsWith('--'))
+  const flags = parseFlags(
+    rest.filter((token) => token.startsWith('--')),
+    ['yes', ...Object.keys(OPT_OUT_FLAGS)]
+  )
+  if (positional.length !== 1) {
+    throw new NextshipError(
+      positional.length === 0 ? 'No server address was given.' : `Expected one server address, got ${positional.length}.`,
+      'Run `nextship server add <user@host[:port]>`, for example root@203.0.113.10.'
+    )
+  }
+
+  const project = await detectProject(process.cwd())
+  await addServer(project, {
+    confirmed: flags.get('yes') === true,
+    address: positional[0],
+    optOut: [...flags.keys()].filter((name) => name in OPT_OUT_FLAGS),
   })
 }
 

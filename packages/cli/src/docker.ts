@@ -122,6 +122,13 @@ export function dockerEnvironment(placement: BuildPlacement, extra: NodeJS.Proce
 }
 
 /**
+ * Secret and cache mounts and the local exporter all need BuildKit, which has
+ * been the default builder since Docker 23. Server setup refuses an older
+ * daemon by the same number.
+ */
+export const MIN_DOCKER_MAJOR = 23
+
+/**
  * Queries the daemon rather than the CLI. `docker --version` succeeds while the
  * daemon is stopped, which would let a build start and then fail later with a
  * pipe error that says nothing useful.
@@ -139,10 +146,8 @@ export async function assertDockerAvailable(placement: BuildPlacement): Promise<
     )
   }
 
-  // Secret and cache mounts and the local exporter all need BuildKit, which
-  // has been the default builder since Docker 23.
   const [major] = serverVersion.split('.').map((part) => Number.parseInt(part, 10))
-  if (Number.isFinite(major) && major < 23) {
+  if (Number.isFinite(major) && major < MIN_DOCKER_MAJOR) {
     throw new NextshipError(
       `Docker ${serverVersion} is too old.`,
       'nextship needs Docker 23 or newer for BuildKit. Update Docker, then run the command again.'
