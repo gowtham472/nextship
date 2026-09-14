@@ -81,6 +81,7 @@ export async function diagnose(project: ProjectInfo, target: TargetId): Promise<
   findings.push(...(await sourceFindings(project.root, target)))
   findings.push(...(await undeclaredPackageFindings(project)))
   findings.push(...runtimeFindings(project, target))
+  if (target === 'vm') findings.push(...(await serverFindings(project.root)))
 
   const order: Record<FindingLevel, number> = { blocker: 0, warning: 1, note: 2 }
   return findings.sort((a, b) => order[a.level] - order[b.level])
@@ -263,6 +264,37 @@ function runtimeFindings(project: ProjectInfo, target: TargetId): Finding[] {
         }
   )
 
+  return findings
+}
+
+/**
+ * What changes when the app runs on one server instead of a platform. Warned on
+ * every vm project, because nothing in the source can show these are handled.
+ */
+async function serverFindings(root: string): Promise<Finding[]> {
+  const findings: Finding[] = [
+    {
+      level: 'warning',
+      title: 'One server, and no CDN in front of it',
+      consequence:
+        'If the server is down, the app is down, and every asset is served by the container through Caddy. Backups of the server, its env file and its Server Actions key are yours to keep.',
+      action: `See ${docsUrl('vm.md', '7-backups-and-recovery')} for what to back up and how to recover on a new server.`,
+    },
+  ]
+
+  for await (const file of sourceFiles(root)) {
+    const contents = await readFile(file, 'utf8').catch(() => '')
+    if (contents.includes('request.url') || contents.includes('req.url')) {
+      findings.push({
+        level: 'warning',
+        title: 'The source reads request.url',
+        consequence:
+          "Behind Caddy a route handler's request.url names the container, http://0.0.0.0:3000, not your domain. Redirects built from it still work because nextship makes them relative; other absolute URLs built from it, such as links in a response or OAuth callback URLs, point nowhere.",
+        action: 'Build absolute URLs from your site URL, set in an environment variable, instead of from request.url.',
+      })
+      break
+    }
+  }
   return findings
 }
 

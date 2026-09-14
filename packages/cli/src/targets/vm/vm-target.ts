@@ -349,6 +349,37 @@ export function statusWarnings(status: ServerStatus, cliSetupVersion: number): s
   return warnings
 }
 
+/**
+ * How far a server is from having every container back after a reboot, from
+ * `docker inspect` lines of `<name> <status> <health>`. A container that was
+ * running before and has no health check counts once it runs; one that is
+ * missing or has exited is still waited on, since Docker may not have reached it.
+ */
+export function rebootProgress(expected: string[], inspected: string): { ready: string[]; waiting: string[] } {
+  const states = new Map<string, string>()
+  for (const line of inspected.split('\n').filter(Boolean)) {
+    const [name, ...rest] = line.trim().split(' ')
+    states.set(name, rest.join(' ').trim())
+  }
+  const ready: string[] = []
+  const waiting: string[] = []
+  for (const name of expected) {
+    const state = states.get(name)
+    if (state === 'running healthy' || state === 'running') ready.push(name)
+    else waiting.push(name)
+  }
+  return { ready, waiting }
+}
+
+/** What moving an app to another server does, in order. Nothing touches the old server except reads. */
+export const MOVE_STEPS = [
+  'set up the new server as `server add` does',
+  'copy the app record, its domains, the env file and the Server Actions key, in memory over SSH',
+  'stream the live image from the old server to the new one',
+  'deploy that image on the new server and wait for it to be healthy',
+  'record the new server in nextship.json',
+] as const
+
 // ----------------------------------------------------------------- driver
 
 export class VmTarget implements Target {
@@ -1306,6 +1337,105 @@ export class VmTarget implements Target {
         .map((line) => line.split(' ')[0]),
       apps,
     }
+  }
+
+  // ---------------------------------------------------------------- reboot
+
+  /**
+   * Identifies one boot. The kernel's boot id changes on a real reboot; PID 1's
+   * start time changes too, and is what changes when the "server" is a container
+   * whose init restarted on the same kernel.
+   */
+  async bootMarker(): Promise<string> {
+    return (await this.run("cat /proc/sys/kernel/random/boot_id; cut -d ' ' -f 22 /proc/1/stat", 'read the boot id')).replace(/\s+/g, ' ').trim()
+  }
+
+  /** The nextship containers running now, which a reboot has to bring back. */
+  async runningContainers(): Promise<string[]> {
+    return (
+      await this.run("docker ps --filter label=sh.nextship.managed=true --format '{{.Names}}'", 'list the running containers')
+    )
+      .split('\n')
+      .filter(Boolean)
+  }
+
+  /** `<name> <status> <health>` for each container, for `rebootProgress`. */
+  async inspectContainers(names: string[]): Promise<string> {
+    if (names.length === 0) return ''
+    const result = await this.exec(
+      `docker inspect -f '{{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' ${names.map(q).join(' ')} 2> /dev/null`
+    )
+    return result.stdout.replace(/^\//gm, '')
+  }
+
+  /** Asks the server to reboot. The connection drops as it does, which is not an error here. */
+  async reboot(): Promise<void> {
+    let result: { code: number; stderr: string } | null
+    try {
+      result = await this.exec('sudo -n /usr/bin/systemctl reboot')
+    } catch {
+      // ssh reports the connection closing under it as its own failure, which
+      // here is the reboot starting.
+      result = null
+    }
+    if (result && result.code !== 0 && result.code !== 255) {
+      throw new NextshipError(
+        `The server refused to reboot: ${result.stderr.trim() || `exit code ${result.code}`}`,
+        'Permission to reboot comes with setup version 2. Run `nextship server add` with --yes to update the server, then try again.'
+      )
+    }
+    await this.close().catch(() => {})
+  }
+
+  // ------------------------------------------------------------------ move
+
+  /** Everything a move copies from this server, held in memory and never written locally. */
+  async exportApp(appId: string): Promise<{ record: AppRecord; env: string; secrets: string; live: VmDeployment }> {
+    const record = await this.appRecord(appId)
+    const live = (await this.readDeployments()).find((entry) => entry.live)
+    if (!live?.imageTag) {
+      throw new NextshipError('This app has no live deployment to move.', 'Run `nextship deploy` first, or add the new server and deploy there.')
+    }
+    const env = (await this.exec(`cat ${q(`${this.appDir()}/env`)} 2> /dev/null`)).stdout
+    const secrets = (await this.exec(`cat ${q(`${this.appDir()}/secrets`)} 2> /dev/null`)).stdout
+    return { record, env, secrets, live }
+  }
+
+  /** Writes a moved app's record, env and key, refusing a server that already has an app of that name. */
+  async importApp(exported: { record: AppRecord; env: string; secrets: string }): Promise<void> {
+    await this.lock()
+    try {
+      const existing = await this.exec(`cat ${q(`${this.appDir()}/app.json`)} 2> /dev/null`)
+      if (existing.code === 0 && existing.stdout.trim() && (JSON.parse(existing.stdout) as AppRecord).id !== exported.record.id) {
+        throw new NextshipError(
+          `The new server already has an app named "${this.name}" that is not this one.`,
+          'Destroy that app on the new server, or move to a server without it. Nothing was copied.'
+        )
+      }
+      await this.writeAppRecord(exported.record)
+      await this.run(`install -m 600 /dev/stdin ${q(`${this.appDir()}/env`)}`, 'write the env file', exported.env)
+      if (exported.secrets.trim()) {
+        await this.run(`install -m 600 /dev/stdin ${q(`${this.appDir()}/secrets`)}`, 'write the Server Actions key', exported.secrets)
+      }
+    } finally {
+      await this.unlock()
+    }
+  }
+
+  /** Streams an image from another server to this one without writing it to this machine's disk. */
+  async copyImageFrom(source: VmTarget, imageTag: string): Promise<void> {
+    const reference = `${this.name}:${assertDeploymentId(imageTag)}`
+    const [from, to] = await Promise.all([source.ssh(), this.ssh()])
+    await pipeline(
+      ['ssh', [...from.options(), ...from.destination(), `docker save ${q(reference)}`]],
+      ['ssh', [...to.options(), ...to.destination(), 'docker load -q']],
+      { cwd: process.cwd() }
+    )
+  }
+
+  /** The address DNS records for a moved app's domains must point at. */
+  async publicAddress(): Promise<string> {
+    return serverAddress(this.server.host)
   }
 
   // --------------------------------------------------------------- destroy

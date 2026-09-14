@@ -244,3 +244,22 @@ test('on a vm target, revalidation is not warned about and cron advice names the
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test('a vm project is warned that it runs on one server, and about request.url when the source reads it', async () => {
+  const root = await fixture({
+    'package.json': JSON.stringify({ name: 'demo', dependencies: { next: '16.3.4' } }),
+    'app/api/callback/route.ts': 'export async function GET(request: Request) { return Response.json({ url: new URL("/done", request.url).href }) }',
+  })
+  try {
+    const vm = await diagnose(projectFor(root), 'vm')
+    assert.equal(titled(vm, 'One server')?.level, 'warning')
+    assert.match(titled(vm, 'One server')?.action ?? '', /vm\.md/)
+    assert.match(titled(vm, 'request.url')?.consequence ?? '', /0\.0\.0\.0:3000/)
+
+    const digitalocean = await diagnose(projectFor(root), 'digitalocean')
+    assert.equal(titled(digitalocean, 'One server'), undefined, 'the server findings are for vm projects only')
+    assert.equal(titled(digitalocean, 'request.url'), undefined)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})

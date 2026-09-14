@@ -109,3 +109,116 @@ minutes, and the journal says so under `nextship-watchdog`. A lock left by a dep
 that was killed is reported with its owner after 30 minutes and never removed
 automatically: confirm nothing is running, then remove
 `/etc/nextship/apps/<name>/lock` as the `nextship` user.
+
+**Reboots.** Every app container runs with `--restart unless-stopped`, Docker is enabled at
+boot, Caddy restarts unless stopped, and the watchdog timer starts two minutes after boot,
+so a reboot brings every app back without nextship. `nextship server reboot --yes` proves it
+on demand: it reboots the server, waits for SSH, and waits until every container that was
+running reports healthy again, for up to 10 minutes. The `nextship` user may run
+`systemctl reboot` through sudo and nothing else, which setup version 2 adds.
+
+## 6. Deploying from GitHub Actions
+
+The server holds everything a deployment needs that is not in your repository: the
+runtime env file and the Server Actions key. The committed `nextship.json` holds the server
+and its pinned host key, so a runner never trusts a key on first use. What a runner needs
+is an SSH key authorised for the `nextship` user.
+
+1. Create a key for CI only, and authorise it on the server. The `nextship` user is
+   root-equivalent, so this key is a root key for the server: keep it in one repository
+   secret and nowhere else.
+
+   ```bash
+   ssh-keygen -t ed25519 -N '' -C nextship-ci -f nextship-ci
+   ssh nextship@203.0.113.10 'cat >> ~/.ssh/authorized_keys' < nextship-ci.pub
+   ```
+
+2. Save the private key, `nextship-ci`, as the repository secret `NEXTSHIP_SSH_KEY`, then
+   delete both files from your machine.
+
+3. Add the workflow:
+
+   ```yaml
+   name: deploy
+   on:
+     push:
+       branches: [main]
+   concurrency: deploy
+   jobs:
+     deploy:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v4
+         - uses: actions/setup-node@v4
+           with:
+             node-version: '22'
+         - run: npm ci
+         - name: Load the deploy key
+           run: |
+             eval "$(ssh-agent -s)"
+             echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+             echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+             ssh-add - <<< "${{ secrets.NEXTSHIP_SSH_KEY }}"
+         - run: npx --yes nextship-cli deploy --yes --build local
+   ```
+
+`--build local` builds on the runner and streams the image to the server, so the build
+never competes with the running apps for the server's memory. The runner is amd64, so this
+suits an amd64 server directly. For an arm64 server, either add
+`docker/setup-qemu-action` before the deploy step so the runner can build arm64 images
+under emulation, which is slow, or deploy with `--build remote` when the server has enough
+memory to build, which is native and uses the server's build cache.
+
+`concurrency: deploy` keeps two pushes from deploying at once. The server's app lock would
+refuse the second anyway, but the refusal would fail that workflow run.
+
+Not yet run in GitHub Actions: this workflow is written from what nextship does locally,
+and running it is on the v1.1 checklist.
+
+## 7. Backups and recovery
+
+A server is one machine. Know what is on it that exists nowhere else:
+
+| What | Where | Back it up? |
+|---|---|---|
+| Runtime variables | `/etc/nextship/apps/<name>/env` | **Yes.** They exist only on the server, unless you keep your own copy |
+| The Server Actions key | `/etc/nextship/apps/<name>/secrets` | **Yes.** A new key breaks Server Actions for every open page |
+| Which server, and its host key | `nextship.json` | Already in your repository |
+| Images | Docker on the server | No. Rebuilt from your repository by `deploy` |
+| Regenerated pages, optimized images | The cache volumes | No. Regenerated on demand |
+| Deployment history | `/etc/nextship/apps/<name>/deployments.json` | Optional. Losing it loses rollback targets, not the app |
+
+Copy the two files somewhere safe, for example a password manager, over SSH:
+
+```bash
+ssh nextship@203.0.113.10 cat /etc/nextship/apps/acme-web/env
+ssh nextship@203.0.113.10 cat /etc/nextship/apps/acme-web/secrets
+```
+
+**Moving while the old server still answers:** `nextship server move user@newhost --yes`
+copies the app record, domains, env file and key over SSH in memory, streams the live
+image from the old server, deploys it on the new one and records the new server only once
+the app is healthy there. The old server is only read. Then change the DNS records it
+prints, and destroy the app on the old server from a copy of the previous `nextship.json`.
+
+**Recovering when the old server is gone:** remove `server` and `appId` from
+`nextship.json`, run `nextship server add` for the new server, put the saved key into
+`.nextship/secrets.local.json` as `{"serverActionsEncryptionKey": "..."}`, and run
+`nextship deploy --yes`, which uploads that key rather than generating a new one. Restore
+the variables with `nextship env push --yes` from an env file holding the saved values, then
+attach the domains again and change their DNS records.
+
+## 8. Putting a proxy such as Cloudflare in front
+
+Caddy obtains certificates itself, over port 80, once a domain's record points at the
+server. A proxy in front changes what the domain resolves to, so `domain add` warns that it
+does not point at the server; that is expected with a proxy.
+
+What to keep in mind, none of it verified with a proxy in front yet:
+
+- Use the proxy's end to end encrypted mode with certificate verification (Cloudflare calls
+  it "Full (strict)"), since the server presents a real certificate.
+- A proxy that caches HTML brings back the limitation App Platform has (`design.md` §12):
+  a page Next.js marks cacheable is kept at the edge, so `revalidatePath` updates the server
+  while visitors keep the old page. Give pages you revalidate on demand an
+  `export const revalidate`, or do not cache HTML at the edge.

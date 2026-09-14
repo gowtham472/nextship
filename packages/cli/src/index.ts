@@ -22,7 +22,7 @@ import { listEnv, pushEnv, removeEnv } from './env.js'
 import { addDomain, listDomains, removeDomain, DEFAULT_MIN_TLS } from './domain.js'
 import { listImages, pruneImages, DEFAULT_KEEP } from './images.js'
 import { destroy } from './destroy.js'
-import { addServer, serverStatus, OPT_OUT_FLAGS } from './server.js'
+import { addServer, moveServer, rebootServer, serverStatus, OPT_OUT_FLAGS } from './server.js'
 import { rollback } from './rollback.js'
 import { logs } from './logs.js'
 import { logoDepth, renderLogo } from './logo.js'
@@ -67,6 +67,8 @@ Usage
   nextship destroy <name>  Destroy the app this project created
   nextship server add <user@host[:port]>  Prepare a Linux server and record it as this project's target
   nextship server status  The server, every app on it, and what needs attention
+  nextship server reboot  Reboot the server and wait for every app to come back healthy
+  nextship server move <user@host[:port]>  Move this project's app to another server
 
 Options
   -h, --help          Show this message
@@ -110,8 +112,8 @@ Image options
   --keep <n>          Images to keep (default ${DEFAULT_KEEP}); the deployed one is always kept
   --gc                Start garbage collection, which is what reclaims storage
 
-Server add options
-  --yes               Execute the plan. Without it, server add only prints the plan
+Server add and server move options
+  --yes               Execute the plan. Without it, only the plan is printed
   --no-firewall       Leave ufw as it is
   --no-auto-updates   Do not enable unattended security updates
   --no-swap           Do not add a swap file on a server under 4 GB of RAM
@@ -473,10 +475,14 @@ async function runServer(argv: string[]): Promise<void> {
     parseFlags(argv.slice(1), [])
     return serverStatus(await detectProject(process.cwd()))
   }
-  if (subcommand !== 'add') {
+  if (subcommand === 'reboot') {
+    const flags = parseFlags(argv.slice(1), ['yes'])
+    return rebootServer(await detectProject(process.cwd()), { confirmed: flags.get('yes') === true })
+  }
+  if (subcommand !== 'add' && subcommand !== 'move') {
     throw new NextshipError(
       subcommand === null ? 'No server subcommand was given.' : `Unknown server subcommand \`${subcommand}\`.`,
-      'Use `nextship server add <user@host>` or `nextship server status`.'
+      'Use `nextship server add <user@host>`, `server status`, `server reboot` or `server move <user@host>`.'
     )
   }
 
@@ -489,16 +495,17 @@ async function runServer(argv: string[]): Promise<void> {
   if (positional.length !== 1) {
     throw new NextshipError(
       positional.length === 0 ? 'No server address was given.' : `Expected one server address, got ${positional.length}.`,
-      'Run `nextship server add <user@host[:port]>`, for example root@203.0.113.10.'
+      `Run \`nextship server ${subcommand} <user@host[:port]>\`, for example root@203.0.113.10.`
     )
   }
 
   const project = await detectProject(process.cwd())
-  await addServer(project, {
+  const options = {
     confirmed: flags.get('yes') === true,
     address: positional[0],
     optOut: [...flags.keys()].filter((name) => name in OPT_OUT_FLAGS),
-  })
+  }
+  return subcommand === 'move' ? moveServer(project, options) : addServer(project, options)
 }
 
 async function runRollback(argv: string[]): Promise<void> {

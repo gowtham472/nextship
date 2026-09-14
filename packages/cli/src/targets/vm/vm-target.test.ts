@@ -14,8 +14,10 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { NextshipError } from '../../errors.js'
 import {
+  MOVE_STEPS,
   assertRoom,
   dnsWarnings,
+  rebootProgress,
   healthCommand,
   memoryLimit,
   parseDockerSize,
@@ -145,4 +147,32 @@ test('a domain that does not resolve, or resolves elsewhere, is warned about by 
   assert.match(dnsWarnings('app.example.com', null, '203.0.113.10')[0], /does not resolve yet.*203\.0\.113\.10/)
   assert.match(dnsWarnings('app.example.com', ['198.51.100.7'], '203.0.113.10')[0], /resolves to 198\.51\.100\.7, not to this server/)
   assert.deepEqual(dnsWarnings('app.example.com', ['198.51.100.7', '203.0.113.10'], '203.0.113.10'), [])
+})
+
+// Recorded from a server coming back: Docker starts restart-policy containers
+// in no particular order, and a container with a health check runs before it is healthy.
+test('after a reboot, a container counts as back only once it is healthy, or running without a health check', () => {
+  const expected = ['shop-r1', 'blog-r2', 'plain-r3']
+  assert.deepEqual(rebootProgress(expected, ''), { ready: [], waiting: expected })
+  assert.deepEqual(rebootProgress(expected, 'shop-r1 running starting\nblog-r2 restarting \nplain-r3 running \n'), {
+    ready: ['plain-r3'],
+    waiting: ['shop-r1', 'blog-r2'],
+  })
+  assert.deepEqual(rebootProgress(expected, 'shop-r1 running healthy\nblog-r2 running healthy\nplain-r3 running \n'), {
+    ready: expected,
+    waiting: [],
+  })
+  assert.deepEqual(rebootProgress(['shop-r1'], 'shop-r1 running unhealthy\n').waiting, ['shop-r1'], 'unhealthy is not back')
+  assert.deepEqual(rebootProgress(['shop-r1'], 'shop-r1 exited \n').waiting, ['shop-r1'])
+})
+
+// nextship.json is the last step, so a move that fails part way leaves every
+// command still pointed at the server that serves the app.
+test('a move copies before it deploys, and records the new server last', () => {
+  assert.equal(MOVE_STEPS.length, 5)
+  assert.match(MOVE_STEPS[0], /set up the new server/)
+  assert.match(MOVE_STEPS[1], /env file and the Server Actions key, in memory/)
+  assert.match(MOVE_STEPS[2], /stream the live image from the old server/)
+  assert.match(MOVE_STEPS[3], /healthy/)
+  assert.match(MOVE_STEPS.at(-1) ?? '', /record the new server in nextship.json/)
 })
