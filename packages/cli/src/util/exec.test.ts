@@ -16,6 +16,10 @@ import { NextshipError } from '../errors.js'
 import { pipeline } from './exec.js'
 
 const node = (script: string): [string, string[]] => [process.execPath, ['-e', script]]
+
+// The children set process.exitCode and let Node exit on its own. Measured on
+// Node 24.7 on macOS: calling process.exit() straight after writing to a pipe
+// crashed the child with SIGSEGV in about one run in five.
 const cwd = process.cwd()
 
 test('data flows from the first command into the second', async () => {
@@ -28,7 +32,7 @@ test('data flows from the first command into the second', async () => {
 })
 
 test('a sender that fails is reported even though the receiver exited 0', async () => {
-  const sender = node('process.stdout.write("partial"); process.stderr.write("disk read error"); process.exit(2)')
+  const sender = node('process.stdout.write("partial"); process.stderr.write("disk read error"); process.exitCode = 2')
   const receiver = node('process.stdin.resume()')
   await assert.rejects(pipeline(sender, receiver, { cwd }), (error: unknown) => {
     assert.ok(error instanceof NextshipError)
@@ -39,7 +43,7 @@ test('a sender that fails is reported even though the receiver exited 0', async 
 
 test('a receiver that exits early is named as the cause, not the sender it cut off', async () => {
   const sender = node('const b = Buffer.alloc(65536); const w = () => { while (process.stdout.write(b)); }; process.stdout.on("drain", w); w()')
-  const receiver = node('process.stderr.write("no space left"); process.exit(4)')
+  const receiver = node('process.stderr.write("no space left"); process.exitCode = 4')
   await assert.rejects(pipeline(sender, receiver, { cwd }), (error: unknown) => {
     assert.ok(error instanceof NextshipError)
     assert.match(error.message, /exited with code 4: no space left/)

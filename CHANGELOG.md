@@ -37,6 +37,20 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   `.next/cache/images`. A per-image volume over `.next` and a per-app volume over
   `.next/cache` keep both; after a restart a revalidated page and an optimized image were
   still served from them. (Ragul D)
+- **Day-two commands on a server.** `env push` and `env rm` rewrite the server's env file
+  and restart the live image without downtime; `domain add` and `domain rm` regenerate
+  the app's Caddy site, validated first, and `domain add` warns when the domain does not
+  resolve to the server yet; `images prune` removes images with their stopped containers
+  and cache volumes, and a deployment prunes beyond the newest five automatically;
+  `destroy` removes the app's containers, volumes, site and state and keeps the server,
+  Caddy, other apps and DNS. `deploy` refuses under 3 GB free. (Ragul D)
+- **`nextship logs --deployment <id>`** reads one deployment's logs from the server's
+  journal, including one that has been replaced. It takes a deployment id or the image tag
+  plans show. (Ragul D)
+- **`nextship server status`** reports the server's OS, uptime, load, memory, disk, Docker,
+  Caddy and setup version, and each app's live deployment, health, restarts, memory and
+  certificates, warning on low disk, ports published past Caddy, an outdated setup, a
+  pending reboot and an unhealthy app. (Ragul D)
 - **An SSH layer that pins the host key.** Connections use the system `ssh` in batch mode
   with no passwords and strict checking against the key recorded in `nextship.json`, so a
   changed key is a hard error that says how to re-verify it. Values placed in a remote
@@ -50,10 +64,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   lines, where an image is built and for which platform, how it reaches the target, how
   logs are followed, what reclaiming storage costs, and where `env push` stores values are
   now asked of the target's driver. This is what lets a second target plug in without
-  editing every command. The DigitalOcean deploy plan is unchanged: `main` and this change
-  printed identical plans, byte for byte, against the same recorded API responses, for an
-  existing app, a first deploy, and a first deploy with `--region`, `--size` and
-  `--registry`. The execute path changed in two small ways: a missing registry is created
+  editing every command. DigitalOcean output is unchanged: against the same stubbed API
+  responses, `main` and this change printed byte for byte identical output for 20 read-only
+  and plan-only commands, among them `deploy` for an existing app and a first deploy,
+  `rollback`, `logs`, `env`, `env push`, `env rm`, `domain` and `domain add` and `rm`,
+  `images`, `images prune`, `destroy` with and without `--images`, and `doctor`. The execute path changed in two small ways: a missing registry is created
   after the build succeeds rather than before it, so a failed build no longer leaves a new
   billable registry behind, and the push step is now called "Delivering image". Not yet
   re-run against a live App Platform app. (Ragul D)
@@ -66,8 +81,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   is refused when it disagrees with the recorded one. `--region`, `--size` and `--registry`
   are refused on a project whose target is not DigitalOcean. (Ragul D)
 - **`doctor` reads the project's target.** On a server there is no CDN, so the on-demand
-  revalidation warning is DigitalOcean only, and the cron advice names a systemd timer
-  rather than a DigitalOcean scheduled job. (Ragul D)
+  revalidation warning is DigitalOcean only, the cron advice names a systemd timer rather
+  than a DigitalOcean scheduled job, and the note about the ISR cache says it survives a
+  restart there. (Ragul D)
+- **Commands take the rest of their target-specific wording from the driver**: how `env`
+  lists and warns about stored values, what an empty `logs` means, what `images` storage
+  measures, which domains are refused as the platform's own, and what `destroy` removes
+  and keeps. DigitalOcean output is unchanged. (Ragul D)
 
 - **The landing page shows a deployment as a build line.** The five pipeline cards are now
   a row of steps on a rail with a stage showing what the selected step does, using values

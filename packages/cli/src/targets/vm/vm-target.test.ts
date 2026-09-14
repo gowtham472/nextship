@@ -15,6 +15,7 @@ import { execFileSync } from 'node:child_process'
 import { NextshipError } from '../../errors.js'
 import {
   assertRoom,
+  dnsWarnings,
   healthCommand,
   memoryLimit,
   parseDockerSize,
@@ -138,4 +139,10 @@ test('a deployment keeps its build output per image and the cache per app, both 
     'nextship-shop-cache:/src/apps/web/.next/cache',
   ])
   assert.ok(value(run(), '--volume').every((mount) => !mount.startsWith('/')), 'never a bind mount')
+})
+
+test('a domain that does not resolve, or resolves elsewhere, is warned about by name, and one that points here is not', () => {
+  assert.match(dnsWarnings('app.example.com', null, '203.0.113.10')[0], /does not resolve yet.*203\.0\.113\.10/)
+  assert.match(dnsWarnings('app.example.com', ['198.51.100.7'], '203.0.113.10')[0], /resolves to 198\.51\.100\.7, not to this server/)
+  assert.deepEqual(dnsWarnings('app.example.com', ['198.51.100.7', '203.0.113.10'], '203.0.113.10'), [])
 })

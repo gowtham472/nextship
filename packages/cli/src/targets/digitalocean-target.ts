@@ -56,6 +56,7 @@ import type {
   ReclaimOutcome,
   ReleaseRequest,
   StorageWording,
+  DestroyPlan,
   Target,
 } from './target.js'
 
@@ -73,6 +74,8 @@ export const DEFAULT_REGION = 'blr'
 export interface DigitalOceanPlacement {
   region: string
   registry: string
+  /** The app name, which is also its repository in the registry. */
+  name: string
 }
 
 /** Phases that mean a deployment took traffic, and so is a valid rollback target. */
@@ -124,6 +127,12 @@ export class DigitalOceanTarget implements Target {
     secret: 'encrypted, not readable afterwards',
     plain: 'readable, already public in the browser',
     notice: 'These values leave your machine and are stored in your DigitalOcean account.',
+    listedSecret: 'secret, value not readable',
+    listedPlain: 'plain, readable',
+    removal: 'A secret cannot be read back, so its value is gone once removed. Have a copy before you continue.',
+    unchanged:
+      'Every variable in this push is already set. A stored secret is never returned, so nextship ' +
+      'cannot tell whether any value actually differs, and this will restart the app either way.',
   }
 
   readonly deployRemoves = null
@@ -440,6 +449,16 @@ export class DigitalOceanTarget implements Target {
     await this.api.updateApp(appId, removeDomainFromSpec(spec, domain))
   }
 
+  /**
+   * Refused as custom domains before any request is sent. The AWS suffixes are
+   * kept from before drivers named their own, so what this refuses is unchanged.
+   */
+  readonly platformSuffixes = ['.ondigitalocean.app', '.awsapprunner.com', '.amazonaws.com']
+
+  async domainWarnings(): Promise<string[]> {
+    return []
+  }
+
   // ---------------------------------------------------------------- images
 
   async images(repository: string): Promise<ImageRecord[]> {
@@ -486,6 +505,7 @@ export class DigitalOceanTarget implements Target {
     reclaimWarning:
       'Garbage collection puts the registry into read-only mode while it runs, so a deploy during it will fail to push.',
     heldUntilReclaimed: 'layers are not freed until garbage collection runs; add --gc to start it',
+    usage: 'used in the registry, across every repository',
   }
 
   async storageBytes(): Promise<number | null> {
@@ -497,6 +517,19 @@ export class DigitalOceanTarget implements Target {
 
   async readLogs(appId: string): Promise<string> {
     return this.api.runLogs(appId)
+  }
+
+  readonly emptyLogs = [
+    'The running container has no buffered output.',
+    'The platform keeps only the current container recent logs, so output from a',
+    'replaced deployment is already gone.',
+  ]
+
+  async deploymentLogs(): Promise<string> {
+    throw new NextshipError(
+      'App Platform keeps logs only for the container running now, so there is no history to read by deployment.',
+      'Use `nextship logs` for the running deployment. Keeping history needs log forwarding, which nextship does not configure.'
+    )
   }
 
   /**
@@ -570,6 +603,39 @@ export class DigitalOceanTarget implements Target {
 
   async destroyApp(appId: string): Promise<void> {
     await this.api.deleteApp(appId)
+  }
+
+  async destroyPlan(appId: string, options: { images: boolean; imageCount: number }): Promise<DestroyPlan> {
+    const address = await this.address(appId)
+    const domains = address?.domains ?? []
+    const repository = `${this.placement.registry}/${this.placement.name}`
+    return {
+      lines: [
+        `address    ${address?.platformHost ?? 'not yet assigned'} stops serving and is not reissued`,
+        ...domains.map((domain) => `domain     ${domain.domain} stops serving this app`),
+        options.images && options.imageCount > 0
+          ? `images     remove all ${options.imageCount} image(s) from ${repository}, then collect`
+          : options.images
+            ? `images     none in ${repository}, nothing to remove`
+            : `images     kept in ${this.placement.registry}; run \`nextship images prune --gc --yes\` first if you want them gone`,
+        'registry   kept, it is shared by every project on this account',
+        'DNS        untouched, nextship did not create your records',
+      ],
+      warnings: [
+        ...(options.images && options.imageCount > 0
+          ? [
+              'Garbage collection runs afterwards and puts the whole registry into read-only mode, ' +
+                'so a deploy of any other project during it will fail to push.',
+            ]
+          : []),
+        ...(domains.length > 0
+          ? [
+              'A replacement app gets a new generated hostname, so the DNS record for ' +
+                `${domains.map((domain) => domain.domain).join(', ')} will point at nothing until you update it.`,
+            ]
+          : []),
+      ],
+    }
   }
 
   // ----------------------------------------------------------------- inner

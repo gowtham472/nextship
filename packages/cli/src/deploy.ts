@@ -58,7 +58,7 @@ export function settingsFor(
   ].filter((flag): flag is string => flag !== null)
   if (target !== 'digitalocean' && doOnly.length > 0) {
     throw new NextshipError(
-      `${doOnly.join(', ')} only apply to the digitalocean target, and this project deploys to ${target}.`,
+      `${doOnly.join(', ')} only ${doOnly.length === 1 ? 'applies' : 'apply'} to the digitalocean target, and this project deploys to ${target}.`,
       'Drop them and run the command again.'
     )
   }
@@ -67,7 +67,7 @@ export function settingsFor(
   )
   if (target !== 'vm' && vmOnly.length > 0) {
     throw new NextshipError(
-      `${vmOnly.join(', ')} only apply to the vm target, and this project deploys to ${target}.`,
+      `${vmOnly.join(', ')} only ${vmOnly.length === 1 ? 'applies' : 'apply'} to the vm target, and this project deploys to ${target}.`,
       'Drop them and run the command again.'
     )
   }

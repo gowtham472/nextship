@@ -3,7 +3,12 @@
 # End to end against a real server over SSH: sets the server up, deploys the streaming
 # fixture behind Caddy, and checks what the VM target promises. Streaming passes through
 # the proxy, a new deployment drops no request, a deployment that cannot start leaves the
-# previous one serving, and rollback returns to the previous deployment.
+# previous one serving, rollback returns to the previous deployment, env push takes effect
+# without downtime, a replaced deployment's logs are still readable, pruning keeps the
+# live image, a domain gets its own site, and destroying one app leaves another serving.
+#
+# It ends by destroying both apps it created, so a server it ran against is left with only
+# what `server add` set up.
 #
 #   conformance/vm/e2e.sh user@host[:port] [server add flags...]
 #
@@ -146,3 +151,78 @@ nextship rollback --yes
 [ "$(nextship rollback | sed -n 's/^  current *\([^ ]*\).*/\1/p')" = "${TARGET}" ] || fail "rollback" "the live deployment is not ${TARGET}"
 curl -sf -o /dev/null "${URL}/" || fail "rollback" "${URL}/ does not answer after rolling back"
 check "rollback" "${TARGET} serves again"
+
+# ---------------------------------------------------------------------- env
+
+mkdir -p app/api/env
+cat > app/api/env/route.js <<'JS'
+export const dynamic = 'force-dynamic'
+export async function GET() {
+  return Response.json({ message: process.env.E2E_MESSAGE ?? null })
+}
+JS
+commit "a route that reads the environment at request time"
+nextship deploy --yes
+printf 'E2E_MESSAGE=from the server env file\n' > .env.production
+poll / "${WORK}/codes" & LOOP_PIDS+=($!)
+nextship env push --yes
+touch "${WORK}/codes.stop"
+wait "${LOOP_PIDS[@]}"
+LOOP_PIDS=()
+rm .env.production
+all_ok "${WORK}/codes" "env push"
+[ "$(curl -s "${URL}/api/env")" = '{"message":"from the server env file"}' ] || fail "env push" "the pushed value is not visible at request time"
+check "env push" "the value is visible at request time"
+
+# --------------------------------------------------------------------- logs
+
+# TARGET served until the env route deployment replaced it, so its output is only in the journal now.
+LOGS="$(nextship logs --deployment "${TARGET}")"
+grep -q 'Ready' <<< "${LOGS}" || fail "logs" "the logs of replaced deployment ${TARGET} are gone"
+if nextship logs --deployment dpl-not-a-deployment > /dev/null 2>&1; then fail "logs" "an unknown deployment was not refused"; fi
+check "logs" "a replaced deployment's logs are still readable, and an unknown one is refused"
+
+# ------------------------------------------------------------------- images
+
+nextship images prune --keep 1 --yes
+# Output is captured before it is searched: grep -q exits at its first match, and the
+# closed pipe would fail the command under pipefail.
+IMAGES="$(nextship images)"
+KEPT="$(grep -c '^  dpl-' <<< "${IMAGES}" || true)"
+[ "${KEPT}" -eq 1 ] || fail "images prune" "${KEPT} images remain after keeping 1"
+grep -q 'deployed now' <<< "${IMAGES}" || fail "images prune" "the live image was removed"
+curl -sf -o /dev/null "${URL}/" || fail "images prune" "the app stopped serving"
+check "images prune" "one image kept, the live one, and the app still serves"
+
+# ------------------------------------------------------------------ domains
+
+nextship domain add e2e.nextship.test --yes
+[ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: e2e.nextship.test' "${URL}/")" = 308 ] ||
+  fail "domain add" "the domain did not get its own HTTPS site"
+check "domain add" "the domain redirects to HTTPS through its own site"
+
+# -------------------------------------------------- a second app, then destroy
+
+SECOND_APP="${WORK}/second"
+mkdir -p "${SECOND_APP}"
+cp -R "${FIXTURE}/app" "${FIXTURE}/package-lock.json" "${SECOND_APP}/"
+sed 's/"nextship-streaming-fixture"/"nextship-e2e-second"/' "${FIXTURE}/package.json" > "${SECOND_APP}/package.json"
+ln -s "$(cd "${FIXTURE}" && pwd)/node_modules" "${SECOND_APP}/node_modules"
+(
+  cd "${SECOND_APP}"
+  printf 'node_modules\n.nextship\n' > .gitignore
+  git init -q
+  commit fixture
+  nextship server add "${SERVER}" "$@" --yes
+  commit "record the server"
+  nextship deploy --yes
+  nextship domain add second.nextship.test --yes
+  [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: second.nextship.test' "${URL}/")" = 308 ] || fail "second app" "its domain has no site"
+  nextship destroy nextship-e2e-second --images --yes
+)
+curl -sf -o /dev/null "${URL}/" || fail "destroy" "the first app stopped serving when the second was destroyed"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: e2e.nextship.test' "${URL}/")" = 308 ] || fail "destroy" "the first app lost its domain"
+check "destroy" "destroying one app left the other and Caddy serving"
+
+nextship destroy nextship-streaming-fixture --images --yes
+check "cleanup" "both apps are destroyed"

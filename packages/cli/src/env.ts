@@ -26,6 +26,7 @@ import { fileURLToPath } from 'node:url'
 import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
 import { ownedApp } from './owned-app.js'
+import type { EnvStorageWording } from './targets/target.js'
 import { captureStrict } from './util/exec.js'
 import { detail, ok, step, warn } from './util/log.js'
 
@@ -137,7 +138,7 @@ export async function listEnv(project: ProjectInfo): Promise<void> {
   }
 
   for (const entry of envs) {
-    const readable = entry.secret ? 'secret, value not readable' : 'plain, readable'
+    const readable = entry.secret ? app.target.envStorage.listedSecret : app.target.envStorage.listedPlain
     detail(`${entry.key}  ${readable}  on ${entry.location}`)
   }
   ok(`${envs.length} variable(s) set.`)
@@ -180,7 +181,7 @@ export async function pushEnv(project: ProjectInfo, options: EnvOptions): Promis
   detail(`untouched  ${untouched.length} variable(s) already on the app`)
   detail('nothing is removed; a variable this push does not name keeps its current value')
 
-  warnAboutContent(values, added.length, app.target.envStorage.notice)
+  warnAboutContent(values, added.length, app.target.envStorage)
 
   if (!options.confirmed) {
     ok('This was a plan only. Nothing changed.')
@@ -227,7 +228,7 @@ export async function removeEnv(project: ProjectInfo, options: RemoveOptions): P
   // looks like. Refusing it would leave a mistaken push stranded on the app,
   // which is the problem this command exists to solve.
   if (remaining === 0) warn('This removes every variable currently set on the app.')
-  warn('A secret cannot be read back, so its value is gone once removed. Have a copy before you continue.')
+  warn(app.target.envStorage.removal)
 
   if (!options.confirmed) {
     ok('This was a plan only. Nothing changed.')
@@ -266,7 +267,7 @@ async function writeEnvs(write: () => Promise<void>, secrets: Iterable<string>):
 }
 
 /** Says what a push is about to do that the user probably did not intend. */
-function warnAboutContent(values: Map<string, string>, addedCount: number, storageNotice: string): void {
+function warnAboutContent(values: Map<string, string>, addedCount: number, storage: EnvStorageWording): void {
   const critical = [...values.keys()].filter((key) => RUNTIME_CRITICAL.has(key))
   if (critical.length > 0) {
     warn(
@@ -294,11 +295,8 @@ function warnAboutContent(values: Map<string, string>, addedCount: number, stora
   }
 
   if (addedCount === 0) {
-    warn(
-      'Every variable in this push is already set. A stored secret is never returned, so nextship ' +
-        'cannot tell whether any value actually differs, and this will restart the app either way.'
-    )
+    warn(storage.unchanged)
   }
 
-  warn(storageNotice)
+  warn(storage.notice)
 }

@@ -60,42 +60,22 @@ export async function destroy(project: ProjectInfo, options: DestroyOptions): Pr
   // Read before deleting, so the plan can say what stops working rather than
   // only what is removed.
   await app.target.requireApp(app.appId)
-  const address = await app.target.address(app.appId)
-  const domains = address?.domains ?? []
-  const manifests = options.images && config?.registry ? await app.target.images(config.name) : []
+  const manifests = options.images ? await app.target.images(app.name) : []
   // `--images` with nothing to remove is not an image removal. Treating it as
   // one would warn about a read-only registry and then start a collection with
   // nothing to collect.
   const removingImages = options.images && manifests.length > 0
+  const plan = await app.target.destroyPlan(app.appId, { images: options.images, imageCount: manifests.length })
 
   step('Plan')
   detail(`app        DESTROY "${app.name}" (${app.appId})`)
-  detail(`address    ${address?.platformHost ?? 'not yet assigned'} stops serving and is not reissued`)
-  for (const domain of domains) detail(`domain     ${domain.domain} stops serving this app`)
-  if (removingImages) {
-    detail(`images     remove all ${manifests.length} image(s) from ${config?.registry}/${config?.name}, then collect`)
-  } else if (options.images) {
-    detail(`images     none in ${config?.registry ?? 'the registry'}/${config?.name}, nothing to remove`)
-  } else {
-    detail(
-      `images     kept in ${config?.registry ?? 'the registry'}; run \`nextship images prune --gc --yes\` first if you want them gone`
-    )
-  }
-  detail(`registry   kept, it is shared by every project on this account`)
-  detail(`DNS        untouched, nextship did not create your records`)
+  for (const line of plan.lines) detail(line)
 
   const others = (await app.target.listApps()).filter((entry) => entry.id !== app.appId)
   detail(`untouched  ${others.length} other app(s) ${app.target.appScope}`)
 
   warn('This cannot be undone. The app, its deployments and its history are removed.')
-  const reclaimWarning = app.target.storage.reclaimWarning
-  if (removingImages && reclaimWarning) warn(`Storage is reclaimed afterwards. ${reclaimWarning}`)
-  if (domains.length > 0) {
-    warn(
-      'A replacement app gets a new generated hostname, so the DNS record for ' +
-        `${domains.map((domain) => domain.domain).join(', ')} will point at nothing until you update it.`
-    )
-  }
+  for (const warning of plan.warnings) warn(warning)
 
   if (!options.confirmed) {
     ok('This was a plan only. Nothing was destroyed.')
@@ -115,10 +95,10 @@ export async function destroy(project: ProjectInfo, options: DestroyOptions): Pr
     detail('nextship.json no longer records an app, so `nextship deploy` will create a new one')
   }
 
-  if (!removingImages || !config?.registry) return
+  if (!removingImages) return
 
   step('Removing images')
-  await app.target.removeImages(config.name, orderForDeletion(manifests).map((manifest) => manifest.id))
+  await app.target.removeImages(app.name, orderForDeletion(manifests).map((manifest) => manifest.id))
   ok(`${manifests.length} image(s) removed.`)
 
   // Collection is started here rather than left to the user. Every other command

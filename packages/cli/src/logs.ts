@@ -28,6 +28,8 @@ import { detail, ok, step } from './util/log.js'
 export interface LogOptions {
   /** Stream new output instead of printing what is buffered and exiting. */
   follow: boolean
+  /** Print the logs of this deployment rather than the running one, where the target keeps history. */
+  deployment?: string
 }
 
 export async function logs(project: ProjectInfo, options: LogOptions): Promise<void> {
@@ -36,11 +38,13 @@ export async function logs(project: ProjectInfo, options: LogOptions): Promise<v
 
   if (options.follow) return follow(app.target, app.appId)
 
-  const text = await app.target.readLogs(app.appId)
+  const text = options.deployment
+    ? await app.target.deploymentLogs(app.appId, options.deployment)
+    : await app.target.readLogs(app.appId)
   if (!text.trim()) {
-    detail('The running container has no buffered output.')
-    detail('The platform keeps only the current container recent logs, so output from a')
-    detail('replaced deployment is already gone.')
+    for (const line of options.deployment ? [`Deployment ${options.deployment} logged nothing that is still kept.`] : app.target.emptyLogs) {
+      detail(line)
+    }
     return
   }
   process.stdout.write(text.endsWith('\n') ? text : `${text}\n`)

@@ -140,7 +140,17 @@ function describeSpawnFailure(command: string, error: NodeJS.ErrnoException): Ne
  * convention shells use, so Ctrl+C surfaces as 130 and can be recognised.
  */
 function signalExitCode(signal: NodeJS.Signals | null): number {
-  const numbers: Partial<Record<NodeJS.Signals, number>> = { SIGINT: 2, SIGTERM: 15, SIGKILL: 9, SIGHUP: 1 }
+  // A crash (SIGSEGV, SIGABRT) or a closed pipe (SIGPIPE) is named too, rather than
+  // collapsing to a bare 128 that reads like an exit code the child chose.
+  const numbers: Partial<Record<NodeJS.Signals, number>> = {
+    SIGHUP: 1,
+    SIGINT: 2,
+    SIGABRT: 6,
+    SIGKILL: 9,
+    SIGSEGV: 11,
+    SIGPIPE: 13,
+    SIGTERM: 15,
+  }
   return 128 + (signal ? (numbers[signal] ?? 0) : 0)
 }
 

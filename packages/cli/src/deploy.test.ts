@@ -53,3 +53,19 @@ test('digitalocean flags on a vm project are refused by name', () => {
     (error: unknown) => error instanceof NextshipError && /--region, --size only apply to the digitalocean target/.test(error.message)
   )
 })
+
+test('vm flags on a digitalocean project are refused by name, and an unknown build mode is refused', () => {
+  const digitalocean: ProjectConfig = { version: 1, target: 'digitalocean', region: 'blr', name: 'demo', registry: 'demo' }
+  assert.throws(
+    () => settingsFor('demo', digitalocean, { confirmed: false, build: 'local' }),
+    (error: unknown) => error instanceof NextshipError && /--build only applies to the vm target/.test(error.message)
+  )
+  const vm: ProjectConfig = {
+    version: 2,
+    target: 'vm',
+    name: 'demo',
+    server: { host: 'h', port: 22, user: 'nextship', hostKey: 'h ssh-ed25519 AAAA', arch: 'amd64' },
+  }
+  assert.throws(() => settingsFor('demo', vm, { confirmed: false, build: 'cloud' as never }), /is not a build mode/)
+  assert.equal(settingsFor('demo', vm, { confirmed: false, build: 'local' }).build, 'local', 'a build mode is recorded')
+})

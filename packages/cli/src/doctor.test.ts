@@ -238,6 +238,8 @@ test('on a vm target, revalidation is not warned about and cron advice names the
     assert.equal(titled(findings, 'On-demand revalidation'), undefined)
     assert.match(titled(findings, 'cron job')?.action ?? '', /systemd timer/)
     assert.doesNotMatch(titled(findings, 'cron job')?.action ?? '', /DigitalOcean/)
+    assert.equal(titled(findings, 'does not survive a restart'), undefined)
+    assert.ok(titled(findings, 'survive a restart'))
   } finally {
     await rm(root, { recursive: true, force: true })
   }
