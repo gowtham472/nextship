@@ -58,7 +58,8 @@ export async function rollback(project: ProjectInfo, options: RollbackOptions): 
     detail("same image on both: this returns the app's configuration, such as environment variables, not its code")
   }
   detail('no build, no push: this reuses an image that already ran')
-  detail('nothing is deleted; the current deployment stays in the history')
+  for (const note of app.target.rollbackNotes) detail(note)
+  detail(app.target.deployRemoves ?? 'nothing is deleted; the current deployment stays in the history')
 
   if (!options.confirmed) {
     ok('This was a plan only. Nothing changed.')
@@ -76,7 +77,7 @@ export async function rollback(project: ProjectInfo, options: RollbackOptions): 
   const address = await app.target.address(app.appId)
   ok(
     `Rolled back to ${target.imageTag ?? target.id}: ${
-      address?.platformHost ? `https://${address.platformHost}` : 'URL unchanged'
+      address?.platformUrl ?? 'URL unchanged'
     }`
   )
 }

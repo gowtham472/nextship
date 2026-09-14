@@ -21,6 +21,7 @@ import { readConfig, TARGET_IDS, type ProjectConfig } from './config.js'
 import { DigitalOcean } from './targets/digitalocean.js'
 import { DigitalOceanTarget } from './targets/digitalocean-target.js'
 import type { Target } from './targets/target.js'
+import { VmTarget } from './targets/vm/vm-target.js'
 import { docsUrl } from './links.js'
 
 export interface OwnedApp {
@@ -49,6 +50,18 @@ export function client(config: ProjectConfig | null, requested?: string): Target
     )
   }
 
+  if (target === 'vm') {
+    if (!config) {
+      throw new NextshipError(
+        'The vm target needs a server on record, and this project has none.',
+        'Run `nextship server add user@host` first, which records the server in nextship.json.'
+      )
+    }
+    const driver = new VmTarget(config)
+    opened.push(driver)
+    return driver
+  }
+
   if (target !== 'digitalocean') {
     throw new NextshipError(
       `Unknown target "${target}".`,
@@ -70,6 +83,17 @@ export function client(config: ProjectConfig | null, requested?: string): Target
     )
   }
   return new DigitalOceanTarget(new DigitalOcean(token), { region: config.region, registry: config.registry })
+}
+
+/**
+ * Drivers holding a connection, closed once when the command ends. A server's
+ * SSH connection is shared by every step of a command, so it outlives any one
+ * call and nothing but the command's end knows when it is finished.
+ */
+const opened: VmTarget[] = []
+
+export async function closeTargets(): Promise<void> {
+  await Promise.all(opened.splice(0).map((driver) => driver.close()))
 }
 
 /** The app recorded for this project, refusing to guess when there is none. */

@@ -126,6 +126,14 @@ export class DigitalOceanTarget implements Target {
     notice: 'These values leave your machine and are stored in your DigitalOcean account.',
   }
 
+  readonly deployRemoves = null
+
+  readonly rollbackNotes: string[] = []
+
+  async actionsKey(): Promise<string | null> {
+    return null
+  }
+
   // ----------------------------------------------------------------- build
 
   async buildPlatform(): Promise<string> {
@@ -133,7 +141,7 @@ export class DigitalOceanTarget implements Target {
   }
 
   async builder(): Promise<ImageBuilder> {
-    return { dockerHost: null, close: async () => {} }
+    return { dockerHost: null, cacheScope: null, warning: null, close: async () => {} }
   }
 
   /**
@@ -246,6 +254,7 @@ export class DigitalOceanTarget implements Target {
 
     return {
       platformHost: status.defaultIngress,
+      platformUrl: status.defaultIngress ? `https://${status.defaultIngress}` : null,
       domains: specDomains(spec).map((entry) => ({
         domain: entry.domain,
         primary: entry.type === 'PRIMARY',

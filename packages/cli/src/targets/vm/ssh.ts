@@ -194,8 +194,12 @@ export class Ssh {
     return new Ssh(endpoint, dir, hostKeyAlgorithms(key))
   }
 
-  /** The options every ssh process for this server uses, so no call can forget the pinned key. */
-  options(): string[] {
+  /**
+   * The options every ssh process for this server uses, so no call can forget
+   * the pinned key. `multiplex: false` is for a long-lived forward, which has to
+   * own its connection: handed to a control master it would exit at once.
+   */
+  options(settings: { multiplex: boolean } = { multiplex: true }): string[] {
     const options = [
       '-o', 'BatchMode=yes',
       '-o', 'PasswordAuthentication=no',
@@ -213,10 +217,17 @@ export class Ssh {
       '-p', String(this.endpoint.port),
     ]
     // Windows' OpenSSH has no connection multiplexing, so each command opens its own.
-    if (process.platform !== 'win32') {
+    if (!settings.multiplex) {
+      options.push('-o', 'ControlMaster=no', '-o', 'ControlPath=none')
+    } else if (process.platform !== 'win32') {
       options.push('-o', 'ControlMaster=auto', '-o', `ControlPath=${path.join(this.dir, '%C')}`, '-o', 'ControlPersist=60')
     }
     return options
+  }
+
+  /** The private directory this connection owns, for sockets that must not be reachable by other users. */
+  privateDir(): string {
+    return this.dir
   }
 
   /** The destination, after `--` so nothing in it can be read as an option. */

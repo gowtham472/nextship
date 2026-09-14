@@ -15,9 +15,9 @@
 
 import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
-import { buildProject, type BuildResult } from './build.js'
+import { buildProject, storedEncryptionKey, type BuildResult } from './build.js'
 import { packageImage, type ImageRef } from './packaging.js'
-import { readConfig, writeConfig, TARGET_IDS, type ProjectConfig, type TargetId } from './config.js'
+import { readConfig, writeConfig, TARGET_IDS, type BuildMode, type ProjectConfig, type TargetId } from './config.js'
 import { CONTAINER_PORT } from './image/dockerfile.js'
 import { client as apiClient } from './owned-app.js'
 import { DEFAULT_REGION } from './targets/digitalocean-target.js'
@@ -35,6 +35,10 @@ export interface DeployOptions {
   instanceSize?: string
   /** DigitalOcean only: the registry name, which must be unique across all of DigitalOcean. */
   registry?: string
+  /** vm only: where the image is built. Recorded in nextship.json. */
+  build?: BuildMode
+  /** vm only: the container memory limit, such as `512m`. */
+  memory?: string
 }
 
 /**
@@ -58,10 +62,25 @@ export function settingsFor(
       'Drop them and run the command again.'
     )
   }
+  const vmOnly = [options.build !== undefined ? '--build' : null, options.memory !== undefined ? '--memory' : null].filter(
+    (flag): flag is string => flag !== null
+  )
+  if (target !== 'vm' && vmOnly.length > 0) {
+    throw new NextshipError(
+      `${vmOnly.join(', ')} only apply to the vm target, and this project deploys to ${target}.`,
+      'Drop them and run the command again.'
+    )
+  }
+  if (options.build !== undefined && options.build !== 'remote' && options.build !== 'local') {
+    throw new NextshipError(`--build "${options.build}" is not a build mode.`, 'Use `--build remote` or `--build local`.')
+  }
 
   if (existing) {
-    // The recorded region wins: an app cannot move region by redeploying.
-    return options.registry ? { ...existing, registry: options.registry } : existing
+    // The recorded region wins: an app cannot move region by redeploying. A build
+    // mode is recorded, so a later deploy from anywhere builds the same way.
+    if (options.registry) return { ...existing, registry: options.registry }
+    if (options.build) return { ...existing, build: options.build }
+    return existing
   }
   if (target !== 'digitalocean') {
     throw new NextshipError(
@@ -119,12 +138,13 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
     name,
     appId: owned?.id ?? null,
     instanceSize: options.instanceSize ?? null,
+    memory: options.memory ?? null,
     delivery,
   })
   for (const line of lines) detail(line)
   if (preserved.length > 0) detail(`preserved     ${preserved.join(', ')}, kept as they are`)
   detail(`untouched     ${apps.length} existing app(s) ${client.appScope}`)
-  detail('nothing is ever deleted by this command')
+  detail(client.deployRemoves ?? 'nothing is ever deleted by this command')
 
   warnAboutMissingRuntimeEnv(project, existingEnv, owned !== undefined)
 
@@ -140,12 +160,19 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
   // be refused says so now instead of after a full build and push.
   if (owned) await client.assertIdle(owned.id)
 
+  const serverKey = await client.actionsKey(project.root, await storedEncryptionKey(project.root), detail)
+
   const builder = await client.builder()
   let build: BuildResult
   let image: ImageRef
   try {
-    const placement = { platform: await client.buildPlatform(), dockerHost: builder.dockerHost }
-    build = await buildProject(project, placement)
+    if (builder.warning) warn(builder.warning)
+    const placement = {
+      platform: await client.buildPlatform(),
+      dockerHost: builder.dockerHost,
+      cacheScope: builder.cacheScope,
+    }
+    build = await buildProject(project, placement, serverKey)
     image = await packageImage(project, build)
   } finally {
     await builder.close()
@@ -179,6 +206,7 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
     tag: deploymentId,
     port: CONTAINER_PORT,
     instanceSize: options.instanceSize ?? null,
+    memory: options.memory ?? null,
     healthPath: build.manifest.healthPath,
   })
   const appId = released.appId
@@ -237,9 +265,9 @@ function warnAboutMissingRuntimeEnv(project: ProjectInfo, existing: EnvRecord[],
  */
 async function reportUrls(client: Target, appId: string): Promise<void> {
   const address = await client.address(appId)
-  const platform = address?.platformHost
+  const platform = address?.platformUrl
 
-  ok(`Deployed: ${platform ? `https://${platform}` : 'URL not yet assigned'}`)
+  ok(`Deployed: ${platform ?? 'URL not yet assigned'}`)
 
   for (const domain of address?.domains ?? []) {
     detail(`https://${domain.domain}  ${domain.state === 'live' ? 'live' : domain.detail}`)

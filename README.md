@@ -296,6 +296,45 @@ app region `blr` corresponds to the registry region `blr1`. nextship matches the
 if no registry region corresponds to your app region it says so and lists the ones
 that exist instead of creating something in the wrong place.
 
+#### Deploying to a server
+
+For a project recorded by `nextship server add`, `deploy` builds the image and runs it on
+that server behind Caddy.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--build <mode>` | `remote` | `remote` builds on the server's own Docker, reached through an SSH forward of its socket, so nothing but the build context leaves your machine and the image is built natively for the server. `local` builds here for the server's architecture and streams the image with `docker save \| ssh docker load`. Recorded in `nextship.json`. A server under 2 GB of RAM is refused for remote builds |
+| `--memory <size>` | an even share of 80% of RAM across the server's apps | The container's memory limit, such as `512m` |
+
+```
+> Plan
+  target        your server 203.0.113.10, arm64, Docker 29.8.0
+  build         on the server's Docker 29.8.0, for linux/arm64, over SSH
+  image         kept on the server as acme-web:<deployment id>
+  app           UPDATE "acme-web" (354832e1-3eab-4c38-ae2a-9cdad8e56b0f), which nextship created
+  memory        up to 6268m of 7836 MiB
+  address       http://203.0.113.10
+  switch        Caddy moves traffic only once the new container is healthy; until then the current one serves
+  caddy         the site is regenerated from the domains recorded for this app
+  untouched     0 existing app(s) on this server
+  removes images older than the newest 5 served deployments once this one is live; nothing else is deleted
+```
+
+A deployment starts a new container with no published port, waits for Docker to report it
+healthy, then points Caddy at it and stops the previous one. Nothing a visitor sees
+changes until the new container is healthy, so a deployment that fails leaves the previous
+one serving, and a deployment that succeeds drops no request. Its last log lines are
+printed when it fails. The first app deployed on a server answers `http://<server>`;
+later apps answer nothing until `nextship domain add`.
+
+The Server Actions key is kept on the server rather than in `.nextship/secrets.local.json`,
+so every machine that deploys, including CI, builds with the same key. A key already in
+your local file is copied to the server on the first deploy. If the server and your local
+file hold different keys, `deploy` refuses rather than choosing one.
+
+`rollback` on a server starts the earlier deployment's image again the same way. It uses
+the current env file, not the one that deployment first ran with, and the plan says so.
+
 ### `nextship rollback`
 
 Returns the app to a deployment that already ran. It builds nothing and pushes
@@ -611,7 +650,7 @@ from a second project records the same server for that project. Each step is des
 Membership of the `docker` group is root-equivalent, and the plan says so: whoever can log
 in as `nextship` controls the server.
 
-Deploying to a server is not built yet. It is the next phase of v1.1.
+Then `nextship deploy` deploys to that server. See [Deploying to a server](#deploying-to-a-server).
 
 ### Planned
 

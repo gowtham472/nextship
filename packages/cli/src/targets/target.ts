@@ -75,6 +75,8 @@ export interface DomainRecord {
  */
 export interface AppAddress {
   platformHost: string | null
+  /** The address to open, with its scheme: App Platform serves HTTPS, a server's default app plain HTTP. */
+  platformUrl: string | null
   domains: DomainRecord[]
 }
 
@@ -109,6 +111,8 @@ export interface ReleaseRequest {
   port: number
   /** A sizing slug the driver interprets, or null for the target's default. */
   instanceSize: string | null
+  /** A container memory limit such as `512m`, or null for the target's default. */
+  memory: string | null
   /** A prerendered route the health check can poll without rendering. */
   healthPath?: string | null
 }
@@ -151,6 +155,8 @@ export interface DeployPlanContext {
   appId: string | null
   /** A sizing slug the driver interprets, or null for the target's default. */
   instanceSize: string | null
+  /** A container memory limit such as `512m`, or null for the target's default. */
+  memory: string | null
   /** What `planDelivery` reported. */
   delivery: string[]
 }
@@ -159,6 +165,13 @@ export interface DeployPlanContext {
 export interface ImageBuilder {
   /** A `DOCKER_HOST` value, or null for the local daemon. */
   dockerHost: string | null
+  /**
+   * Names the Next.js build cache when builds run on a shared daemon, so every
+   * machine deploying the app reuses one cache there. Null keeps the local rule.
+   */
+  cacheScope: string | null
+  /** Something the user must know about how this builder is reached, or null. */
+  warning: string | null
   close(): Promise<void>
 }
 
@@ -204,7 +217,18 @@ export interface Target {
    */
   readonly envStorage: EnvStorageWording
 
+  /** What a successful deploy removes, for the plan's last line, or null when it removes nothing. */
+  readonly deployRemoves: string | null
+
   // ----------------------------------------------------------------- build
+
+  /**
+   * The Server Actions encryption key a build must use, or null when the key is
+   * the project's own local file (`build.ts`). A target that can hold the key
+   * where every deploying machine reaches it returns that one, so a second
+   * machine does not build with a different key.
+   */
+  actionsKey(projectRoot: string, localKey: string | null, onPhase: PhaseReporter): Promise<string | null>
 
   /** The `--platform` an image for this target has to be built for. */
   buildPlatform(): Promise<string>
@@ -275,6 +299,9 @@ export interface Target {
 
   /** Past deployments, newest first. */
   deployments(appId: string): Promise<DeploymentRecord[]>
+
+  /** What a rollback plan must say about this target's rollback that the generic plan does not. */
+  readonly rollbackNotes: string[]
 
   /**
    * Returns the app to a previous deployment.

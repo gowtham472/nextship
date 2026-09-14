@@ -46,7 +46,7 @@ const identity: BuildIdentity = {
   installerDigest: null,
 }
 
-const amd64 = { platform: 'linux/amd64', dockerHost: null }
+const amd64 = { platform: 'linux/amd64', dockerHost: null, cacheScope: null }
 
 /** Reads the value that follows a flag, so order changes do not break the tests. */
 const valueAfter = (args: string[], flag: string): string | undefined => args[args.indexOf(flag) + 1]
@@ -63,7 +63,7 @@ test('the platform a target asks for reaches the arguments, and the key still do
     project,
     context,
     identity,
-    { platform: 'linux/arm64', dockerHost: 'unix:///tmp/nextship-tunnel/docker.sock' },
+    { platform: 'linux/arm64', dockerHost: 'unix:///tmp/nextship-tunnel/docker.sock', cacheScope: null },
     { target: 'runtime', tag: 'demo:x' }
   )
   assert.equal(valueAfter(args, '--platform'), 'linux/arm64')
@@ -73,7 +73,7 @@ test('the platform a target asks for reaches the arguments, and the key still do
 
 test('DOCKER_HOST is set only when a target names another daemon', () => {
   assert.deepEqual(dockerEnvironment(amd64, { NEXTSHIP_KEY: 'k' }), { NEXTSHIP_KEY: 'k' })
-  assert.deepEqual(dockerEnvironment({ platform: 'linux/amd64', dockerHost: 'unix:///s.sock' }, {}), {
+  assert.deepEqual(dockerEnvironment({ platform: 'linux/amd64', dockerHost: 'unix:///s.sock', cacheScope: null }, {}), {
     DOCKER_HOST: 'unix:///s.sock',
   })
 })
@@ -151,4 +151,23 @@ test('the Next.js build cache is per project location, and stable for one locati
   // Two projects with the same name in different places: the case that shared a cache.
   const elsewhere = { ...project, root: '/tmp/other/demo', contextRoot: '/tmp/other/demo' }
   assert.notEqual(cacheArg(buildArguments(elsewhere, context, identity, amd64, { target: 'runtime', tag: 'demo:x' })), cacheArg(same))
+})
+
+// Builds on a server run on its daemon from any machine that deploys. Naming the
+// cache by this machine's path would give a laptop and a CI runner two cold
+// caches on the same server.
+test('a cache scope from the target replaces the local path, so machines share one cache on a server', () => {
+  const scoped = { platform: 'linux/arm64', dockerHost: 'unix:///s.sock', cacheScope: 'demo@203.0.113.10:22' }
+  const cacheArg = (args: string[]) => args.find((arg) => arg.startsWith('NEXTSHIP_NEXT_CACHE_ID='))
+  const laptop = buildArguments(project, context, identity, scoped, { target: 'runtime', tag: 'demo:x' })
+  const runner = buildArguments(
+    { ...project, root: '/home/runner/work/demo', contextRoot: '/home/runner/work/demo' },
+    context,
+    identity,
+    scoped,
+    { target: 'runtime', tag: 'demo:x' }
+  )
+  assert.equal(cacheArg(laptop), cacheArg(runner))
+  assert.notEqual(cacheArg(laptop), cacheArg(buildArguments(project, context, identity, amd64, { target: 'runtime', tag: 'demo:x' })))
+  assert.match(cacheArg(laptop) ?? '', /^NEXTSHIP_NEXT_CACHE_ID=nextship-next-demo-[0-9a-f]{12}$/)
 })
