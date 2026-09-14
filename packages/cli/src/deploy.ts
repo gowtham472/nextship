@@ -1,7 +1,7 @@
 /**
  * @nextship/cli: deploy
  *
- * Builds, pushes and releases to DigitalOcean.
+ * Builds, delivers and releases an image to the project's target.
  *
  * The whole command is built around one rule: **it must be impossible for this
  * to damage anything it did not create.** Concretely that means no delete call
@@ -15,78 +15,115 @@
 
 import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
-import { buildProject } from './build.js'
-import { packageImage } from './packaging.js'
-import { readConfig, writeConfig, type ProjectConfig } from './config.js'
+import { buildProject, type BuildResult } from './build.js'
+import { packageImage, type ImageRef } from './packaging.js'
+import { readConfig, writeConfig, TARGET_IDS, type ProjectConfig, type TargetId } from './config.js'
 import { CONTAINER_PORT } from './image/dockerfile.js'
 import { client as apiClient } from './owned-app.js'
+import { DEFAULT_REGION } from './targets/digitalocean-target.js'
 import type { EnvRecord, Target } from './targets/target.js'
 import { detail, ok, step, warn } from './util/log.js'
 
 export interface DeployOptions {
   /** Without this nothing is created or changed. The plan is printed and the command stops. */
   confirmed: boolean
-  region: string
-  instanceSize: string
-  /** Overrides the registry name, which must be unique across all of DigitalOcean. */
+  /** `--target`, which chooses only for a project with no nextship.json yet. */
+  target?: string
+  /** DigitalOcean only: the region for a project that has none recorded. */
+  region?: string
+  /** DigitalOcean only: the App Platform instance size. */
+  instanceSize?: string
+  /** DigitalOcean only: the registry name, which must be unique across all of DigitalOcean. */
   registry?: string
 }
 
+/**
+ * What this deploy will record, before anything exists: the file as it stands,
+ * or for a first deploy the choices the flags made.
+ */
+export function settingsFor(
+  projectName: string,
+  existing: ProjectConfig | null,
+  options: DeployOptions
+): ProjectConfig {
+  const target = existing?.target ?? options.target ?? 'digitalocean'
+  const doOnly = [
+    options.region !== undefined ? '--region' : null,
+    options.instanceSize !== undefined ? '--size' : null,
+    options.registry !== undefined ? '--registry' : null,
+  ].filter((flag): flag is string => flag !== null)
+  if (target !== 'digitalocean' && doOnly.length > 0) {
+    throw new NextshipError(
+      `${doOnly.join(', ')} only apply to the digitalocean target, and this project deploys to ${target}.`,
+      'Drop them and run the command again.'
+    )
+  }
+
+  if (existing) {
+    // The recorded region wins: an app cannot move region by redeploying.
+    return options.registry ? { ...existing, registry: options.registry } : existing
+  }
+  if (target !== 'digitalocean') {
+    throw new NextshipError(
+      TARGET_IDS.includes(target as TargetId)
+        ? `The ${target} target needs a server on record, and this project has none.`
+        : `Unknown target "${target}".`,
+      TARGET_IDS.includes(target as TargetId)
+        ? 'Run `nextship server add user@host` first, which records the server in nextship.json.'
+        : `nextship deploys to: ${TARGET_IDS.join(', ')}.`
+    )
+  }
+  return {
+    version: 1,
+    target: 'digitalocean',
+    name: projectName,
+    region: options.region ?? DEFAULT_REGION,
+    registry: options.registry ?? projectName,
+  }
+}
+
 export async function deploy(project: ProjectInfo, options: DeployOptions): Promise<void> {
-  const client = apiClient()
   const existing = await readConfig(project.root)
-  const name = existing?.name ?? project.name
-  const registryName = options.registry ?? existing?.registry ?? name
-  const region = existing?.region ?? options.region
+  const settings = settingsFor(project.name, existing, options)
+  const client = apiClient(settings, existing ? options.target : undefined)
+  const name = settings.name
 
   // Read-only reconnaissance first, so the plan describes reality.
-  const store = await client.prepareImageStore(registryName, region, { dryRun: true })
+  const delivery = await client.planDelivery(name)
   const apps = await client.listApps()
   const owned = existing?.appId ? apps.find((app) => app.id === existing.appId) : undefined
   const nameClash = apps.find((app) => app.name === name && app.id !== existing?.appId)
 
   if (nameClash) {
     throw new NextshipError(
-      `An app named "${name}" already exists in this account, and nextship did not create it.`,
+      `An app named "${name}" already exists ${client.appScope}, and nextship did not create it.`,
       'nextship will not modify an app it does not own. Rename this project, or set a different name in nextship.json.'
     )
   }
   if (existing?.appId && !owned) {
     throw new NextshipError(
-      `nextship.json records app ${existing.appId}, which no longer exists in this account.`,
+      `nextship.json records app ${existing.appId}, which no longer exists ${client.appScope}.`,
       'Remove the appId from nextship.json to create a new app, after confirming the old one is really gone.'
     )
   }
 
-  // The spec of the app being updated, read here rather than at write time so
-  // the plan can describe what survives and what is missing before anything is
-  // built. It is also what the update is merged into.
-  const preservedFields = owned ? await client.preservedSettings(owned.id) : []
+  // Read here rather than at write time so the plan can describe what survives
+  // and what is missing before anything is built.
+  const preserved = owned ? await client.preservedSettings(owned.id) : []
   const existingEnv = owned ? await client.env(owned.id) : []
 
   // ------------------------------------------------------------------- plan
 
-  const willCreateRegistry = store.willCreate
-  const registryInUse = store.store
-
   step('Plan')
-  detail(`target        DigitalOcean, region ${region}`)
-  detail(
-    willCreateRegistry
-      ? `registry      CREATE "${registryName}" on the Basic tier, 5 GiB, $5/month`
-      : `registry      use existing "${registryInUse}", unchanged`
-  )
-  detail(`repository    ${registryInUse}/${name}`)
-  detail(
-    owned
-      ? `app           UPDATE "${name}" (${owned.id}), which nextship created`
-      : `app           CREATE "${name}" on ${options.instanceSize}`
-  )
-  detail(`instance      ${options.instanceSize}, 1 instance`)
-  detail(`project       default (this token cannot assign projects)`)
-  const preserved = preservedFields
+  const lines = await client.planLines({
+    name,
+    appId: owned?.id ?? null,
+    instanceSize: options.instanceSize ?? null,
+    delivery,
+  })
+  for (const line of lines) detail(line)
   if (preserved.length > 0) detail(`preserved     ${preserved.join(', ')}, kept as they are`)
-  detail(`untouched     ${apps.length} existing app(s) in this account`)
+  detail(`untouched     ${apps.length} existing app(s) ${client.appScope}`)
   detail('nothing is ever deleted by this command')
 
   warnAboutMissingRuntimeEnv(project, existingEnv, owned !== undefined)
@@ -103,23 +140,27 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
   // be refused says so now instead of after a full build and push.
   if (owned) await client.assertIdle(owned.id)
 
-  if (willCreateRegistry) {
-    step(`Creating an image store named "${registryName}" (Basic, $5/month)`)
-    await client.prepareImageStore(registryName, region, { dryRun: false })
+  const builder = await client.builder()
+  let build: BuildResult
+  let image: ImageRef
+  try {
+    const placement = { platform: await client.buildPlatform(), dockerHost: builder.dockerHost }
+    build = await buildProject(project, placement)
+    image = await packageImage(project, build)
+  } finally {
+    await builder.close()
   }
+  const deploymentId = build.identity.deploymentId
 
-  const build = await buildProject(project)
-  const image = await packageImage(project, build)
-  const tag = build.identity.deploymentId
-
-  step('Pushing image')
-  const remoteTag = await client.pushImage({
+  step('Delivering image')
+  const delivered = await client.deliverImage({
     localTag: image.tag,
-    repository: name,
-    tag,
+    name,
+    tag: deploymentId,
     cwd: project.root,
+    onPhase: detail,
   })
-  detail(remoteTag)
+  if (delivered.reference) detail(delivered.reference)
 
   detail(
     build.manifest.healthPath
@@ -134,11 +175,10 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
   step(owned ? `Updating app "${name}"` : `Creating app "${name}"`)
   const released = await client.release(owned?.id ?? null, {
     name,
-    region,
     repository: name,
-    tag,
+    tag: deploymentId,
     port: CONTAINER_PORT,
-    instanceSize: options.instanceSize,
+    instanceSize: options.instanceSize ?? null,
     healthPath: build.manifest.healthPath,
   })
   const appId = released.appId
@@ -146,11 +186,8 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
   // Written before waiting, so a timeout still leaves the app recorded as ours
   // rather than orphaned and unadoptable on the next run.
   const config: ProjectConfig = {
-    version: 1,
-    target: client.id as ProjectConfig['target'],
-    region,
-    name,
-    registry: registryInUse,
+    ...settings,
+    ...(delivered.store ? { registry: delivered.store } : {}),
     appId,
   }
   await writeConfig(project.root, config)
@@ -166,8 +203,6 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
 
   await reportUrls(client, appId)
 }
-
-
 
 /**
  * Says so when a project keeps env files but the deployed app has no runtime

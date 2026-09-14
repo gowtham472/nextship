@@ -104,11 +104,11 @@ export interface ImageRecord {
 /** What a release asks for. Platform sizing is a slug the driver interprets. */
 export interface ReleaseRequest {
   name: string
-  region: string
   repository: string
   tag: string
   port: number
-  instanceSize: string
+  /** A sizing slug the driver interprets, or null for the target's default. */
+  instanceSize: string | null
   /** A prerendered route the health check can poll without rendering. */
   healthPath?: string | null
 }
@@ -116,12 +116,51 @@ export interface ReleaseRequest {
 /** Progress reporting, so a driver can narrate a wait without importing the logger. */
 export type PhaseReporter = (phase: string) => void
 
-/** The result of asking a driver to reclaim storage, since not every platform needs to. */
+/**
+ * The result of asking a driver to reclaim storage, since not every platform
+ * needs to. Each outcome carries the driver's own words for it.
+ */
 export type ReclaimOutcome =
-  | { kind: 'started' }
+  /** `detail` explains what happens next, since a started collection has not freed anything yet. */
+  | { kind: 'started'; detail: string[] }
   | { kind: 'already-running'; detail: string }
-  /** ECR frees space on delete, so there is nothing to run and nothing to warn about. */
-  | { kind: 'not-needed' }
+  /** Removing the images already freed their space; `detail` says what, if anything, was also tidied. */
+  | { kind: 'not-needed'; detail: string }
+
+/** What reclaiming storage means on a target, printed by `images prune` and `destroy`. */
+export interface StorageWording {
+  /** Warned in a plan that reclaims, or null when reclaiming affects nothing else. */
+  reclaimWarning: string | null
+  /** Printed when images are removed without reclaiming, or null when removal alone frees the space. */
+  heldUntilReclaimed: string | null
+}
+
+/** How `env push` describes where values end up. */
+export interface EnvStorageWording {
+  /** Per variable in the plan, by whether the target treats it as a secret. */
+  secret: string
+  plain: string
+  /** Warned once per push. */
+  notice: string
+}
+
+/** What a deploy plan needs a driver to describe. */
+export interface DeployPlanContext {
+  name: string
+  /** The app being updated, or null when this deploy creates it. */
+  appId: string | null
+  /** A sizing slug the driver interprets, or null for the target's default. */
+  instanceSize: string | null
+  /** What `planDelivery` reported. */
+  delivery: string[]
+}
+
+/** A Docker daemon to build against. */
+export interface ImageBuilder {
+  /** A `DOCKER_HOST` value, or null for the local daemon. */
+  dockerHost: string | null
+  close(): Promise<void>
+}
 
 /** The DNS record an owner has to create for a custom domain. */
 export interface DnsInstruction {
@@ -137,6 +176,8 @@ export interface Target {
   readonly id: string
   /** How the target is named in output. */
   readonly displayName: string
+  /** Where the other apps a plan counts live, as in "3 other app(s) in this account". */
+  readonly appScope: string
 
   // ------------------------------------------------------------- ownership
 
@@ -146,24 +187,54 @@ export interface Target {
   /** Fails rather than returning empty when the recorded app is gone. */
   requireApp(appId: string): Promise<AppRef>
 
-  // ----------------------------------------------------------- image store
+  // ------------------------------------------------------------------ plan
 
   /**
-   * Makes sure there is somewhere to push images, creating it if there is not.
-   *
-   * Deliberately allowed to be billable, which is why it reports whether it
-   * created anything: the caller shows that in a plan before it happens. The
-   * shape differs per cloud (DigitalOcean has one registry per account, ECR has
-   * a repository per application) and the caller does not need to know which.
+   * How a deploy plan describes this target: where the app runs, what it is
+   * billed as, and what will be created. The lines sit between the plan heading
+   * and the settings a deploy preserves, so each driver can say what its
+   * platform charges for without the command knowing the words.
    */
-  prepareImageStore(
-    name: string,
-    region: string,
-    options: { dryRun: boolean }
-  ): Promise<{ store: string; willCreate: boolean }>
+  planLines(context: DeployPlanContext): Promise<string[]>
 
-  /** Pushes a local image, returning the reference the platform will pull. */
-  pushImage(options: { localTag: string; repository: string; tag: string; cwd: string }): Promise<string>
+  /**
+   * Where the values `env push` sets are stored, printed as a warning in its
+   * plan. On App Platform they are encrypted in the account; on a server they
+   * are a file the server's owner can read.
+   */
+  readonly envStorage: EnvStorageWording
+
+  // ----------------------------------------------------------------- build
+
+  /** The `--platform` an image for this target has to be built for. */
+  buildPlatform(): Promise<string>
+
+  /**
+   * The Docker daemon a build runs against. `dockerHost` is null for the local
+   * daemon, and `close` releases whatever was opened to reach another one.
+   */
+  builder(): Promise<ImageBuilder>
+
+  /**
+   * How delivering an image will go, for the deploy plan. Nothing is created:
+   * a registry the account does not have yet is reported here, because creating
+   * one can be billable and the plan has to say so first.
+   */
+  planDelivery(name: string): Promise<string[]>
+
+  /**
+   * Puts a built image where the target will run it, returning the reference
+   * the target pulls (null when it runs the image where it was built) and the
+   * image store that was used, recorded in `nextship.json` so later commands
+   * find the images, or null for a target with none.
+   */
+  deliverImage(options: {
+    localTag: string
+    name: string
+    tag: string
+    cwd: string
+    onPhase: PhaseReporter
+  }): Promise<{ reference: string | null; store: string | null }>
 
   // --------------------------------------------------------------- release
 
@@ -262,6 +333,9 @@ export interface Target {
   /** Frees the storage removed images were holding, where the platform needs asking. */
   reclaim(): Promise<ReclaimOutcome>
 
+  /** What reclaiming costs and what removing images alone leaves held, in the target's words. */
+  readonly storage: StorageWording
+
   /** Storage the registry is billed for, or null when the platform does not report it. */
   storageBytes(): Promise<number | null>
 
@@ -270,8 +344,13 @@ export interface Target {
   /** What the running container has buffered. */
   readLogs(appId: string): Promise<string>
 
-  /** A URL that streams new output. It carries a token, so it is a secret. */
-  logStreamUrl(appId: string): Promise<string | null>
+  /**
+   * Streams new output to `write` until `signal` aborts or the target ends the
+   * stream. Resolves with a note to print when the target ended it, so a stream
+   * that expired is not mistaken for an app that went quiet, or null when it
+   * stopped because `signal` aborted.
+   */
+  followLogs(appId: string, write: (text: string) => void, signal: AbortSignal): Promise<string | null>
 
   // --------------------------------------------------------------- destroy
 

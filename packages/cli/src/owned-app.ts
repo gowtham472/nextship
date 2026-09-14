@@ -17,7 +17,7 @@
 
 import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
-import { readConfig } from './config.js'
+import { readConfig, TARGET_IDS, type ProjectConfig } from './config.js'
 import { DigitalOcean } from './targets/digitalocean.js'
 import { DigitalOceanTarget } from './targets/digitalocean-target.js'
 import type { Target } from './targets/target.js'
@@ -27,17 +27,35 @@ export interface OwnedApp {
   target: Target
   appId: string
   name: string
+  config: ProjectConfig
 }
 
 /**
  * The driver for a project's target, authenticated.
  *
  * Commands are handed a `Target` rather than a cloud's client, so that adding a
- * second cloud is a new driver rather than an edit to every command. Which
+ * second target is a new driver rather than an edit to every command. Which
  * driver is chosen comes from `nextship.json`, which is why that file records a
- * target at all.
+ * target at all. `requested` is `deploy --target`, which only chooses when there
+ * is no file yet, and is refused when it disagrees with one.
  */
-export function client(): Target {
+export function client(config: ProjectConfig | null, requested?: string): Target {
+  const target = config?.target ?? requested ?? 'digitalocean'
+
+  if (config && requested && requested !== config.target) {
+    throw new NextshipError(
+      `This project deploys to ${config.target}, according to nextship.json, not to ${requested}.`,
+      'Drop --target. Moving a project to another target is not something nextship does in place.'
+    )
+  }
+
+  if (target !== 'digitalocean') {
+    throw new NextshipError(
+      `Unknown target "${target}".`,
+      `nextship deploys to: ${TARGET_IDS.join(', ')}.`
+    )
+  }
+
   const token = process.env.DIGITALOCEAN_TOKEN
   if (!token) {
     throw new NextshipError(
@@ -45,7 +63,13 @@ export function client(): Target {
       `Create a token with Registry and Apps scopes, export it, then run the command again. See ${docsUrl('digitalocean.md')}.`
     )
   }
-  return new DigitalOceanTarget(new DigitalOcean(token))
+  if (!config?.region || !config.registry) {
+    throw new NextshipError(
+      'This DigitalOcean project has no region or registry on record.',
+      'Run `nextship deploy`, which records both.'
+    )
+  }
+  return new DigitalOceanTarget(new DigitalOcean(token), { region: config.region, registry: config.registry })
 }
 
 /** The app recorded for this project, refusing to guess when there is none. */
@@ -57,5 +81,5 @@ export async function ownedApp(project: ProjectInfo): Promise<OwnedApp> {
       'Run `nextship deploy` first. nextship only acts on apps listed in nextship.json.'
     )
   }
-  return { target: client(), appId: config.appId, name: config.name }
+  return { target: client(config), appId: config.appId, name: config.name, config }
 }

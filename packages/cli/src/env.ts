@@ -174,13 +174,13 @@ export async function pushEnv(project: ProjectInfo, options: EnvOptions): Promis
   // terminal buffer and into whatever captures it.
   for (const entry of preview) {
     const action = entry.action === 'update' ? 'update' : 'add   '
-    const stored = entry.secret ? 'encrypted, not readable afterwards' : 'readable, already public in the browser'
+    const stored = entry.secret ? app.target.envStorage.secret : app.target.envStorage.plain
     detail(`${action}     ${entry.key}  ${stored}`)
   }
   detail(`untouched  ${untouched.length} variable(s) already on the app`)
   detail('nothing is removed; a variable this push does not name keeps its current value')
 
-  warnAboutContent(values, added.length)
+  warnAboutContent(values, added.length, app.target.envStorage.notice)
 
   if (!options.confirmed) {
     ok('This was a plan only. Nothing changed.')
@@ -266,7 +266,7 @@ async function writeEnvs(write: () => Promise<void>, secrets: Iterable<string>):
 }
 
 /** Says what a push is about to do that the user probably did not intend. */
-function warnAboutContent(values: Map<string, string>, addedCount: number): void {
+function warnAboutContent(values: Map<string, string>, addedCount: number, storageNotice: string): void {
   const critical = [...values.keys()].filter((key) => RUNTIME_CRITICAL.has(key))
   if (critical.length > 0) {
     warn(
@@ -300,5 +300,5 @@ function warnAboutContent(values: Map<string, string>, addedCount: number): void
     )
   }
 
-  warn('These values leave your machine and are stored in your DigitalOcean account.')
+  warn(storageNotice)
 }

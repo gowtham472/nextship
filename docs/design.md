@@ -533,6 +533,100 @@ Desktop for Windows, so images are pushed through `localhost:5100`.
 The probe is not in CI yet. Until a driver exists it exercises the emulator rather than
 nextship, and a failure would say nothing about this code.
 
+### 9.3 VM target over SSH (Designed)
+
+One generic target: **any Ubuntu or Debian server nextship can reach over SSH.** It covers
+a Hetzner or Hostinger VPS, a DigitalOcean Droplet, EC2, Compute Engine, an Azure VM and a
+machine under a desk, with one driver. §9 already named "Droplet and Compose" as the
+fallback compute; this is that path, generalised to any provider.
+
+**Why one generic target rather than a driver per cloud.** Every managed platform differs
+in auth, registry, update and rollback model, env, TLS, logs, scaling and streaming, so
+each driver is a small product in its own right. That is more than a two person team can
+keep verified, and §14 already says convenience is not a wedge. A server over SSH is the
+same thing everywhere, and it removes limitations App Platform imposes: the cache can
+survive restarts, there is no CDN serving a stale revalidated page, logs keep history,
+one server can host many apps, and no cloud token is involved.
+
+**Commands stay target-agnostic.** `deploy` asks the driver for its plan lines
+(`planLines`), the platform to build for (`buildPlatform`), the Docker daemon to build
+against (`builder`) and how to get the image to where it runs (`planDelivery`,
+`deliverImage`). Log streaming (`followLogs`) and what reclaiming storage means
+(`storage`, `ReclaimOutcome` detail) are the driver's words too. The DigitalOcean plan
+output is unchanged by this: the same plan was printed byte for byte against recorded API
+responses before and after the move.
+
+#### Server layout
+
+`nextship server add user@host` prepares a server once and records it in `nextship.json`
+(version 2: `target: "vm"`, `server { host, port, user, hostKey, arch }`, `build`).
+Everything nextship keeps on the server lives in a few places:
+
+| Where | What |
+|---|---|
+| `/etc/nextship/server.json` | The setup script version that last ran, so `server status` can say when setup is out of date |
+| `/etc/nextship/apps/<name>/app.json` | `{ id, name, createdAt, domains }`: the ownership record. A directory whose id differs from `nextship.json` is refused, never adopted |
+| `/etc/nextship/apps/<name>/deployments.json` | Deployment history, newest first: `{ id, imageTag, createdAt, cause, served, live }` |
+| `/etc/nextship/apps/<name>/env`, `secrets` | Runtime variables and the Server Actions key, mode 0600, written from SSH stdin |
+| `/etc/nextship/apps/<name>/lock` | A directory created with `mkdir`, so two deployments cannot interleave |
+| `/etc/nextship/caddy/sites/<name>.caddy` | The Caddy site for the app |
+| Docker network `nextship` | Caddy and every app container; no app publishes a port |
+| Container `nextship-caddy` | Caddy 2 on ports 80 and 443, certificates in named volumes so they are not reissued |
+
+The server runs a `nextship` user in the `docker` group. **Membership of the `docker`
+group is root-equivalent**, and the docs say so rather than implying the user is
+unprivileged.
+
+#### Build and delivery
+
+The default build mode is **remote**: the image is built by the server's own Docker daemon,
+reached through `ssh -L` forwarding a local socket to `/var/run/docker.sock`. That keeps the
+pinned host key in force, which `DOCKER_HOST=ssh://` would bypass, builds for the server's
+own architecture natively, and sends only the build context rather than a finished image.
+A server under 2 GB of RAM is refused for remote builds with `--build local` as the action.
+`--build local` builds here for the server's platform and streams
+`docker save | ssh docker load`.
+
+#### Release sequence
+
+1. Take the app lock. A lock older than 30 minutes is reported, never broken automatically.
+2. Create `app.json` on a first deployment, or verify its id matches.
+3. Start `<name>-<deploymentId>` on the `nextship` network with `--restart unless-stopped`,
+   the env file, a memory limit, journald logging, nextship labels and a health check. No
+   published ports.
+4. Wait for Docker to report it healthy. On failure: print its last log lines, remove it,
+   record the deployment as not served, and leave the previous container serving.
+5. Render the Caddy site pointing at the new container, validate it, move it into place
+   and reload Caddy. A failed validation or reload restores the previous file.
+6. Stop the previous container (kept, not removed, until images are pruned) and update
+   `deployments.json`.
+
+Rollback runs steps 3 to 6 with an earlier deployment's image. **It uses the current env
+file**, which differs from App Platform, where a rollback restores the old spec.
+
+#### Security
+
+- Nothing changes without `--yes`, and a plan is printed first.
+- The host key is pinned. Every connection uses `StrictHostKeyChecking=yes` against the key
+  recorded in `nextship.json`; a changed key is a hard error, never a prompt.
+- SSH is the system `ssh` binary in batch mode, no password authentication, never a shell
+  string built on this machine. Every value placed in a remote command is validated and
+  quoted.
+- Secrets travel on SSH stdin into files with mode 0600. They never appear on a command
+  line or in an image layer.
+- Only containers labelled `sh.nextship.managed=true` and `sh.nextship.app=<name>` are ever
+  stopped or removed. Other workloads and the global Docker daemon configuration are never
+  modified. `destroy` never removes the server, Caddy, other apps or DNS.
+
+#### Limitations
+
+| Limitation | Consequence |
+|---|---|
+| **One server.** | No failover: if the server is down, the app is down. Backups and recovery are the owner's |
+| **No CDN.** | Static assets and media are served by the container through Caddy |
+| **The owner owns the OS.** | `server add` enables security updates, but kernel reboots, disk and provider incidents are the owner's to watch |
+| **Rollback uses the current env file.** | Rolling back code does not roll back a variable changed since |
+
 ## 10. Deploy lifecycle
 
 Immutable by construction, which is where rollback and skew protection come from.

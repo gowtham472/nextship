@@ -15,7 +15,7 @@ import { randomBytes } from 'node:crypto'
 import path from 'node:path'
 import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
-import { assertDockerAvailable, dockerBuild } from './docker.js'
+import { assertDockerAvailable, dockerBuild, type BuildPlacement } from './docker.js'
 import { installerDigest, computeDigest, resolveDeploymentId, type BuildIdentity } from './identity.js'
 import { OUTPUT_DIR } from './image/dockerfile.js'
 import { prepareContext, type PreparedContext } from './image/prepare.js'
@@ -42,10 +42,12 @@ export interface BuildResult {
   manifest: Manifest
   identity: BuildIdentity
   context: PreparedContext
+  /** Where this build ran, so the runtime image is built in the same place from its cache. */
+  placement: BuildPlacement
 }
 
-export async function buildProject(project: ProjectInfo): Promise<BuildResult> {
-  await assertDockerAvailable()
+export async function buildProject(project: ProjectInfo, placement: BuildPlacement): Promise<BuildResult> {
+  await assertDockerAvailable(placement)
 
   const context = await prepareContext(project)
   const encryptionKey = await resolveEncryptionKey(project.root)
@@ -66,7 +68,7 @@ export async function buildProject(project: ProjectInfo): Promise<BuildResult> {
   if (project.envFiles.length > 0) detail(`env files  ${project.envFiles.join(', ')}`)
 
   const outputDir = path.join(project.root, OUTPUT_DIR)
-  await dockerBuild(project, context, identity, { target: 'manifest', outputDir })
+  await dockerBuild(project, context, identity, placement, { target: 'manifest', outputDir })
 
   const manifest = await readManifest(outputDir)
   if (manifest.deploymentId !== deploymentId) {
@@ -76,7 +78,7 @@ export async function buildProject(project: ProjectInfo): Promise<BuildResult> {
     )
   }
 
-  return { manifest, identity, context }
+  return { manifest, identity, context, placement }
 }
 
 /**

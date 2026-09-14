@@ -13,7 +13,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { frameText } from './logs.js'
+import { frameText } from './digitalocean-target.js'
 
 const frame = (op: string, data?: unknown): string => JSON.stringify({ op, data })
 

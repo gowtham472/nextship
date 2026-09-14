@@ -85,15 +85,11 @@ export async function destroy(project: ProjectInfo, options: DestroyOptions): Pr
   detail(`DNS        untouched, nextship did not create your records`)
 
   const others = (await app.target.listApps()).filter((entry) => entry.id !== app.appId)
-  detail(`untouched  ${others.length} other app(s) in this account`)
+  detail(`untouched  ${others.length} other app(s) ${app.target.appScope}`)
 
   warn('This cannot be undone. The app, its deployments and its history are removed.')
-  if (removingImages) {
-    warn(
-      'Garbage collection runs afterwards and puts the whole registry into read-only mode, ' +
-        'so a deploy of any other project during it will fail to push.'
-    )
-  }
+  const reclaimWarning = app.target.storage.reclaimWarning
+  if (removingImages && reclaimWarning) warn(`Storage is reclaimed afterwards. ${reclaimWarning}`)
   if (domains.length > 0) {
     warn(
       'A replacement app gets a new generated hostname, so the DNS record for ' +
@@ -132,6 +128,8 @@ export async function destroy(project: ProjectInfo, options: DestroyOptions): Pr
   step('Reclaiming storage')
   const outcome = await app.target.reclaim()
   if (outcome.kind === 'already-running') detail(`collection is already running (${outcome.detail})`)
-  else if (outcome.kind === 'not-needed') ok('Storage was freed when the images were removed.')
-  else ok('Garbage collection started, which is what frees the storage.')
+  else if (outcome.kind === 'not-needed') {
+    ok('Storage was freed when the images were removed.')
+    if (outcome.detail) detail(outcome.detail)
+  } else ok('Garbage collection started, which is what frees the storage.')
 }

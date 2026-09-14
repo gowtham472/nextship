@@ -62,11 +62,12 @@ export async function run(
 export async function capture(
   command: string,
   args: string[],
-  options: { cwd: string }
+  options: { cwd: string; env?: NodeJS.ProcessEnv }
 ): Promise<string | null> {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
+      env: { ...process.env, ...options.env },
       stdio: ['ignore', 'pipe', 'ignore'],
     })
     let stdout = ''
