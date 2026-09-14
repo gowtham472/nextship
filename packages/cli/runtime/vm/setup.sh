@@ -36,7 +36,7 @@ set -euo pipefail
 
 # Raised whenever a step changes, so `server status` can tell a server set up by an
 # older nextship to run `server add --yes` again.
-SETUP_VERSION=1
+SETUP_VERSION=2
 
 # Pinned to a minor so a server gets the same Caddy until nextship moves it on purpose.
 CADDY_IMAGE="caddy:2.10"
@@ -154,6 +154,11 @@ apply_docker() {
 
 # ----------------------------------------------------------------------- user
 
+# `nextship server reboot` is the one thing the nextship user needs root for. The
+# rule names the exact command, so it grants nothing else through sudo.
+SUDOERS=/etc/sudoers.d/nextship
+SUDOERS_RULE="$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reboot"
+
 check_user() {
   if ! id "$SERVICE_USER" > /dev/null 2>&1; then result change "create the $SERVICE_USER user in the docker and systemd-journal groups"; return; fi
   local groups
@@ -161,7 +166,8 @@ check_user() {
   case "$groups" in *" docker "*) ;; *) result change "add $SERVICE_USER to the docker group"; return ;; esac
   case "$groups" in *" systemd-journal "*) ;; *) result change "add $SERVICE_USER to the systemd-journal group"; return ;; esac
   if [ ! -s "/home/$SERVICE_USER/.ssh/authorized_keys" ]; then result change "authorise the keys of $ADMIN for $SERVICE_USER"; return; fi
-  result ok "$SERVICE_USER exists, in the docker and systemd-journal groups"
+  if [ "$(cat "$SUDOERS" 2> /dev/null)" != "$SUDOERS_RULE" ]; then result change "allow $SERVICE_USER to run systemctl reboot, and nothing else, as root"; return; fi
+  result ok "$SERVICE_USER exists, in the docker and systemd-journal groups, and may reboot"
 }
 apply_user() {
   id "$SERVICE_USER" > /dev/null 2>&1 || useradd --create-home --shell /bin/bash "$SERVICE_USER"
@@ -175,6 +181,12 @@ apply_user() {
   fi
   install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_USER" "/home/$SERVICE_USER/.ssh"
   install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_USER" "$source" "/home/$SERVICE_USER/.ssh/authorized_keys"
+  printf '%s\n' "$SUDOERS_RULE" > "$SUDOERS.tmp"
+  chmod 0440 "$SUDOERS.tmp"
+  # A sudoers file sudo cannot parse breaks sudo for every user, so it is checked
+  # before it is moved into place.
+  visudo -cf "$SUDOERS.tmp" > /dev/null
+  mv "$SUDOERS.tmp" "$SUDOERS"
 }
 
 # ----------------------------------------------------------------------- dirs

@@ -701,6 +701,26 @@ kept serving; a second project deployed with its own domain beside the first, an
 first app and Caddy kept serving. A certificate being issued needs public DNS and was not
 checked.
 
+#### Resilience and moving (Implemented)
+
+Containers run with `--restart unless-stopped`, Docker is enabled at boot, Caddy restarts
+unless stopped, and the watchdog timer starts after boot, so a reboot brings every app back
+without nextship. `server reboot` checks it: it records a boot marker (the kernel boot id and
+PID 1's start time), reboots through a sudoers rule that allows `systemctl reboot` and
+nothing else, waits for the marker to change, and waits until every container that was
+running reports healthy. On the local stand-in it came back in 5 s with the app healthy, but
+the stand-in is a container whose init restarts on the same kernel, so a real kernel reboot
+is on the v1.1 checklist.
+
+`server move` reads the app record, env file and key from the old server into memory,
+writes them to the new one, and streams the live image between the servers with the same
+two-sided pipeline as `--build local`. It streams rather than rebuilding, so the new server
+runs exactly the image that served, not a rebuild that could differ. `nextship.json` changes
+only after the app is healthy on the new server, so a move that fails part way leaves every
+command pointed at the server still serving. On the local stand-in a move to a fresh server
+took 55 s including setup, served with the copied env and domain, held a byte-identical
+Server Actions key, and left the old server serving.
+
 #### Security (Implemented)
 
 - Nothing changes without `--yes`, and a plan is printed first.

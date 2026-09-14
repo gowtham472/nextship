@@ -184,7 +184,7 @@ stays identical.
 | 1 | SSH layer with a pinned host key, and `nextship server add` | **Done.** Verified end to end against a local Ubuntu 24.04 arm64 stand-in over SSH, not yet on a provider. The CI job exists but has not run, since the branch is not pushed |
 | 2 | VM driver: remote or local builds, zero-downtime release behind Caddy, rollback, the Server Actions key kept on the server | **Done.** Verified on the local stand-in: streaming through Caddy, no failed request across a deployment, a failed startup leaving the previous deployment serving, and rollback. Not yet on a provider |
 | 3 | Day-two commands on a server: env, domains, logs with history, images, destroy, `server status`, a disk guard | **Done.** Verified on the local stand-in, including two apps on one server and destroying one. A real certificate being issued is not verified |
-| 4 | Reboot resilience, `server move`, GitHub Actions usage, VM checks in `doctor` | Planned |
+| 4 | Reboot resilience, `server move`, GitHub Actions usage, VM checks in `doctor` | **Done.** `server reboot` and `server move` verified on the local stand-in, where a reboot restarts a container rather than a kernel. The GitHub Actions workflow in `vm.md` has not run |
 | 5 | A CI job and `conformance/vm/e2e.sh` that run all of it against a real SSH server, docs | Planned |
 
 **Not claimed until run on real providers:** the live checklist on a Hetzner arm64 VM and an

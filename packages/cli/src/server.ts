@@ -31,7 +31,8 @@ import { MIN_DOCKER_MAJOR } from './docker.js'
 import { fingerprint, parseKeyLine, scanHostKey, type HostKey } from './targets/vm/host-key.js'
 import { Ssh, assertHost, assertUser, shellQuote } from './targets/vm/ssh.js'
 import { client } from './owned-app.js'
-import { statusWarnings, type VmTarget } from './targets/vm/vm-target.js'
+import { CONTAINER_PORT } from './image/dockerfile.js'
+import { MOVE_STEPS, rebootProgress, statusWarnings, type VmTarget } from './targets/vm/vm-target.js'
 import { detail, ok, step, warn } from './util/log.js'
 
 /** The user every later command connects as. Created by the `user` step. */
@@ -262,17 +263,204 @@ export async function serverStatus(project: ProjectInfo): Promise<void> {
   if (warnings.length === 0) ok('Nothing needs attention.')
 }
 
+// --------------------------------------------------------------- reboot
+
+/** How long a reboot may take, from asking to every container healthy again. */
+const REBOOT_TIMEOUT_MS = 10 * 60 * 1000
+
+async function vmProject(project: ProjectInfo): Promise<ProjectConfig & { server: ServerRecord }> {
+  const config = await readConfig(project.root)
+  if (config?.target !== 'vm' || !config.server) {
+    throw new NextshipError(
+      'This project does not deploy to a server.',
+      'Run `nextship server add user@host` first. This command acts on the server recorded in nextship.json.'
+    )
+  }
+  return config as ProjectConfig & { server: ServerRecord }
+}
+
+/**
+ * `nextship server reboot`: reboots the server and waits until every container
+ * that was running is back and healthy, which is the proof that a reboot, such as
+ * the one security updates eventually need, brings every app back on its own.
+ */
+export async function rebootServer(project: ProjectInfo, options: { confirmed: boolean }): Promise<void> {
+  const config = await vmProject(project)
+  const target = client(config) as VmTarget
+  const running = await target.runningContainers()
+
+  step('Plan')
+  detail(`server     REBOOT ${config.server.host}`)
+  detail(`apps       ${running.length} container(s) stop, and come back on their own: ${running.join(', ') || 'none'}`)
+  detail('downtime   every app on this server is down until the server is back, usually a minute or two')
+  detail(`waits      up to ${REBOOT_TIMEOUT_MS / 60000} minutes for SSH, then for each of those containers to be healthy`)
+  warn('This reboots the whole server, including anything nextship did not deploy.')
+
+  if (!options.confirmed) {
+    ok('This was a plan only. Nothing changed.')
+    detail('Run `nextship server reboot --yes` to execute it.')
+    return
+  }
+
+  const before = await target.bootMarker()
+  step(`Rebooting ${config.server.host}`)
+  await target.reboot()
+
+  const deadline = Date.now() + REBOOT_TIMEOUT_MS
+  let back = false
+  while (!back) {
+    if (Date.now() > deadline) {
+      throw new NextshipError(
+        `${config.server.host} did not come back within ${REBOOT_TIMEOUT_MS / 60000} minutes.`,
+        "Check the server in your provider's console. nextship has not changed anything since asking it to reboot."
+      )
+    }
+    await sleep(5000)
+    try {
+      back = (await target.bootMarker()) !== before
+    } catch {
+      // Unreachable while it restarts, which is expected. The connection is
+      // reopened on the next attempt.
+      await target.close()
+    }
+  }
+  detail('SSH is back, and the server has booted again')
+
+  let last = ''
+  for (;;) {
+    const progress = rebootProgress(running, await target.inspectContainers(running))
+    const summary = `${progress.ready.length} of ${running.length} container(s) healthy`
+    if (summary !== last) {
+      detail(summary)
+      last = summary
+    }
+    if (progress.waiting.length === 0) break
+    if (Date.now() > deadline) {
+      throw new NextshipError(
+        `After the reboot, ${progress.waiting.join(', ')} did not come back healthy.`,
+        'Check them with `nextship server status`, and their logs with `nextship logs`.'
+      )
+    }
+    await sleep(3000)
+  }
+  ok(`${config.server.host} rebooted, and every app came back healthy.`)
+}
+
+// ------------------------------------------------------------------ move
+
+/**
+ * `nextship server move user@newhost`: moves this project's app to another server.
+ *
+ * The old server is only ever read. The new one is set up as `server add` would,
+ * receives the app's record, env and key in memory and the live image straight
+ * from the old server, and serves the app before nextship.json names it. Until
+ * then every command still acts on the old server, so a move that fails part way
+ * leaves the project exactly where it was.
+ */
+export async function moveServer(project: ProjectInfo, options: AddServerOptions): Promise<void> {
+  const config = await vmProject(project)
+  if (!config.appId) {
+    throw new NextshipError('This project has no deployed app to move.', 'Run `nextship server add` for the new server instead.')
+  }
+  const { host, port } = parseServerAddress(options.address)
+  if (host === config.server.host && port === config.server.port) {
+    throw new NextshipError(`The app already runs on ${host}:${port}.`, 'Name a different server to move to.')
+  }
+
+  const source = client(config) as VmTarget
+  const exported = await source.exportApp(config.appId)
+  const variables = exported.env.split('\n').filter(Boolean).length
+
+  step('Plan')
+  detail(`app        MOVE "${config.name}" (${config.appId})`)
+  detail(`from       ${config.server.user}@${config.server.host}:${config.server.port}, which is only read`)
+  detail(`to         ${options.address}`)
+  detail(`copies     ${variables} env variable(s), the Server Actions key, ${exported.record.domains.length} domain(s), and image ${exported.live.imageTag}`)
+  detail('not copied deployment history and older images, so rollback starts fresh there; cached pages and optimized images start cold')
+  for (const [index, entry] of MOVE_STEPS.entries()) detail(`step ${index + 1}     ${entry}`)
+  detail('DNS        untouched; the records to change are printed once the app serves on the new server')
+
+  const record = await setUpServer(options, undefined, () => {})
+  if (!record) {
+    detail('Run the same command with --yes to move the app.')
+    return
+  }
+
+  const destination = client({ ...config, server: record }) as VmTarget
+  step(`Copying ${config.name} to ${record.host}`)
+  await destination.importApp(exported)
+  detail('app record, domains, env file and Server Actions key copied')
+  await destination.copyImageFrom(source, exported.live.imageTag as string)
+  detail(`image ${exported.live.imageTag} copied`)
+
+  step(`Deploying on ${record.host}`)
+  const released = await destination.release(config.appId, {
+    name: config.name,
+    repository: config.name,
+    tag: exported.live.imageTag as string,
+    port: CONTAINER_PORT,
+    instanceSize: null,
+    memory: null,
+    healthPath: exported.live.healthPath,
+  })
+  await destination.awaitRelease(config.appId, released.deploymentId as string, detail, false)
+
+  await writeConfig(project.root, { ...config, server: record })
+  ok(`"${config.name}" serves on ${record.host}, and nextship.json now records it.`)
+
+  const address = await destination.publicAddress()
+  if (exported.record.domains.length > 0) {
+    step('Change these DNS records')
+    for (const domain of exported.record.domains) detail(`A       ${domain.domain}  ${address}`)
+    detail('Caddy on the new server requests certificates once they resolve to it.')
+  }
+  warn(
+    `The app still runs on ${config.server.host}. To remove it there, restore the previous nextship.json ` +
+      `(for example with \`git stash\` or \`git checkout HEAD -- nextship.json\`) and run \`nextship destroy ${config.name}\`, ` +
+      'then restore this one.'
+  )
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
 // --------------------------------------------------------------- command
 
 export async function addServer(project: ProjectInfo, options: AddServerOptions): Promise<void> {
+  const existing = await readConfig(project.root)
+  const record = await setUpServer(options, existing?.server, (host, port, scanned) => assertCanRecord(existing, host, port, scanned))
+  if (!record) return
+
+  const config: ProjectConfig = {
+    version: 2,
+    target: 'vm',
+    name: existing?.name ?? project.name,
+    server: record,
+    ...(existing?.build ? { build: existing.build } : {}),
+    ...(existing?.appId ? { appId: existing.appId } : {}),
+  }
+  await writeConfig(project.root, config)
+  ok(`${record.host} is ready, and recorded in nextship.json.`)
+  detail('Run `nextship deploy` to see the deployment plan.')
+}
+
+/**
+ * Plans server setup and, when confirmed, applies it. Returns the server as it
+ * should be recorded, or null when this was a plan only. `recorded` is the server
+ * nextship.json already names, whose pinned key `admit` has checked; `admit`
+ * refuses a server the caller may not use, before anything connects as an admin.
+ */
+async function setUpServer(
+  options: AddServerOptions,
+  recorded: ServerRecord | undefined,
+  admit: (host: string, port: number, scanned: HostKey) => void
+): Promise<ServerRecord | null> {
   const { user, host, port } = parseServerAddress(options.address)
   const skip = skippedSteps(options.optOut)
-  const existing = await readConfig(project.root)
 
   step(`Checking ${host}`)
   const scanned = await scanHostKey(host, port)
-  assertCanRecord(existing, host, port, scanned)
-  const pinnedBefore = existing?.server?.host === host && existing.server.port === port
+  admit(host, port, scanned)
+  const pinnedBefore = recorded?.host === host && recorded.port === port
   const hostKey = `${host} ${scanned.type} ${scanned.key}`
 
   const admin = await Ssh.open({ host, port, user, hostKey })
@@ -298,7 +486,7 @@ export async function addServer(project: ProjectInfo, options: AddServerOptions)
       )
     }
 
-    step('Plan')
+    step(`Plan for ${host}`)
     detail(`server        ${user}@${host}:${port}`)
     detail(
       pinnedBefore
@@ -327,19 +515,18 @@ export async function addServer(project: ProjectInfo, options: AddServerOptions)
     }
 
     if (!options.confirmed) {
-      ok(changes.length === 0 ? 'This server is already set up. Nothing was changed.' : 'This was a plan only. Nothing was changed.')
+      ok(changes.length === 0 ? `${host} is already set up. Nothing was changed.` : 'This was a plan only. Nothing was changed.')
       detail(
         changes.length === 0
           ? 'Run the same command with --yes to record it in nextship.json.'
           : 'Run the same command with --yes to set it up and record it in nextship.json.'
       )
-      return
+      return null
     }
 
     if (changes.length > 0) {
-      const phases = applyPhases(skip)
       step(`Setting up ${host}`)
-      for (const phase of phases) {
+      for (const phase of applyPhases(skip)) {
         await applySteps(admin, user, port, input, skipArgs, phase)
         // The first phase ends with the user step, so hardening is never reached
         // without this having passed.
@@ -358,18 +545,7 @@ export async function addServer(project: ProjectInfo, options: AddServerOptions)
       await proveLogin(host, port, hostKey)
     }
 
-    const arch = reportedArch(lines)
-    const config: ProjectConfig = {
-      version: 2,
-      target: 'vm',
-      name: existing?.name ?? project.name,
-      server: { host, port, user: SERVICE_USER, hostKey, arch },
-      ...(existing?.build ? { build: existing.build } : {}),
-      ...(existing?.appId ? { appId: existing.appId } : {}),
-    }
-    await writeConfig(project.root, config)
-    ok(`${host} is ready, and recorded in nextship.json.`)
-    detail('Run `nextship deploy` to see the deployment plan.')
+    return { host, port, user: SERVICE_USER, hostKey, arch: reportedArch(lines) }
   } finally {
     await admin.close()
   }

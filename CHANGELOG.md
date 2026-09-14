@@ -47,6 +47,17 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 - **`nextship logs --deployment <id>`** reads one deployment's logs from the server's
   journal, including one that has been replaced. It takes a deployment id or the image tag
   plans show. (Ragul D)
+- **`nextship server reboot`** reboots the server and waits until every container that was
+  running is back and healthy, for up to 10 minutes. Setup version 2 lets the `nextship` user
+  run `systemctl reboot` through sudo, and nothing else. (Ragul D)
+- **`nextship server move <user@host>`** moves this project's app to another server: sets it
+  up, copies the app record, domains, env file and Server Actions key in memory over SSH,
+  streams the live image from the old server, deploys it, and records the new server only
+  once the app is healthy there. The old server is only read. On the local stand-in the app
+  served on the new server with the same env and key in 55 s. (Ragul D)
+- **`doctor` on a vm project** warns that the app runs on one server with no CDN, pointing at
+  backup guidance, and warns when the source reads `request.url`, which names the container
+  behind Caddy. (Ragul D)
 - **`nextship server status`** reports the server's OS, uptime, load, memory, disk, Docker,
   Caddy and setup version, and each app's live deployment, health, restarts, memory and
   certificates, warning on low disk, ports published past Caddy, an outdated setup, a
@@ -97,8 +108,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Docs
 
-- **`docs/vm.md`** describes what `server add` changes on a server, step by step, and the
-  SSH security model, including that the `nextship` user is root-equivalent. `SECURITY.md`
+- **`docs/vm.md`** describes what `server add` changes on a server, step by step, the SSH
+  security model including that the `nextship` user is root-equivalent, deploying from
+  GitHub Actions with a key loaded into ssh-agent and `--build local` (written, not yet run
+  in Actions), what to back up and how to recover on a new server, and putting a proxy such
+  as Cloudflare in front. `SECURITY.md`
   gains what nextship uses on a server. (Ragul D)
 - **v1.1 is now any Linux server over SSH, not AWS.** `docs/design.md` §9.3 designs one
   generic target for Ubuntu and Debian servers reached over SSH: the server layout, the

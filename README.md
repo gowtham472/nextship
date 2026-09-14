@@ -631,7 +631,8 @@ with the one your provider shows. From then on the key is pinned in `nextship.js
 server presenting any other key is refused.
 
 ```
-> Plan
+> Checking 203.0.113.10
+> Plan for 203.0.113.10
   server        root@203.0.113.10:22
   host key      ssh-ed25519 SHA256:YrbhoPLtpPr48BI8g70C+hbCmMMSZBOCv009n/FJyiY, trusted from now on if you continue
   os            ok     ubuntu 24.04
@@ -695,6 +696,24 @@ v Nothing needs attention.
 It warns when the server has under 3 GB free, when a container other than Caddy publishes
 a port (which Docker opens past ufw), when setup is older than this nextship's, when a
 reboot is needed, and when a live app is not running healthy.
+
+### `nextship server reboot`
+
+Reboots the server and waits until every container that was running before is back and
+healthy, for up to 10 minutes. It is the proof that a reboot, such as one security updates
+need, brings every app back on its own: containers restart unless stopped, Docker and Caddy
+start at boot, and the watchdog timer resumes. Every app on the server is down while it
+reboots, and the plan says so. `--yes` executes it.
+
+### `nextship server move <user@host[:port]>`
+
+Moves this project's app to another server: sets the new server up as `server add` does,
+copies the app record, its domains, the env file and the Server Actions key in memory over
+SSH, streams the live image from the old server, deploys it on the new one, and records
+the new server in `nextship.json` only once the app is healthy there. The old server is only
+read, and keeps serving until you destroy the app there. Deployment history, older images
+and the cache volumes are not copied. The DNS records to change are printed at the end.
+It takes the same options as `server add`.
 
 ### Planned
 
@@ -806,7 +825,7 @@ touch the existing one rather than guess.
 | Variable | Read by | Purpose |
 |---|---|---|
 | `DIGITALOCEAN_TOKEN` | `deploy`, `rollback`, `logs` | Your API token. See [`docs/digitalocean.md`](./docs/digitalocean.md) for the scopes it needs |
-| `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | `build` | Overrides the per-project key. Set this wherever else you build, so Server Actions keep working for clients served by builds made here |
+| `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | `build`, `deploy` | Overrides the per-project key. Set this wherever else you build, so Server Actions keep working for clients served by builds made here |
 | `NO_COLOR` | all | Disables colored output |
 
 Your app's own env files are detected and mounted automatically, in the order Next.js
