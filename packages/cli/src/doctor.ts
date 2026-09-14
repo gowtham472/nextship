@@ -15,6 +15,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { ProjectInfo } from './detect.js'
+import type { TargetId } from './config.js'
 import { docsUrl } from './links.js'
 import { namesInLockfile, undeclaredPackages } from './vendored.js'
 
@@ -63,7 +64,12 @@ const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']
 /** Enough to catch a real project without walking a monorepo forever. */
 const MAX_SCANNED_FILES = 3000
 
-export async function diagnose(project: ProjectInfo): Promise<Finding[]> {
+/**
+ * `target` is the project's recorded target, or the default one when nothing is
+ * recorded yet, because several consequences depend on what serves the app: App
+ * Platform puts a CDN in front of it, a server does not.
+ */
+export async function diagnose(project: ProjectInfo, target: TargetId): Promise<Finding[]> {
   const findings: Finding[] = []
   // Detection already proved this file exists and parses, so an empty object
   // here would mean it changed underneath us; treating it as no dependencies is
@@ -71,8 +77,8 @@ export async function diagnose(project: ProjectInfo): Promise<Finding[]> {
   const manifest = (await readJson(path.join(project.root, 'package.json'))) ?? {}
 
   findings.push(...dependencyFindings(manifest))
-  findings.push(...(await vercelConfigFindings(project.root)))
-  findings.push(...(await sourceFindings(project.root)))
+  findings.push(...(await vercelConfigFindings(project.root, target)))
+  findings.push(...(await sourceFindings(project.root, target)))
   findings.push(...(await undeclaredPackageFindings(project)))
   findings.push(...runtimeFindings(project))
 
@@ -132,7 +138,7 @@ function dependencyFindings(manifest: Record<string, any>): Finding[] {
     }))
 }
 
-async function vercelConfigFindings(root: string): Promise<Finding[]> {
+async function vercelConfigFindings(root: string, target: TargetId): Promise<Finding[]> {
   const config = await readJson(path.join(root, 'vercel.json'))
   if (!config) return []
 
@@ -150,7 +156,10 @@ async function vercelConfigFindings(root: string): Promise<Finding[]> {
       level: 'blocker',
       title: `vercel.json defines ${config.crons.length} cron job(s)`,
       consequence: 'They will never run. Nothing schedules them off Vercel, and nothing reports that.',
-      action: 'Schedule them with your platform, for example a DigitalOcean scheduled job that calls the route.',
+      action:
+        target === 'vm'
+          ? 'Schedule them on your server, for example a systemd timer or a crontab entry that calls the route.'
+          : 'Schedule them with your platform, for example a DigitalOcean scheduled job that calls the route.',
     })
   }
 
@@ -175,7 +184,7 @@ async function vercelConfigFindings(root: string): Promise<Finding[]> {
  */
 const ON_DEMAND_REVALIDATION = ['revalidatePath', 'revalidateTag', 'updateTag']
 
-async function sourceFindings(root: string): Promise<Finding[]> {
+async function sourceFindings(root: string, target: TargetId): Promise<Finding[]> {
   const findings: Finding[] = []
   const usedEnvVars = new Set<string>()
   const revalidatesOnDemand = new Set<string>()
@@ -207,7 +216,9 @@ async function sourceFindings(root: string): Promise<Finding[]> {
     })
   }
 
-  if (revalidatesOnDemand.size > 0) {
+  // A server answers from the container itself, so a revalidated page reaches
+  // the next visitor. Only a CDN that honours s-maxage keeps the old copy.
+  if (revalidatesOnDemand.size > 0 && target === 'digitalocean') {
     findings.push({
       level: 'warning',
       title: `On-demand revalidation is used: ${[...revalidatesOnDemand].sort().join(', ')}`,

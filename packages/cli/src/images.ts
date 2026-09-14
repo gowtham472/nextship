@@ -159,9 +159,15 @@ const megabytes = (bytes: number): string => `${(bytes / 1048576).toFixed(1)} Mi
 /** Which repository holds this project's images, which the config recorded at deploy time. */
 async function repository(project: ProjectInfo): Promise<string> {
   const config = await readConfig(project.root)
-  if (!config?.registry) {
+  if (config?.target === 'digitalocean' && !config.registry) {
     throw new NextshipError(
       'This project has no registry on record.',
+      'Run `nextship deploy` first. nextship only acts on resources listed in nextship.json.'
+    )
+  }
+  if (!config) {
+    throw new NextshipError(
+      'This project has no deployment on record.',
       'Run `nextship deploy` first. nextship only acts on resources listed in nextship.json.'
     )
   }
@@ -243,10 +249,11 @@ export async function pruneImages(project: ProjectInfo, options: PruneOptions): 
   // `--gc` has to work on its own. Deleting manifests frees nothing until
   // collection runs, so the command tells the user to come back with `--gc`, and
   // returning early here would make that instruction a dead end.
+  const wording = app.target.storage
   if (options.collect) {
-    warn('Garbage collection puts the registry into read-only mode while it runs, so a deploy during it will fail to push.')
-  } else {
-    detail('layers are not freed until garbage collection runs; add --gc to start it')
+    if (wording.reclaimWarning) warn(wording.reclaimWarning)
+  } else if (wording.heldUntilReclaimed) {
+    detail(wording.heldUntilReclaimed)
   }
 
   if (!options.confirmed) {
@@ -265,7 +272,9 @@ export async function pruneImages(project: ProjectInfo, options: PruneOptions): 
   }
 
   if (!options.collect) {
-    detail('Layers are still held until garbage collection runs. Start it with `nextship images prune --gc`.')
+    if (wording.heldUntilReclaimed) {
+      detail('Layers are still held until garbage collection runs. Start it with `nextship images prune --gc`.')
+    }
     return
   }
 
@@ -277,10 +286,10 @@ export async function pruneImages(project: ProjectInfo, options: PruneOptions): 
   }
   if (outcome.kind === 'not-needed') {
     ok('Storage was already freed when the images were removed.')
+    if (outcome.detail) detail(outcome.detail)
     return
   }
 
   ok('Garbage collection started.')
-  detail('It can take several minutes to begin, because the registry waits for existing')
-  detail('write authorisations to expire first. Storage is reclaimed when it finishes.')
+  for (const line of outcome.detail) detail(line)
 }

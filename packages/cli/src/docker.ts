@@ -15,8 +15,16 @@ import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
 import type { BuildIdentity } from './identity.js'
 import type { PreparedContext } from './image/prepare.js'
-import { KEY_SECRET_ID, TARGET_PLATFORM, envSecretId, installerSecretId, type BuildTarget } from './image/dockerfile.js'
+import { KEY_SECRET_ID, envSecretId, installerSecretId, type BuildTarget } from './image/dockerfile.js'
 import { capture, run } from './util/exec.js'
+
+/** Where an image is built and what for, chosen by the deployment target. */
+export interface BuildPlacement {
+  /** The `--platform` to build for, such as `linux/arm64` for an arm64 server. */
+  platform: string
+  /** A `DOCKER_HOST` for a daemon other than the local one, or null. */
+  dockerHost: string | null
+}
 
 export interface DockerBuildOptions {
   target: BuildTarget
@@ -35,6 +43,7 @@ export function buildArguments(
   project: ProjectInfo,
   context: PreparedContext,
   identity: BuildIdentity,
+  placement: BuildPlacement,
   options: DockerBuildOptions
 ): string[] {
   const args = [
@@ -43,7 +52,7 @@ export function buildArguments(
     // arm64 laptop would produce an image that cannot run on an amd64 host, and
     // the failure appears at deploy time rather than build time.
     '--platform',
-    TARGET_PLATFORM,
+    placement.platform,
     '--file',
     context.dockerfilePath,
     '--target',
@@ -94,12 +103,22 @@ export async function dockerBuild(
   project: ProjectInfo,
   context: PreparedContext,
   identity: BuildIdentity,
+  placement: BuildPlacement,
   options: DockerBuildOptions
 ): Promise<void> {
-  await run('docker', buildArguments(project, context, identity, options), {
+  await run('docker', buildArguments(project, context, identity, placement, options), {
     cwd: project.contextRoot,
-    env: { NEXTSHIP_KEY: identity.encryptionKey },
+    env: dockerEnvironment(placement, { NEXTSHIP_KEY: identity.encryptionKey }),
   })
+}
+
+/**
+ * The environment a docker client runs with. `DOCKER_HOST` is set only when a
+ * target named another daemon, so a local build keeps whatever context the user
+ * has configured.
+ */
+export function dockerEnvironment(placement: BuildPlacement, extra: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return placement.dockerHost ? { ...extra, DOCKER_HOST: placement.dockerHost } : extra
 }
 
 /**
@@ -107,9 +126,10 @@ export async function dockerBuild(
  * daemon is stopped, which would let a build start and then fail later with a
  * pipe error that says nothing useful.
  */
-export async function assertDockerAvailable(): Promise<void> {
+export async function assertDockerAvailable(placement: BuildPlacement): Promise<void> {
   const serverVersion = await capture('docker', ['version', '--format', '{{.Server.Version}}'], {
     cwd: process.cwd(),
+    env: dockerEnvironment(placement, {}),
   })
 
   if (!serverVersion) {

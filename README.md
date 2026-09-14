@@ -43,13 +43,14 @@ destroyed afterwards, so its URL no longer serves.
 
 ## Status
 
-**Version 1.0.2, for Next.js on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. AWS follows as v1.1: the driver interface exists, the AWS driver does not.
+**Version 1.0.2, for Next.js on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. Next is v1.1, a target for any Linux server reached over SSH, in progress on `feat/vm-target` and not released.
 
 | Area | State |
 |---|---|
 | Local pipeline: `detect`, `build`, `package`, `run` | Done. Verified on a real production project and a purpose-built feature app |
 | DigitalOcean deployment: `deploy`, `rollback`, `logs` | Done. Verified against a live app, including two rollbacks in opposite directions, and deployed from an Apple Silicon Mac (M3 Max) with 0.4.4 from npm, on the second attempt |
-| AWS | Not in v1.0. The driver interface exists and DigitalOcean implements it; the AWS driver is v1.1 |
+| Any Linux server over SSH | v1.1, in progress and not released. Commands are target-agnostic; the server driver is being built. See [`docs/design.md`](./docs/design.md) §9.3 |
+| AWS | On demand, after a streaming experiment on Lightsail. The server target already runs on EC2 |
 | Official Next.js adapter compatibility suite | Passes in full on 16.4.0-canary.22: 1123 of 1123 suites and 3599 of 3599 assertions, with 9 Vercel-specific tests skipped and each reason published. See the results below |
 
 Verified on real containers: every route serves, image optimization produces WebP,
@@ -67,7 +68,7 @@ would justify building it.
 
 **v1.0 is DigitalOcean only.** That is the target that is built, verified against a live
 app, and actually used. A second cloud is built on the proven one rather than beside it,
-so AWS follows as v1.1.
+so the next target, any Linux server over SSH, follows as v1.1.
 
 ---
 
@@ -267,6 +268,7 @@ Builds, pushes and releases to DigitalOcean App Platform.
 | Option | Default | Meaning |
 |---|---|---|
 | `--yes` | off | Execute the plan. Without it, `deploy` only prints the plan |
+| `--target <id>` | `digitalocean` | Which target a project with no `nextship.json` deploys to. Refused when it disagrees with the recorded one |
 | `--region <slug>` | `blr` | App Platform region. Recorded in `nextship.json` on the first deploy and reused after that |
 | `--size <slug>` | `apps-s-1vcpu-0.5gb` | App Platform instance size |
 | `--registry <name>` | the app name | Container registry name, which must be unique across all of DigitalOcean |
@@ -566,8 +568,9 @@ next `deploy` creates a fresh one rather than refusing.
 
 ### Planned
 
-v1.0 is complete. Next is v1.1, a second cloud target, which is where the claim that this
-ports beyond DigitalOcean is either proven or shown to cost more than it looked.
+v1.0 is complete. Next is v1.1, one target for any Ubuntu or Debian server reached over SSH,
+which is where the claim that this ports beyond DigitalOcean is either proven or shown to
+cost more than it looked.
 See [`docs/roadmap.md`](./docs/roadmap.md), which also records what is
 deliberately not being built and why.
 
@@ -918,7 +921,7 @@ Bun's adapter keeps a list of its own the same way.
 | **v0.3** | First cloud deployment to DigitalOcean: deploy, rollback, logs | Done, verified live. Image retention and a health endpoint were moved to v0.4 with reasons |
 | **v0.4** | Day-two operations: domains and TLS, env, images, destroy, logs | Done, verified live |
 | **v1.0** | Trustworthy for personal use: compatibility suite results, streaming conformance, honest limitations | Done. The suite passes in full (1123 of 1123 suites), the package is on npm under Apache-2.0, and streaming conformance passes in CI and on a live App Platform app |
-| **v1.1** | AWS | Planned. The driver interface exists and DigitalOcean implements it; the AWS driver needs an account to verify against |
+| **v1.1** | Any Linux server over SSH | In progress. Commands are target-agnostic; the server driver is being built |
 
 Beyond v1.0, each with the trigger that would justify it: correctness at scale (a
 shared cache and distributed tags, needed once there is more than one instance),

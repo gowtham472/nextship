@@ -13,31 +13,21 @@
  * container restarted, not that the app printed nothing, and guessing wrong
  * sends people hunting a bug that is not there.
  *
- * The stream URL carries its own access token, so it is treated as a secret
- * throughout: never printed, never logged, never put in an error message.
+ * How output is streamed is the driver's: App Platform hands out a websocket URL
+ * that carries its own access token.
  *
  * Author: Gowtham
  * Design: ../../../docs/design.md §10.7
  */
 
-import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
 import { ownedApp } from './owned-app.js'
 import type { Target } from './targets/target.js'
 import { detail, ok, step } from './util/log.js'
 
-/** How long to wait for the server to answer a close before finishing anyway. */
-const CLOSE_GRACE_MS = 2000
-
 export interface LogOptions {
   /** Stream new output instead of printing what is buffered and exiting. */
   follow: boolean
-}
-
-/** One frame of the log stream. Anything else is ignored rather than printed raw. */
-interface LogFrame {
-  op?: string
-  data?: string
 }
 
 export async function logs(project: ProjectInfo, options: LogOptions): Promise<void> {
@@ -57,101 +47,26 @@ export async function logs(project: ProjectInfo, options: LogOptions): Promise<v
 }
 
 /**
- * Streams until the user stops it or the server closes the connection.
+ * Streams until the user stops it or the target ends the stream.
  *
- * The socket is closed on Ctrl+C rather than letting the process die under it,
- * so the command reports a stop as a stop. The server also ends the stream on
- * its own, because these URLs expire, and that is reported rather than left to
- * look like the app went quiet.
+ * Ctrl+C aborts the stream rather than letting the process die under it, so the
+ * command reports a stop as a stop, and a stream the target ended is reported
+ * rather than left to look like the app went quiet.
  */
 async function follow(target: Target, appId: string): Promise<void> {
-  const url = await target.logStreamUrl(appId)
-  if (!url) {
-    throw new NextshipError(
-      'The target returned no log stream for this app.',
-      'It may have no running container yet. Try `nextship logs` without --follow.'
-    )
-  }
-
   detail('following, press Ctrl+C to stop')
 
-  const socket = new WebSocket(url.replace(/^http/, 'ws'))
-  let stopping = false
-  let stop = (): void => {
-    stopping = true
-  }
+  const controller = new AbortController()
+  const stop = (): void => controller.abort()
+  process.on('SIGINT', stop)
 
-  process.on('SIGINT', () => stop())
-
+  let ended: string | null
   try {
-    await new Promise<void>((resolve, reject) => {
-      let settled = false
-      const finish = (): void => {
-        if (settled) return
-        settled = true
-        resolve()
-      }
-
-      stop = (): void => {
-        stopping = true
-        // 1000 is a normal closure, which tells the server this was deliberate
-        // rather than a dropped connection.
-        try {
-          socket.close(1000)
-        } catch {
-          // Already closing or closed, so there is nothing left to ask for.
-        }
-        // Registering a SIGINT handler stops Node exiting on Ctrl+C, so if the
-        // server never completes the close handshake the command would hang
-        // with no way out but killing it. Measured: a close request that was
-        // never answered left the process running indefinitely. The timer is
-        // unref'd so it never keeps the process alive on its own.
-        setTimeout(finish, CLOSE_GRACE_MS).unref()
-      }
-
-      socket.onmessage = (event) => process.stdout.write(frameText(event.data))
-      socket.onclose = finish
-      socket.onerror = () => {
-        if (settled) return
-        // The event carries no useful detail, and anything it did carry could
-        // include the tokenised URL, so the message is written here instead.
-        if (stopping) finish()
-        else {
-          settled = true
-          reject(
-            new NextshipError(
-              'The log stream closed unexpectedly.',
-              'The stream URL is short-lived. Run the command again to reconnect.'
-            )
-          )
-        }
-      }
-    })
+    ended = await target.followLogs(appId, (text) => process.stdout.write(text), controller.signal)
   } finally {
-    process.removeAllListeners('SIGINT')
+    process.off('SIGINT', stop)
   }
 
-  if (stopping) ok('Stopped')
-  else detail('The stream ended. These URLs are short-lived; run the command again to reconnect.')
-}
-
-/**
- * Turns one frame into text.
- *
- * Frames are JSON objects carrying the line in `data`. A frame that is not JSON
- * is printed as it arrived rather than dropped, because losing output is worse
- * than printing something unexpected, but it is never parsed for meaning.
- */
-export function frameText(raw: unknown): string {
-  const text = typeof raw === 'string' ? raw : String(raw)
-
-  let frame: LogFrame
-  try {
-    frame = JSON.parse(text) as LogFrame
-  } catch {
-    return text.endsWith('\n') ? text : `${text}\n`
-  }
-
-  if (typeof frame.data !== 'string') return ''
-  return frame.data.endsWith('\n') ? frame.data : `${frame.data}\n`
+  if (ended === null) ok('Stopped')
+  else detail(ended)
 }

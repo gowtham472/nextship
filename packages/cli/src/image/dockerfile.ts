@@ -21,11 +21,12 @@ import { docsUrl } from '../links.js'
 export const CONTAINER_PORT = 3000
 
 /**
- * The image is always built for the deployment target, never for the developer's
- * machine. Both AWS and DigitalOcean run amd64 by default, and an arm64 image
- * fails there at deploy time rather than build time.
+ * The image is built for the deployment target, never for the developer's
+ * machine. App Platform runs amd64, and an arm64 image fails there at deploy
+ * time rather than build time. A target that runs another architecture, such as
+ * an arm64 server, asks for its own through `Target.buildPlatform`.
  */
-export const TARGET_PLATFORM = 'linux/amd64'
+export const DEFAULT_PLATFORM = 'linux/amd64'
 
 /** Secret ids, shared between the Dockerfile and the `docker build` arguments. */
 export const KEY_SECRET_ID = 'nextship_key'

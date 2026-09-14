@@ -143,7 +143,7 @@ The things that turn a deploy script into something worth relying on.
 ## v1.0: trustworthy for personal use, DigitalOcean only (Complete, 2026-09-11)
 
 The bar is honest reliability, not features. **Scope is DigitalOcean alone**: it is the
-target that is built, verified live, and actually used. AWS is v1.1.
+target that is built, verified live, and actually used. The second target is v1.1.
 
 | Deliverable | State |
 |---|---|
@@ -157,10 +157,44 @@ target that is built, verified live, and actually used. AWS is v1.1.
 **Explicitly not in v1.0:** AWS, a second compute option, CDN assets, and anything from
 "Beyond v1.0". Shipping one target honestly beats shipping two badly.
 
-## v1.1: AWS (Planned, deferred past v1.0)
+## v1.1: any Linux server over SSH (In progress, on `feat/vm-target`)
 
-The second target. This is where the design's portability claim is either proven or
-shown to be more expensive than it looked.
+The second target, decided by Ragul D: **one generic target for any Ubuntu or Debian server
+reached over SSH**, instead of a driver per managed cloud. It covers Hetzner, a Hostinger
+VPS, DigitalOcean Droplets, EC2, Compute Engine, Azure VMs and on-premises machines with one
+driver. The design is `design.md` §9.3.
+
+**Why this rather than AWS next.** Each managed platform differs in auth, registry, update
+and rollback model, env, TLS, logs, scaling and streaming, so each driver is a small product
+of its own. That is more than a two person team can keep verified, and it goes against
+"Build for the current user" below and `design.md` §14. A server over SSH also removes
+limitations App Platform imposes: the cache can survive restarts, no CDN serves a stale
+revalidated page, logs keep history, one server can host many apps, and no cloud token is
+involved. `design.md` §9 and §13 already named "Droplet and Compose" as the fallback
+compute, so this restores a path the original design had.
+
+The outcome: `nextship server add user@host`, then `nextship deploy --target vm --yes`, with
+zero-downtime deployments behind Caddy and automatic HTTPS, plus rollback, env, domains,
+logs, images, destroy, status and moving to another server. Every DigitalOcean behaviour
+stays identical.
+
+| Phase | Deliverable | State |
+|---|---|---|
+| 0 | Commands target-agnostic, `nextship.json` version 2, the build platform and Docker daemon chosen by the target, and this design | **Done.** DigitalOcean plan output checked byte for byte against recorded API responses before and after |
+| 1 | SSH layer with a pinned host key, and `nextship server add` | Planned |
+| 2 | VM driver: remote or local builds, zero-downtime release behind Caddy, rollback, the Server Actions key kept on the server | Planned |
+| 3 | Day-two commands on a server: env, domains, logs with history, images, destroy, `server status`, a disk guard | Planned |
+| 4 | Reboot resilience, `server move`, GitHub Actions usage, VM checks in `doctor` | Planned |
+| 5 | A CI job and `conformance/vm/e2e.sh` that run all of it against a real SSH server, docs | Planned |
+
+**Not claimed until run on real providers:** the live checklist on a Hetzner arm64 VM and an
+amd64 VM from another provider. Anything not run is recorded as not run.
+
+## AWS: on demand, after the Lightsail streaming experiment
+
+Previously v1.1. Moved behind the VM target: the VM target already runs on EC2, so AWS as a
+managed target is built only when someone needs Lightsail or ECS specifically, and only after
+the streaming experiment below settles whether Lightsail can serve Next.js correctly at all.
 
 **Deferred past v1.0 deliberately.** v1.0 is defined as trustworthy for personal use, and
 the person using it deploys to DigitalOcean. Holding a release for a second cloud nobody
@@ -214,8 +248,8 @@ image store and requires the **lightsailctl** plugin alongside the AWS CLI.
 
 Three consequences, none fatal but all real:
 
-1. `prepareImageStore` has nothing to create. The store is the service itself.
-2. `pushImage` is not `docker push`. It shells out to the AWS CLI with a plugin the user
+1. `deliverImage` has no registry to create. The store is the service itself.
+2. Delivering an image is not `docker push`. It shells out to the AWS CLI with a plugin the user
    must have, which is the first dependency beyond Docker this tool would require. The
    plan has to say so before it fails.
 3. Image retention is per service rather than per registry, through
@@ -337,6 +371,21 @@ Next.js's own filesystem cache handler is correct for a single instance.
 
 This is also the only part of the plan that is not already served by an existing
 tool, so it is where the work would go if this ever becomes a product.
+
+### VM target follow-ups
+
+**Trigger:** the VM target in real use showing the need.
+
+- **Registry build mode.** Push to a registry the owner already runs and pull on the server,
+  for teams that want an image store between build and server.
+- **`server create` provisioners.** Create the server through a provider's API before
+  `server add`, one provider at a time and only where someone asks.
+- **`nextship export`.** Write a Compose file and Caddyfile so an app can leave nextship
+  without redeploying.
+- **Encrypted env backup.** A copy of a server's env and Server Actions key the owner can
+  restore after losing the server.
+- **Multi-server.** More than one server behind one address, which is where v2's shared
+  cache becomes necessary.
 
 ### v3: git-driven previews
 

@@ -6,11 +6,43 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Changed
 
+- **Commands no longer carry DigitalOcean wording or choices.** The deploy plan's target
+  lines, where an image is built and for which platform, how it reaches the target, how
+  logs are followed, what reclaiming storage costs, and where `env push` stores values are
+  now asked of the target's driver. This is what lets a second target plug in without
+  editing every command. The DigitalOcean deploy plan is unchanged: `main` and this change
+  printed identical plans, byte for byte, against the same recorded API responses, for an
+  existing app, a first deploy, and a first deploy with `--region`, `--size` and
+  `--registry`. The execute path changed in two small ways: a missing registry is created
+  after the build succeeds rather than before it, so a failed build no longer leaves a new
+  billable registry behind, and the push step is now called "Delivering image". Not yet
+  re-run against a live App Platform app. (Ragul D)
+- **`nextship.json` has a version 2.** It adds the `vm` target with a `server` and a
+  `build` mode, and makes `region` and `registry` DigitalOcean fields. A file is written as
+  version 1 whenever it holds nothing version 2 introduced, so an existing DigitalOcean
+  project is never rewritten, and each target's required fields are now checked when the
+  file is read, naming the field that is missing. (Ragul D)
+- **`deploy --target <id>`** chooses the target for a project with no `nextship.json`, and
+  is refused when it disagrees with the recorded one. `--region`, `--size` and `--registry`
+  are refused on a project whose target is not DigitalOcean. (Ragul D)
+- **`doctor` reads the project's target.** On a server there is no CDN, so the on-demand
+  revalidation warning is DigitalOcean only, and the cron advice names a systemd timer
+  rather than a DigitalOcean scheduled job. (Ragul D)
+
 - **The landing page shows a deployment as a build line.** The five pipeline cards are now
   a row of steps on a rail with a stage showing what the selected step does, using values
   nextship prints. It plays through the steps while on screen, stops once a visitor picks
   one, pauses on hover or focus, and does not move at all for visitors who ask for reduced
   motion. Every step's text is in the page without JavaScript. (Gowtham)
+
+### Docs
+
+- **v1.1 is now any Linux server over SSH, not AWS.** `docs/design.md` §9.3 designs one
+  generic target for Ubuntu and Debian servers reached over SSH: the server layout, the
+  release sequence behind Caddy, the security model and its limitations. `docs/roadmap.md`
+  moves AWS to "on demand, after the Lightsail streaming experiment", and records the VM
+  follow-ups that are deliberately not being built: a registry build mode, `server create`
+  provisioners, `nextship export`, encrypted env backup and multi-server. (Ragul D)
 
 ## [1.0.2] - 2026-09-13
 

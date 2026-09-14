@@ -25,7 +25,7 @@ export async function packageImage(project: ProjectInfo, build: BuildResult): Pr
   step('Packaging runtime image')
   detail(`base node:${project.nodeMajor}-slim`)
 
-  await dockerBuild(project, build.context, build.identity, { target: 'runtime', tag })
+  await dockerBuild(project, build.context, build.identity, build.placement, { target: 'runtime', tag })
 
   return { tag }
 }

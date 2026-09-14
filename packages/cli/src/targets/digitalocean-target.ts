@@ -18,6 +18,7 @@
 
 import { NextshipError } from '../errors.js'
 import {
+  DEFAULT_INSTANCE_SIZE,
   DigitalOcean,
   REGISTRY_HOST,
   buildAppSpec,
@@ -39,17 +40,22 @@ import {
   withoutEnvs,
   type DomainSpec,
 } from './digitalocean-spec.js'
+import { DEFAULT_PLATFORM } from '../image/dockerfile.js'
 import type {
   AppAddress,
   AppRef,
+  DeployPlanContext,
   DeploymentRecord,
   DnsInstruction,
   DomainState,
   EnvRecord,
+  EnvStorageWording,
+  ImageBuilder,
   ImageRecord,
   PhaseReporter,
   ReclaimOutcome,
   ReleaseRequest,
+  StorageWording,
   Target,
 } from './target.js'
 
@@ -57,6 +63,17 @@ import type {
 const DEPLOY_TIMEOUT_MS = 15 * 60 * 1000
 const ROLLBACK_TIMEOUT_MS = 10 * 60 * 1000
 const POLL_INTERVAL_MS = 10_000
+/** How long to wait for the log server to answer a close before finishing anyway. */
+const CLOSE_GRACE_MS = 2000
+
+/** The region a first deploy uses when `--region` is not given. */
+export const DEFAULT_REGION = 'blr'
+
+/** Where a DigitalOcean project runs and keeps its images, from nextship.json or deploy's flags. */
+export interface DigitalOceanPlacement {
+  region: string
+  registry: string
+}
 
 /** Phases that mean a deployment took traffic, and so is a valid rollback target. */
 const SERVED_PHASES = new Set(['ACTIVE', 'SUPERSEDED'])
@@ -64,8 +81,12 @@ const SERVED_PHASES = new Set(['ACTIVE', 'SUPERSEDED'])
 export class DigitalOceanTarget implements Target {
   readonly id = 'digitalocean'
   readonly displayName = 'DigitalOcean'
+  readonly appScope = 'in this account'
 
-  constructor(private readonly api: DigitalOcean) {}
+  constructor(
+    private readonly api: DigitalOcean,
+    private readonly placement: DigitalOceanPlacement
+  ) {}
 
   // ------------------------------------------------------------- ownership
 
@@ -85,24 +106,79 @@ export class DigitalOceanTarget implements Target {
     return app
   }
 
-  // ----------------------------------------------------------- image store
+  // ------------------------------------------------------------------ plan
+
+  async planLines(context: DeployPlanContext): Promise<string[]> {
+    return [
+      `target        DigitalOcean, region ${this.placement.region}`,
+      ...context.delivery,
+      context.appId
+        ? `app           UPDATE "${context.name}" (${context.appId}), which nextship created`
+        : `app           CREATE "${context.name}" on ${context.instanceSize ?? DEFAULT_INSTANCE_SIZE}`,
+      `instance      ${context.instanceSize ?? DEFAULT_INSTANCE_SIZE}, 1 instance`,
+      `project       default (this token cannot assign projects)`,
+    ]
+  }
+
+  readonly envStorage: EnvStorageWording = {
+    secret: 'encrypted, not readable afterwards',
+    plain: 'readable, already public in the browser',
+    notice: 'These values leave your machine and are stored in your DigitalOcean account.',
+  }
+
+  // ----------------------------------------------------------------- build
+
+  async buildPlatform(): Promise<string> {
+    return DEFAULT_PLATFORM
+  }
+
+  async builder(): Promise<ImageBuilder> {
+    return { dockerHost: null, close: async () => {} }
+  }
 
   /**
    * DigitalOcean allows one registry per account, shared by every project, so
-   * this creates it only when the account has none and otherwise reports the
-   * existing one untouched.
+   * one is created only when the account has none and otherwise the existing
+   * one is used untouched.
    */
-  async prepareImageStore(
-    name: string,
-    region: string,
-    options: { dryRun: boolean }
-  ): Promise<{ store: string; willCreate: boolean }> {
+  async planDelivery(name: string): Promise<string[]> {
     const existing = await this.api.getRegistry()
-    if (existing) return { store: existing, willCreate: false }
-    if (options.dryRun) return { store: name, willCreate: true }
+    return [
+      existing
+        ? `registry      use existing "${existing}", unchanged`
+        : `registry      CREATE "${this.placement.registry}" on the Basic tier, 5 GiB, $5/month`,
+      `repository    ${existing ?? this.placement.registry}/${name}`,
+    ]
+  }
 
+  async deliverImage(options: {
+    localTag: string
+    name: string
+    tag: string
+    cwd: string
+    onPhase: PhaseReporter
+  }): Promise<{ reference: string | null; store: string | null }> {
+    let store = await this.api.getRegistry()
+    if (!store) {
+      store = this.placement.registry
+      options.onPhase(`creating an image store named "${store}" (Basic, $5/month)`)
+      await this.createRegistry(store)
+    }
+
+    const reference = `${REGISTRY_HOST}/${store}/${options.name}:${options.tag}`
+    await pushImage({
+      localTag: options.localTag,
+      remoteTag: reference,
+      configDir: await this.api.dockerConfigDir(),
+      cwd: options.cwd,
+    })
+    return { reference, store }
+  }
+
+  private async createRegistry(name: string): Promise<void> {
     // An App Platform region and a registry region are different namespaces:
     // the app region `blr` corresponds to the registry region `blr1`.
+    const region = this.placement.region
     const available = await this.api.registryRegions()
     const registryRegion = matchRegistryRegion(region, available)
     if (!registryRegion) {
@@ -111,28 +187,7 @@ export class DigitalOceanTarget implements Target {
         `The registry supports: ${available.join(', ')}. Choose an app region in one of those cities with --region.`
       )
     }
-
     await this.api.createRegistry(name, registryRegion)
-    return { store: name, willCreate: true }
-  }
-
-  async pushImage(options: { localTag: string; repository: string; tag: string; cwd: string }): Promise<string> {
-    const store = await this.api.getRegistry()
-    if (!store) {
-      throw new NextshipError(
-        'This account has no container registry.',
-        'Run `nextship deploy`, which creates one after showing you the cost.'
-      )
-    }
-
-    const remoteTag = `${REGISTRY_HOST}/${store}/${options.repository}:${options.tag}`
-    await pushImage({
-      localTag: options.localTag,
-      remoteTag,
-      configDir: await this.api.dockerConfigDir(),
-      cwd: options.cwd,
-    })
-    return remoteTag
   }
 
   // --------------------------------------------------------------- release
@@ -141,7 +196,11 @@ export class DigitalOceanTarget implements Target {
     appId: string | null,
     request: ReleaseRequest
   ): Promise<{ appId: string; deploymentId: string | null }> {
-    const spec = buildAppSpec(request)
+    const spec = buildAppSpec({
+      ...request,
+      region: this.placement.region,
+      instanceSize: request.instanceSize ?? DEFAULT_INSTANCE_SIZE,
+    })
 
     if (!appId) {
       const created = await this.api.createApp(spec)
@@ -405,7 +464,19 @@ export class DigitalOceanTarget implements Target {
     if (active) return { kind: 'already-running', detail: active.status }
 
     await this.api.startGarbageCollection(store)
-    return { kind: 'started' }
+    return {
+      kind: 'started',
+      detail: [
+        'It can take several minutes to begin, because the registry waits for existing',
+        'write authorisations to expire first. Storage is reclaimed when it finishes.',
+      ],
+    }
+  }
+
+  readonly storage: StorageWording = {
+    reclaimWarning:
+      'Garbage collection puts the registry into read-only mode while it runs, so a deploy during it will fail to push.',
+    heldUntilReclaimed: 'layers are not freed until garbage collection runs; add --gc to start it',
   }
 
   async storageBytes(): Promise<number | null> {
@@ -419,8 +490,71 @@ export class DigitalOceanTarget implements Target {
     return this.api.runLogs(appId)
   }
 
-  async logStreamUrl(appId: string): Promise<string | null> {
-    return this.api.runLogStreamUrl(appId)
+  /**
+   * Follows App Platform's log websocket.
+   *
+   * The stream URL carries its own access token, so it is treated as a secret
+   * throughout: never printed, never logged, never put in an error message.
+   * The server ends the stream on its own because these URLs expire, and that
+   * is reported rather than left to look like the app went quiet.
+   */
+  async followLogs(appId: string, write: (text: string) => void, signal: AbortSignal): Promise<string | null> {
+    const url = await this.api.runLogStreamUrl(appId)
+    if (!url) {
+      throw new NextshipError(
+        'The target returned no log stream for this app.',
+        'It may have no running container yet. Try `nextship logs` without --follow.'
+      )
+    }
+
+    const socket = new WebSocket(url.replace(/^http/, 'ws'))
+
+    await new Promise<void>((resolve, reject) => {
+      let settled = false
+      const finish = (): void => {
+        if (settled) return
+        settled = true
+        resolve()
+      }
+
+      const stop = (): void => {
+        // 1000 is a normal closure, which tells the server this was deliberate
+        // rather than a dropped connection.
+        try {
+          socket.close(1000)
+        } catch {
+          // Already closing or closed, so there is nothing left to ask for.
+        }
+        // Registering a SIGINT handler stops Node exiting on Ctrl+C, so if the
+        // server never completes the close handshake the command would hang
+        // with no way out but killing it. Measured: a close request that was
+        // never answered left the process running indefinitely. The timer is
+        // unref'd so it never keeps the process alive on its own.
+        setTimeout(finish, CLOSE_GRACE_MS).unref()
+      }
+      if (signal.aborted) stop()
+      else signal.addEventListener('abort', stop, { once: true })
+
+      socket.onmessage = (event) => write(frameText(event.data))
+      socket.onclose = finish
+      socket.onerror = () => {
+        if (settled) return
+        // The event carries no useful detail, and anything it did carry could
+        // include the tokenised URL, so the message is written here instead.
+        if (signal.aborted) finish()
+        else {
+          settled = true
+          reject(
+            new NextshipError(
+              'The log stream closed unexpectedly.',
+              'The stream URL is short-lived. Run the command again to reconnect.'
+            )
+          )
+        }
+      }
+    })
+
+    return signal.aborted ? null : 'The stream ended. These URLs are short-lived; run the command again to reconnect.'
   }
 
   // --------------------------------------------------------------- destroy
@@ -487,6 +621,33 @@ export class DigitalOceanTarget implements Target {
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
     }
   }
+}
+
+/** One frame of the log stream. Anything else is ignored rather than printed raw. */
+interface LogFrame {
+  op?: string
+  data?: string
+}
+
+/**
+ * Turns one frame into text.
+ *
+ * Frames are JSON objects carrying the line in `data`. A frame that is not JSON
+ * is printed as it arrived rather than dropped, because losing output is worse
+ * than printing something unexpected, but it is never parsed for meaning.
+ */
+export function frameText(raw: unknown): string {
+  const text = typeof raw === 'string' ? raw : String(raw)
+
+  let frame: LogFrame
+  try {
+    frame = JSON.parse(text) as LogFrame
+  } catch {
+    return text.endsWith('\n') ? text : `${text}\n`
+  }
+
+  if (typeof frame.data !== 'string') return ''
+  return frame.data.endsWith('\n') ? frame.data : `${frame.data}\n`
 }
 
 /** App Platform's phases, reduced to what a command needs to decide anything. */

@@ -16,6 +16,7 @@ import { packageImage } from './packaging.js'
 import { runImage } from './run.js'
 import { diagnose, type Finding } from './doctor.js'
 import { deploy } from './deploy.js'
+import { readConfig } from './config.js'
 import { listEnv, pushEnv, removeEnv } from './env.js'
 import { addDomain, listDomains, removeDomain, DEFAULT_MIN_TLS } from './domain.js'
 import { listImages, pruneImages, DEFAULT_KEEP } from './images.js'
@@ -24,8 +25,10 @@ import { rollback } from './rollback.js'
 import { logs } from './logs.js'
 import { logoDepth, renderLogo } from './logo.js'
 import { DEFAULT_INSTANCE_SIZE } from './targets/digitalocean.js'
+import { DEFAULT_REGION } from './targets/digitalocean-target.js'
 import { NextshipError } from './errors.js'
-import { TARGET_PLATFORM } from './image/dockerfile.js'
+import { DEFAULT_PLATFORM } from './image/dockerfile.js'
+import type { BuildPlacement } from './docker.js'
 import { VERSION } from './version.js'
 import { detail, fail, ok, step, warn } from './util/log.js'
 
@@ -67,7 +70,10 @@ Options
 
 Deploy options
   --yes               Execute the plan. Without it, deploy only prints the plan
-  --region <slug>     DigitalOcean region (default blr)
+  --target <id>       digitalocean. Chooses only for a project with no nextship.json
+
+Deploy options, digitalocean target
+  --region <slug>     Region (default ${DEFAULT_REGION})
   --size <slug>       App Platform instance size (default ${DEFAULT_INSTANCE_SIZE})
   --registry <name>   Registry name, unique across all of DigitalOcean
 
@@ -181,9 +187,15 @@ async function runDetect(): Promise<void> {
   detail(`env files     ${project.envFiles.length > 0 ? project.envFiles.join(', ') : 'none'}`)
 }
 
+/**
+ * Where `build`, `package` and `run` build: the local daemon, for the default
+ * platform. Only `deploy` asks a target, because only it knows where the image goes.
+ */
+const LOCAL_BUILD: BuildPlacement = { platform: DEFAULT_PLATFORM, dockerHost: null }
+
 async function runBuild(): Promise<void> {
   const project = await detectProject(process.cwd())
-  const build = await buildProject(project)
+  const build = await buildProject(project, LOCAL_BUILD)
 
   ok(`Built ${build.manifest.framework.name} ${build.manifest.framework.version}`)
   detail(`build      ${build.manifest.buildId}`)
@@ -192,18 +204,18 @@ async function runBuild(): Promise<void> {
 
 async function runPackage(): Promise<void> {
   const project = await detectProject(process.cwd())
-  const build = await buildProject(project)
+  const build = await buildProject(project, LOCAL_BUILD)
   const image = await packageImage(project, build)
 
   ok(`Image ready: ${image.tag}`)
-  detail(`platform   ${TARGET_PLATFORM}`)
+  detail(`platform   ${LOCAL_BUILD.platform}`)
   detail('start it with: nextship run')
 }
 
 async function runDoctor(): Promise<void> {
   step('Checking this project')
   const project = await detectProject(process.cwd())
-  const findings = await diagnose(project)
+  const findings = await diagnose(project, (await readConfig(project.root))?.target ?? 'digitalocean')
 
   const blockers = findings.filter((finding) => finding.level === 'blocker')
   const warnings = findings.filter((finding) => finding.level === 'warning')
@@ -259,16 +271,25 @@ function parseFlags(argv: string[], allowed: string[]): Map<string, string | tru
 }
 
 async function runDeploy(argv: string[]): Promise<void> {
-  const flags = parseFlags(argv, ['yes', 'region', 'size', 'registry'])
+  const flags = parseFlags(argv, ['yes', 'target', 'region', 'size', 'registry'])
   const project = await detectProject(process.cwd())
 
   await deploy(project, {
     confirmed: flags.get('yes') === true,
-    region: typeof flags.get('region') === 'string' ? (flags.get('region') as string) : 'blr',
-    instanceSize:
-      typeof flags.get('size') === 'string' ? (flags.get('size') as string) : DEFAULT_INSTANCE_SIZE,
-    registry: typeof flags.get('registry') === 'string' ? (flags.get('registry') as string) : undefined,
+    target: stringFlag(flags, 'target'),
+    region: stringFlag(flags, 'region'),
+    instanceSize: stringFlag(flags, 'size'),
+    registry: stringFlag(flags, 'registry'),
   })
+}
+
+/** A flag that takes a value, refusing one given bare so `--region --yes` is not read as no region. */
+function stringFlag(flags: Map<string, string | true>, name: string): string | undefined {
+  const value = flags.get(name)
+  if (value === true) {
+    throw new NextshipError(`--${name} needs a value.`, 'Run `nextship --help` to see what it takes.')
+  }
+  return value
 }
 
 /**
@@ -430,7 +451,7 @@ async function runRollback(argv: string[]): Promise<void> {
 
 async function runLocally(): Promise<void> {
   const project = await detectProject(process.cwd())
-  const build = await buildProject(project)
+  const build = await buildProject(project, LOCAL_BUILD)
   const image = await packageImage(project, build)
 
   await runImage(project, image)
