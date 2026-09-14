@@ -43,13 +43,13 @@ destroyed afterwards, so its URL no longer serves.
 
 ## Status
 
-**Version 1.0.2, for Next.js on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. Next is v1.1, a target for any Linux server reached over SSH, in progress on `feat/vm-target` and not released.
+**Version 1.0.2, for Next.js on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. Next is v1.1, a target for any Linux server reached over SSH, built on `feat/vm-target` and not released until it has run on real providers.
 
 | Area | State |
 |---|---|
 | Local pipeline: `detect`, `build`, `package`, `run` | Done. Verified on a real production project and a purpose-built feature app |
 | DigitalOcean deployment: `deploy`, `rollback`, `logs` | Done. Verified against a live app, including two rollbacks in opposite directions, and deployed from an Apple Silicon Mac (M3 Max) with 0.4.4 from npm, on the second attempt |
-| Any Linux server over SSH | v1.1, in progress and not released. Commands are target-agnostic; the server driver is being built. See [`docs/design.md`](./docs/design.md) §9.3 |
+| Any Linux server over SSH | v1.1, built and not released. `server add`, deploy, rollback and every day-two command pass end to end against a local Ubuntu 24.04 test server over SSH; not yet run on a real provider. See [`docs/vm.md`](./docs/vm.md) |
 | AWS | On demand, after a streaming experiment on Lightsail. The server target already runs on EC2 |
 | Official Next.js adapter compatibility suite | Passes in full on 16.4.0-canary.22: 1123 of 1123 suites and 3599 of 3599 assertions, with 9 Vercel-specific tests skipped and each reason published. See the results below |
 
@@ -150,6 +150,10 @@ nextship domain rm  Detach a domain
 nextship images     List the images pushed for this project
 nextship images prune  Remove old images, keeping the recent ones
 nextship destroy <name>  Destroy the app this project created
+nextship server add <user@host[:port]>  Prepare a Linux server and record it as the target
+nextship server status  The server, every app on it, and what needs attention
+nextship server reboot  Reboot the server and wait for every app to come back healthy
+nextship server move <user@host[:port]>  Move this project's app to another server
 
   -h, --help        Show usage
   -v, --version     Show the version
@@ -902,6 +906,12 @@ Budget **$10 per month** to start on DigitalOcean: $5 for the smallest App Platf
 instance and $5 for a Basic container registry. The free registry tier does not hold
 enough for rollback to have anything to roll back to.
 
+On your own server nextship adds nothing to what your provider charges for the server:
+there is no registry, load balancer or managed service involved, and several apps can share
+one server. What a suitable server costs depends on the provider and changes often, so no
+price is quoted here. For a remote build, choose a server with at least 2 GB of RAM, or use
+`--build local`.
+
 A costed comparison against Vercel at three traffic tiers is in
 [`docs/costs.md`](./docs/costs.md). The short version: DigitalOcean
 egress is $0.02 per GiB against Vercel's $0.15 and up, and App Platform needs no load
@@ -1017,10 +1027,13 @@ docs/
   roadmap.md           v0.1 to v1.0, then what is deliberately not built
   costs.md             costed comparison against Vercel at three traffic tiers
   digitalocean.md      the API token, its scopes, and what deploying costs
-conformance/           scripts for the official Next.js adapter compatibility suite
+  vm.md                deploying to your own server: setup, security, CI, backups
+conformance/           scripts for the official Next.js adapter compatibility suite,
+                       streaming conformance, and vm/e2e.sh against a server over SSH
 packages/
   adapter/             Next.js Adapter API implementation, injected via NEXT_ADAPTER_PATH
-  cli/                 every command; runtime/ holds the files copied into a build
+  cli/                 every command; runtime/ holds the files copied into a build,
+                       and runtime/vm/ the setup and watchdog scripts sent to a server
 site/                  the marketing site and documentation, exported as static files
 ```
 
@@ -1136,7 +1149,7 @@ Bun's adapter keeps a list of its own the same way.
 | **v0.3** | First cloud deployment to DigitalOcean: deploy, rollback, logs | Done, verified live. Image retention and a health endpoint were moved to v0.4 with reasons |
 | **v0.4** | Day-two operations: domains and TLS, env, images, destroy, logs | Done, verified live |
 | **v1.0** | Trustworthy for personal use: compatibility suite results, streaming conformance, honest limitations | Done. The suite passes in full (1123 of 1123 suites), the package is on npm under Apache-2.0, and streaming conformance passes in CI and on a live App Platform app |
-| **v1.1** | Any Linux server over SSH | In progress. Commands are target-agnostic; the server driver is being built |
+| **v1.1** | Any Linux server over SSH | Built, and verified end to end on a local test server. Live verification on real providers comes before release |
 
 Beyond v1.0, each with the trigger that would justify it: correctness at scale (a
 shared cache and distributed tags, needed once there is more than one instance),

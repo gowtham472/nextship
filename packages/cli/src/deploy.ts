@@ -160,7 +160,7 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
   // be refused says so now instead of after a full build and push.
   if (owned) await client.assertIdle(owned.id)
 
-  const serverKey = await client.actionsKey(project.root, await storedEncryptionKey(project.root), detail)
+  const serverKey = await client.actionsKey(await storedEncryptionKey(project.root), detail)
 
   const builder = await client.builder()
   let build: BuildResult

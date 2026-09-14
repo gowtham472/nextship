@@ -94,7 +94,7 @@ const MIN_FREE_DISK_MIB = 3 * 1024
 const APP_MEMORY_SHARE = 0.8
 
 /** What the app's ownership record holds on the server. */
-export interface AppRecord {
+interface AppRecord {
   id: string
   name: string
   createdAt: string
@@ -102,7 +102,7 @@ export interface AppRecord {
 }
 
 /** What a server reports in one round trip, for plans and guards. */
-export interface ServerFacts {
+interface ServerFacts {
   memMib: number
   diskFreeMib: number
   dockerVersion: string
@@ -236,7 +236,7 @@ export function runArguments(options: {
  * `.next/cache/images` is not mounted directly: it does not exist in the image, so
  * its volume would be created owned by root and the app could not write to it.
  */
-export function cacheVolumes(name: string, imageTag: string): { build: string; cache: string } {
+function cacheVolumes(name: string, imageTag: string): { build: string; cache: string } {
   return { build: `nextship-${name}-build-${imageTag}`, cache: `nextship-${name}-cache` }
 }
 
@@ -285,7 +285,7 @@ export function withoutDomain(domains: SiteDomain[], domain: string): SiteDomain
 const q = shellQuote
 
 /** What `server status` reports about the server itself. */
-export interface ServerStatus {
+interface ServerStatus {
   os: string
   arch: string
   uptime: string
@@ -313,7 +313,7 @@ export interface AppStatus {
 }
 
 /** Reads the `key=value` lines the status script prints. Keys may repeat. */
-export function parseStatusLines(output: string): Map<string, string[]> {
+function parseStatusLines(output: string): Map<string, string[]> {
   const values = new Map<string, string[]>()
   for (const line of output.split('\n')) {
     const separator = line.indexOf('=')
@@ -545,7 +545,7 @@ export class VmTarget implements Target {
 
   // ----------------------------------------------------------------- build
 
-  async actionsKey(_projectRoot: string, localKey: string | null, onPhase: PhaseReporter): Promise<string | null> {
+  async actionsKey(localKey: string | null, onPhase: PhaseReporter): Promise<string | null> {
     const file = `${this.appDir()}/secrets`
     const stored = await this.exec(`cat ${q(file)} 2> /dev/null`)
     let server: string | null = null

@@ -27,7 +27,7 @@ export interface SiteDomain {
   minimumTls: string
 }
 
-export interface SiteOptions {
+interface SiteOptions {
   name: string
   /** The container Caddy proxies to, on the nextship network. */
   container: string

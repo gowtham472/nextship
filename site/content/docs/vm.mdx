@@ -1,0 +1,89 @@
+---
+title: Your own server
+description: Deploy to any Ubuntu or Debian server over SSH, behind Caddy with automatic HTTPS, and what stays yours to run.
+---
+
+<Callout type="note">
+
+**Not in 1.0.2.** This target is built and verified against a local test server, and ships in
+the next release once it has run on real providers. The checklist is in the
+[roadmap](https://github.com/gowtham472/nextship/blob/main/docs/roadmap.md).
+
+</Callout>
+
+One target covers any server you can SSH into: a Hetzner or Hostinger VPS, a DigitalOcean
+Droplet, EC2, Compute Engine, an Azure VM, or your own hardware. It needs Ubuntu 22.04,
+Ubuntu 24.04 or Debian 12, amd64 or arm64, at least 1 GB of RAM and 5 GB of free disk, and
+SSH as root or as a user with passwordless sudo.
+
+## Set the server up
+
+```bash
+nextship server add root@203.0.113.10
+nextship server add root@203.0.113.10 --yes
+```
+
+The first command changes nothing. It shows the server's host key fingerprint, which you
+compare with the one your provider shows, and every setup step with what it would change.
+The second installs Docker if needed, creates a `nextship` user and proves a login as it,
+runs Caddy on ports 80 and 443, limits the journal, enables security updates and ufw,
+installs a watchdog for containers that stay unhealthy, and turns off SSH password logins
+last. From then on the host key is pinned in `nextship.json` and a server presenting any
+other key is refused.
+
+`--no-firewall`, `--no-auto-updates`, `--no-swap` and `--no-ssh-hardening` opt out of those
+steps. Running `server add` again changes nothing.
+
+## Deploy
+
+```bash
+nextship deploy --yes
+```
+
+The image is built on the server's own Docker by default, through an SSH forward that keeps
+the pinned host key. `--build local` builds on your machine instead and streams the image
+over SSH, which suits a server with little memory.
+
+A new container starts with no published port. Caddy moves traffic to it only once Docker
+reports it healthy, then the previous container stops. A deployment that fails leaves the
+previous one serving; one that succeeds drops no request. Measured on a test server: no
+failed request out of 249 during a deployment, with two second streamed responses finishing
+across the switch.
+
+The first app deployed answers `http://<server>`. Attach a domain and Caddy obtains its
+certificate:
+
+```bash
+nextship domain add app.example.com --yes
+```
+
+## What is different from App Platform
+
+| | App Platform | Your server |
+|---|---|---|
+| Cache after a restart | Starts cold | Regenerated pages and optimized images kept in volumes |
+| Logs of a replaced deployment | Gone | `nextship logs --deployment <id>` reads the journal |
+| CDN | In front, keeps static pages | None unless you add one |
+| Rollback | Restores the old spec, env included | Starts the old image with the current env file |
+| Server Actions key | In a local file | On the server, shared by every machine that deploys |
+| Apps | One per App Platform app | Many per server, each with its own domains |
+| Failover | Managed | None: one server |
+
+## Keep it running
+
+```bash
+nextship server status   # the server and every app on it, with what needs attention
+nextship server reboot --yes
+nextship server move root@198.51.100.7 --yes
+```
+
+`server reboot` reboots and waits until every app is healthy again. `server move` copies the
+app, its env and its key to another server, deploys it there, and records the new server only
+once it serves.
+
+Two things on the server exist nowhere else: `/etc/nextship/apps/<name>/env` and
+`/etc/nextship/apps/<name>/secrets`. Keep a copy of both. The `nextship` user is in the docker
+group, which is root-equivalent, so treat its keys as root's.
+
+The full guide, including GitHub Actions and recovery, is
+[docs/vm.md](https://github.com/gowtham472/nextship/blob/main/docs/vm.md).

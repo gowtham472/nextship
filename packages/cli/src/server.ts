@@ -36,7 +36,7 @@ import { MOVE_STEPS, rebootProgress, statusWarnings, type VmTarget } from './tar
 import { detail, ok, step, warn } from './util/log.js'
 
 /** The user every later command connects as. Created by the `user` step. */
-export const SERVICE_USER = 'nextship'
+const SERVICE_USER = 'nextship'
 
 /** Setup steps in the order setup.sh runs them. */
 export const SETUP_STEPS = [
@@ -57,7 +57,7 @@ export const SETUP_STEPS = [
   'ssh-hardening',
 ] as const
 
-export type SetupStep = (typeof SETUP_STEPS)[number]
+type SetupStep = (typeof SETUP_STEPS)[number]
 
 /** The steps a user may opt out of, by the flag that does it. */
 export const OPT_OUT_FLAGS: Record<string, SetupStep> = {
@@ -67,15 +67,15 @@ export const OPT_OUT_FLAGS: Record<string, SetupStep> = {
   'no-ssh-hardening': 'ssh-hardening',
 }
 
-export type StepStatus = 'ok' | 'change' | 'done' | 'skip' | 'refuse'
+type StepStatus = 'ok' | 'change' | 'done' | 'skip' | 'refuse'
 
-export interface StepLine {
+interface StepLine {
   step: string
   status: StepStatus
   detail: string
 }
 
-export interface AddServerOptions {
+interface AddServerOptions {
   confirmed: boolean
   /** `user@host` or `user@host:port`. */
   address: string

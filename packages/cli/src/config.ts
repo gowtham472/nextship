@@ -114,7 +114,7 @@ export async function readConfig(root: string): Promise<ProjectConfig | null> {
  * here would otherwise surface as an undefined region in an API call or a
  * connection to a host named `undefined`.
  */
-export function validateConfig(config: ProjectConfig): void {
+function validateConfig(config: ProjectConfig): void {
   const refuse = (problem: string): never => {
     throw new NextshipError(
       `${CONFIG_FILE} ${problem}.`,
@@ -157,7 +157,7 @@ export function validateConfig(config: ProjectConfig): void {
 }
 
 /** The lowest version that can hold everything in this config. */
-export function configVersion(config: Omit<ProjectConfig, 'version'>): number {
+function configVersion(config: Omit<ProjectConfig, 'version'>): number {
   return config.target === 'vm' || config.server !== undefined || config.build !== undefined ? 2 : 1
 }
 

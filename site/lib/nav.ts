@@ -38,6 +38,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: 'environment-variables', title: 'Environment variables' },
       { slug: 'custom-domains', title: 'Custom domains' },
       { slug: 'rollbacks-and-logs', title: 'Rollbacks and logs' },
+      { slug: 'vm', title: 'Your own server' },
     ],
   },
   {

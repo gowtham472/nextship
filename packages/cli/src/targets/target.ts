@@ -245,7 +245,7 @@ export interface Target {
    * where every deploying machine reaches it returns that one, so a second
    * machine does not build with a different key.
    */
-  actionsKey(projectRoot: string, localKey: string | null, onPhase: PhaseReporter): Promise<string | null>
+  actionsKey(localKey: string | null, onPhase: PhaseReporter): Promise<string | null>
 
   /** The `--platform` an image for this target has to be built for. */
   buildPlatform(): Promise<string>

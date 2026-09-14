@@ -533,7 +533,7 @@ Desktop for Windows, so images are pushed through `localhost:5100`.
 The probe is not in CI yet. Until a driver exists it exercises the emulator rather than
 nextship, and a failure would say nothing about this code.
 
-### 9.3 VM target over SSH (Designed)
+### 9.3 VM target over SSH (Implemented, verified on a local test server)
 
 One generic target: **any Ubuntu or Debian server nextship can reach over SSH.** It covers
 a Hetzner or Hostinger VPS, a DigitalOcean Droplet, EC2, Compute Engine, an Azure VM and a
@@ -734,6 +734,34 @@ Server Actions key, and left the old server serving.
 - Only containers labelled `sh.nextship.managed=true` and `sh.nextship.app=<name>` are ever
   stopped or removed. Other workloads and the global Docker daemon configuration are never
   modified. `destroy` never removes the server, Caddy, other apps or DNS.
+
+#### What is verified, and what is not
+
+Everything below ran against a local stand-in: privileged Ubuntu 24.04.4 and Debian 12
+containers on an M3 Max, arm64, running systemd, sshd and their own Docker 29.8.0, reached
+over SSH on forwarded ports. `conformance/vm/e2e.sh` passed in full against a fresh Ubuntu
+stand-in: setup and its idempotence, deploy, streaming through Caddy (first byte 46 ms
+against 2051 ms), the Edge route, no failed request in 211 during a deployment with streams
+open across the switch, a crashing build refused with 158 of 158 requests to the previous
+deployment answering 200, rollback, `env push` without downtime, a replaced deployment's
+logs, pruning, a domain's site, and destroying one app while another kept serving.
+
+By hand on the same stand-ins: `server add` on Debian 12 (46 s, and a second run changed
+nothing); a killed Node process restarted by Docker; a frozen one marked unhealthy after 90 s and
+restarted by the watchdog 3 minutes later, logged as "unhealthy for 3 consecutive checks";
+`server reboot` bringing the app back healthy; `server move` to a fresh server with the same
+env and key; the regenerated ISR page and optimized image surviving a restart.
+
+Not verified, and required before release:
+
+| Not verified | Why |
+|---|---|
+| A real provider: a Hetzner arm64 VM and an amd64 VM elsewhere | The stand-in shares the host's kernel and network; ufw and SSH hardening were exercised there, swap was not (a container cannot `swapon`) |
+| A certificate issued for a real domain, and streaming over HTTPS | Needs public DNS pointing at a public server |
+| A real kernel reboot | On the stand-in a reboot restarts a container on the same kernel |
+| Deploy refusing a server under 3 GB free | Unit tested; the stand-in's disk could not be filled |
+| The `vm` CI job, and the GitHub Actions workflow in `vm.md` | The branch has not been pushed |
+| `--build remote` from Windows over a loopback forward | No Windows machine was used |
 
 #### Limitations
 

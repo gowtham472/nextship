@@ -36,7 +36,7 @@ import { hostKeyAlgorithms, knownHostsLine, parseKeyLine } from './host-key.js'
 /** The name every connection gives the host in its known_hosts file. */
 const HOST_ALIAS = 'nextship-server'
 
-export interface SshEndpoint {
+interface SshEndpoint {
   host: string
   port: number
   user: string
@@ -44,7 +44,7 @@ export interface SshEndpoint {
   hostKey: string
 }
 
-export interface SshResult {
+interface SshResult {
   code: number
   stdout: string
   stderr: string
