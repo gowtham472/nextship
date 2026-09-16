@@ -752,15 +752,28 @@ restarted by the watchdog 3 minutes later, logged as "unhealthy for 3 consecutiv
 `server reboot` bringing the app back healthy; `server move` to a fresh server with the same
 env and key; the regenerated ISR page and optimized image surviving a restart.
 
+**On a real machine (Ragul D, 2026-09-16).** An Ubuntu 24.04 amd64 VM on a Proxmox cluster,
+3915 MiB RAM, 8 GB free: `server add` planned and applied every step on a clean machine,
+installing Docker 29.8.1, proving the `nextship` login before hardening, and leaving ufw
+active for 22, 80 and 443 on both address families, `passwordauthentication no`,
+`permitrootlogin without-password`, and `nextship` in the `docker` and `systemd-journal`
+groups, each confirmed from the VM's own console. `conformance/vm/e2e.sh` then ran to its
+final line, which it reaches only when every check passed, since it stops at the first
+failure; the full log of that run was not captured. This is the first run on a real kernel,
+a real firewall and a cloud-init image, whose `50-cloud-init.conf` did not override the
+hardening drop-in.
+
 Not verified, and required before release:
 
 | Not verified | Why |
 |---|---|
-| A real provider: a Hetzner arm64 VM and an amd64 VM elsewhere | The stand-in shares the host's kernel and network; ufw and SSH hardening were exercised there, swap was not (a container cannot `swapon`) |
-| A certificate issued for a real domain, and streaming over HTTPS | Needs public DNS pointing at a public server |
-| A real kernel reboot | On the stand-in a reboot restarts a container on the same kernel |
-| Deploy refusing a server under 3 GB free | Unit tested; the stand-in's disk could not be filled |
-| The `vm` CI job, and the GitHub Actions workflow in `vm.md` | The branch has not been pushed |
+| A hosting provider: a Hetzner arm64 VM and an amd64 VM elsewhere | An amd64 Proxmox VM has passed (above). arm64 has run only against the container stand-in, and no provider's images or networking have been used |
+| The swap step | Both the stand-in and the Proxmox image already had swap, so the step reported `ok` and its apply path has never run |
+| A certificate issued for a real domain, and streaming over HTTPS | Needs public DNS pointing at a reachable server; the Proxmox VM is on a private network |
+| A real kernel reboot | On the stand-in a reboot restarts a container on the same kernel; not yet run on the Proxmox VM |
+| `server move` between two real machines | Run on the stand-in only |
+| Deploy refusing a server under 3 GB free | Unit tested; neither machine's disk was filled |
+| The `vm` CI job, and the GitHub Actions workflow in `vm.md` | Not run until this branch is pushed |
 | `--build remote` from Windows over a loopback forward | No Windows machine was used |
 
 #### Limitations

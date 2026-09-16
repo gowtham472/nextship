@@ -113,9 +113,18 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Docs
 
+- **The setup instructions link the CLI in a way that works.** `npm link --workspace
+  packages/cli` in the README and CONTRIBUTING failed with "No workspaces found": this is a
+  pnpm workspace, so npm has none to resolve. Both now link from the package directory, and
+  CONTRIBUTING names running `dist/index.js` directly as the alternative. (Ragul D)
+- **`docs/vm-target-overview.html`** walks through the VM target for the maintainers: what
+  changed from 1.0.2, how building, releasing and every command work step by step, the
+  safety guarantees, and what is verified and what is not. Open it in a browser. (Ragul D)
 - **The site documents the server target** on a new "Your own server" page, and the CLI
   reference, requirements and security pages name it, each saying it is not in 1.0.2. (Ragul D)
-- **`design.md` §9.3 records what was verified and what was not.** `e2e.sh` passes in full
+- **`design.md` §9.3 records what was verified and what was not,** including the first run on
+  a real machine: an Ubuntu 24.04 amd64 VM on a Proxmox cluster, where `server add` applied
+  every step and `e2e.sh` ran to completion. `e2e.sh` passes in full
   against a local Ubuntu 24.04 stand-in, and `server add` was also run on Debian 12; a real
   provider, a real certificate, a real kernel reboot, the disk guard on a full disk, the CI
   job and Windows are listed as not verified. (Ragul D)

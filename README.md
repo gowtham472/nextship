@@ -100,7 +100,7 @@ Or build from source, which puts the same binary on your PATH:
 git clone https://github.com/gowtham472/nextship.git
 cd nextship
 pnpm install && pnpm build
-npm link --workspace packages/cli
+cd packages/cli && npm link && cd ../..
 ```
 
 Before trusting it with a cloud account, read
@@ -1028,6 +1028,7 @@ docs/
   costs.md             costed comparison against Vercel at three traffic tiers
   digitalocean.md      the API token, its scopes, and what deploying costs
   vm.md                deploying to your own server: setup, security, CI, backups
+  vm-target-overview.html  a walkthrough of the VM target: before and after, and every workflow step by step
 conformance/           scripts for the official Next.js adapter compatibility suite,
                        streaming conformance, and vm/e2e.sh against a server over SSH
 packages/

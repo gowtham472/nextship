@@ -31,10 +31,15 @@ node packages/cli/scripts/verify-pack.mjs
 To run your working copy against a real project:
 
 ```bash
-npm link --workspace packages/cli
+cd packages/cli && npm link && cd ../..
 cd ~/some-nextjs-app
 nextship detect
 ```
+
+The link is made from the package directory rather than with npm's `--workspace` flag:
+this repository is a pnpm workspace, so npm finds no workspaces to resolve and refuses.
+If your npm prefix needs root, run the built CLI directly instead:
+`node <checkout>/packages/cli/dist/index.js`.
 
 ## What a change is expected to include
 
