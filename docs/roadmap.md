@@ -202,8 +202,10 @@ done" in the pull request and in `design.md` §9.3:
 10. Two projects on one server with their own domains, and `destroy` on one leaves the other
 11. A deployment from the GitHub Actions workflow in `vm.md` with `--build local`
 
-Items 2 (on the stand-in), 3, 5, 6, 7, 9 and 10 passed on the local stand-in, which is not a
-provider. The regression check on DigitalOcean before merge: `deploy --yes`, `rollback
+Items 2, 3, 5, 6, 7, 9 and 10 passed on the local stand-in, which is not a provider. On
+2026-09-16, items 2 and 3 also passed on an Ubuntu 24.04 amd64 VM on a Proxmox cluster:
+`server add` applied every step on a clean machine and `e2e.sh` ran to its final line. The
+swap step has still never applied, because every machine tried so far already had swap. The regression check on DigitalOcean before merge: `deploy --yes`, `rollback
 --yes`, `logs --follow`, `env push --yes`, `domain` and `images` behave as on `main`, against
 a live app.
 

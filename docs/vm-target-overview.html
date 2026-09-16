@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- A walkthrough of the VM target for the maintainers: what it adds, how building, releasing and every command work, and what is verified. Author: Ragul D. Design: design.md §9.3 -->
+<title>nextship VM Target</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root {
+  --paper: #fbfcff;
+  --panel: #f2f5fd;
+  --panel-strong: #e7ecf8;
+  --rule: #dfe6f4;
+  --rule-strong: #c6d3ee;
+  --ink: #0b1220;
+  --ink-soft: #2f3b52;
+  --muted: #58657d;
+  --blue: #005eff;
+  --blue-text: #0050d8;
+  --blue-wash: #e8f0ff;
+  --yellow: #fdcf18;
+  --yellow-text: #7a5a00;
+  --yellow-wash: #fff6cf;
+  --ok: #17864a;
+  --ok-wash: #e4f5ec;
+  --bad: #c43a3a;
+  --bad-wash: #fbe9e9;
+  --term-bg: #0b1220;
+  --term-ink: #dbe4f7;
+  --term-dim: #7d8aa6;
+  --term-blue: #6aa2ff;
+  --term-green: #5fd38d;
+  --term-yellow: #fdcf18;
+  --term-red: #ff7a7a;
+  --sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #070c1a;
+    --panel: #0d1630;
+    --panel-strong: #132042;
+    --rule: #1b2a52;
+    --rule-strong: #2a3d70;
+    --ink: #eef2ff;
+    --ink-soft: #c9d2e6;
+    --muted: #97a3bf;
+    --blue: #3d82ff;
+    --blue-text: #7aabff;
+    --blue-wash: #10214a;
+    --yellow-text: #fdcf18;
+    --yellow-wash: #2b2408;
+    --ok: #5fd38d;
+    --ok-wash: #0f2a1d;
+    --bad: #ff8a8a;
+    --bad-wash: #2e1216;
+    --term-bg: #030713;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #070c1a;
+  --panel: #0d1630;
+  --panel-strong: #132042;
+  --rule: #1b2a52;
+  --rule-strong: #2a3d70;
+  --ink: #eef2ff;
+  --ink-soft: #c9d2e6;
+  --muted: #97a3bf;
+  --blue: #3d82ff;
+  --blue-text: #7aabff;
+  --blue-wash: #10214a;
+  --yellow-text: #fdcf18;
+  --yellow-wash: #2b2408;
+  --ok: #5fd38d;
+  --ok-wash: #0f2a1d;
+  --bad: #ff8a8a;
+  --bad-wash: #2e1216;
+  --term-bg: #030713;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--blue-text); text-underline-offset: 3px; }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 4px; }
+code, kbd { font-family: var(--mono); font-size: 0.86em; background: var(--panel); border: 1px solid var(--rule); border-radius: 5px; padding: 0.08em 0.35em; color: var(--ink); white-space: nowrap; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.2; margin: 0; }
+p { margin: 0; }
+
+.shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-inline: 24px;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 56px;
+}
+@media (max-width: 900px) { .shell { grid-template-columns: minmax(0, 1fr); gap: 0; padding-inline: 16px; } }
+
+/* ------------------------------------------------------------ contents rail */
+.rail { position: sticky; top: 0; align-self: start; padding-block: 40px; max-height: 100vh; overflow-y: auto; }
+.rail .mark { font-weight: 800; font-size: 18px; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; }
+.rail .mark i { width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); display: inline-block; }
+.rail .mark b { color: var(--blue); font-weight: 800; }
+.rail nav { margin-top: 28px; display: grid; gap: 2px; }
+.rail .group { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 700; margin-top: 18px; margin-bottom: 4px; }
+.rail a { color: var(--ink-soft); text-decoration: none; font-size: 14px; padding: 4px 10px; border-radius: 6px; border-left: 2px solid transparent; }
+.rail a:hover { background: var(--panel); color: var(--ink); }
+@media (max-width: 900px) { .rail { display: none; } }
+
+/* ------------------------------------------------------------------- main */
+main { padding-block: 40px 96px; min-width: 0; }
+.prose { max-width: 70ch; }
+section { padding-top: 64px; scroll-margin-top: 16px; }
+section > h2 { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 14px; }
+section > .lede { font-size: 18px; color: var(--ink-soft); max-width: 66ch; }
+h3 { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; margin-top: 40px; margin-bottom: 10px; }
+.stack { display: grid; gap: 14px; }
+.eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 700; color: var(--blue-text); }
+
+/* ------------------------------------------------------------------- hero */
+.hero { padding-top: 16px; }
+.hero h1 { font-size: clamp(34px, 5vw, 52px); font-weight: 800; letter-spacing: -0.035em; margin-top: 12px; max-width: 18ch; }
+.hero h1 span { color: var(--blue); }
+.hero .lede { font-size: 19px; color: var(--ink-soft); margin-top: 18px; max-width: 62ch; }
+.byline { margin-top: 18px; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.byline span { font-family: var(--mono); font-size: 12px; }
+
+.split { margin-top: 32px; display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--rule-strong); border-radius: 14px; overflow: hidden; }
+@media (max-width: 720px) { .split { grid-template-columns: 1fr; } }
+.split > div { padding: 22px 22px 24px; display: grid; gap: 12px; align-content: start; }
+.split > div + div { border-left: 1px solid var(--rule-strong); background: var(--blue-wash); }
+@media (max-width: 720px) { .split > div + div { border-left: 0; border-top: 1px solid var(--rule-strong); } }
+.split h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: var(--muted); }
+.split > div + div h2 { color: var(--blue-text); }
+.split .big { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; }
+.split ul { margin: 0; padding-left: 18px; color: var(--ink-soft); font-size: 15px; display: grid; gap: 4px; }
+
+.figures { margin-top: 22px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 720px) { .figures { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.figure { border-top: 2px solid var(--ink); padding-top: 10px; }
+.figure b { display: block; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.figure b small { font-size: 14px; color: var(--muted); font-weight: 600; }
+.figure span { font-size: 13px; color: var(--muted); }
+
+/* ----------------------------------------------------------------- tables */
+.table-wrap { overflow-x: auto; margin-top: 18px; border: 1px solid var(--rule); border-radius: 12px; }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; min-width: 640px; }
+th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+thead th { background: var(--panel); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
+tbody tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 600; color: var(--ink); }
+td { color: var(--ink-soft); }
+td.was { color: var(--muted); }
+
+.chip { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; vertical-align: 1px; white-space: nowrap; }
+.chip.new { background: var(--yellow-wash); color: var(--yellow-text); border: 1px solid color-mix(in srgb, var(--yellow) 60%, transparent); }
+.chip.same { background: var(--panel); color: var(--muted); border: 1px solid var(--rule); }
+.chip.ok { background: var(--ok-wash); color: var(--ok); }
+.chip.no { background: var(--bad-wash); color: var(--bad); }
+
+/* ---------------------------------------------------------------- terminal */
+.term {
+  background: var(--term-bg);
+  color: var(--term-ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  border-radius: 12px;
+  padding: 16px 18px;
+  overflow-x: auto;
+  margin-top: 16px;
+  white-space: pre;
+}
+.term .p { color: var(--term-blue); }
+.term .v { color: var(--term-green); }
+.term .w { color: var(--term-yellow); }
+.term .x { color: var(--term-red); }
+.term .d { color: var(--term-dim); }
+.term .c { color: #ffffff; }
+
+/* --------------------------------------------------------------- features */
+.features { margin-top: 22px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px; }
+@media (max-width: 720px) { .features { grid-template-columns: 1fr; } }
+.feature { padding: 14px 0; border-bottom: 1px solid var(--rule); display: grid; gap: 4px; }
+.feature h4 { margin: 0; font-size: 15.5px; font-weight: 700; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.feature h4 code { font-size: 13px; }
+.feature p { font-size: 14.5px; color: var(--ink-soft); }
+
+/* ----------------------------------------------------------- architecture */
+.arch { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1fr) 150px minmax(0, 1.6fr); gap: 0; align-items: stretch; }
+@media (max-width: 820px) { .arch { grid-template-columns: 1fr; } }
+.zone { border: 1px solid var(--rule-strong); border-radius: 14px; padding: 18px; display: grid; gap: 10px; align-content: start; background: var(--paper); }
+.zone.server { background: var(--panel); }
+.zone h4 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 700; }
+.box { border: 1px solid var(--rule); background: var(--paper); border-radius: 9px; padding: 9px 12px; font-size: 14px; }
+.zone.server .box { background: var(--paper); }
+.box b { display: block; font-size: 14px; }
+.box span { color: var(--muted); font-size: 12.5px; line-height: 1.45; display: block; }
+.box.hot { border-color: var(--blue); box-shadow: inset 3px 0 0 var(--blue); }
+.boxes2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 520px) { .boxes2 { grid-template-columns: 1fr; } }
+.wire { display: grid; place-items: center; padding: 12px 8px; text-align: center; }
+.wire .line { width: 100%; height: 2px; background: repeating-linear-gradient(90deg, var(--blue) 0 8px, transparent 8px 14px); position: relative; }
+.wire .line::after { content: ""; position: absolute; right: -2px; top: -5px; border: 6px solid transparent; border-left: 9px solid var(--blue); }
+.wire p { font-family: var(--mono); font-size: 11.5px; color: var(--blue-text); margin-top: 8px; line-height: 1.45; }
+@media (max-width: 820px) { .wire .line { width: 2px; height: 36px; background: repeating-linear-gradient(180deg, var(--blue) 0 8px, transparent 8px 14px); } .wire .line::after { right: -5px; top: auto; bottom: -8px; border: 6px solid transparent; border-top: 9px solid var(--blue); } }
+
+/* ------------------------------------------------------------------ steps */
+ol.steps { list-style: none; counter-reset: s; margin: 20px 0 0; padding: 0; display: grid; gap: 0; }
+ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 14px; padding: 14px 0; border-top: 1px solid var(--rule); }
+ol.steps > li::before { content: counter(s, decimal-leading-zero); font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--blue-text); padding-top: 2px; }
+ol.steps h4 { margin: 0 0 4px; font-size: 16px; font-weight: 700; }
+ol.steps p, ol.steps li li { font-size: 14.5px; color: var(--ink-soft); }
+ol.steps ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 3px; }
+ol.steps .where { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-left: 6px; font-weight: 500; }
+
+/* release sequence with the visitor rail */
+.release { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1fr) 132px; border: 1px solid var(--rule-strong); border-radius: 14px; overflow: hidden; }
+@media (max-width: 640px) { .release { grid-template-columns: minmax(0, 1fr) 70px; } }
+.release .act { padding: 14px 16px; border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }
+.release .act .n { font-family: var(--mono); font-weight: 600; color: var(--blue-text); font-size: 13px; padding-top: 2px; }
+.release .act h4 { margin: 0; font-size: 15.5px; }
+.release .act p { font-size: 14px; color: var(--ink-soft); margin-top: 2px; }
+.release .act code { white-space: normal; }
+.release .vis { border-left: 1px solid var(--rule-strong); border-bottom: 1px solid var(--rule); display: grid; place-items: center; font-size: 12px; font-weight: 700; text-align: center; padding: 6px; }
+.release .vis.old { background: var(--panel); color: var(--muted); }
+.release .vis.new { background: var(--blue-wash); color: var(--blue-text); }
+.release .head { padding: 10px 16px; background: var(--panel-strong); font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 700; border-bottom: 1px solid var(--rule-strong); }
+.release .head + .head { border-left: 1px solid var(--rule-strong); text-align: center; padding-inline: 6px; }
+.release .fail { grid-column: 1 / -1; padding: 12px 16px; background: var(--bad-wash); color: var(--ink); font-size: 14px; border-bottom: 1px solid var(--rule); }
+.release .fail b { color: var(--bad); }
+.release > :nth-last-child(-n+2) { border-bottom: 0; }
+
+/* ------------------------------------------------------------------ notes */
+.note { margin-top: 18px; padding: 14px 16px; border-radius: 10px; background: var(--yellow-wash); border: 1px solid color-mix(in srgb, var(--yellow) 55%, transparent); font-size: 14.5px; color: var(--ink); }
+.note b { color: var(--yellow-text); }
+.kv { margin-top: 16px; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 18px; font-size: 14.5px; }
+.kv dt { font-family: var(--mono); font-size: 12.5px; color: var(--ink); padding-top: 2px; }
+.kv dd { margin: 0; color: var(--ink-soft); }
+@media (max-width: 560px) { .kv { grid-template-columns: 1fr; gap: 2px; } .kv dd { margin-bottom: 10px; } }
+
+details.cmd { border-top: 1px solid var(--rule); padding: 4px 0; }
+details.cmd:last-of-type { border-bottom: 1px solid var(--rule); }
+details.cmd summary { cursor: pointer; list-style: none; padding: 12px 0; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+details.cmd summary::-webkit-details-marker { display: none; }
+details.cmd summary::before { content: "+"; font-family: var(--mono); color: var(--blue-text); width: 12px; font-weight: 600; }
+details.cmd[open] summary::before { content: "\2212"; }
+details.cmd summary code { font-size: 14px; background: transparent; border: 0; padding: 0; font-weight: 600; }
+details.cmd summary span { color: var(--muted); font-size: 14px; }
+details.cmd .body { padding: 0 0 16px 24px; display: grid; gap: 10px; }
+details.cmd .body ol, details.cmd .body ul { margin: 0; padding-left: 20px; display: grid; gap: 5px; font-size: 14.5px; color: var(--ink-soft); }
+
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+@media (max-width: 720px) { .two { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border-radius: 12px; padding: 16px 18px; display: grid; gap: 8px; align-content: start; }
+.panel h4 { margin: 0; font-size: 15px; }
+.panel ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 14.5px; color: var(--ink-soft); }
+
+footer { margin-top: 72px; padding-top: 20px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail" aria-label="Contents">
+    <div class="mark"><i></i>next<b>ship</b></div>
+    <nav>
+      <div class="group">Overview</div>
+      <a href="#summary">In one minute</a>
+      <a href="#compare">Before and after</a>
+      <a href="#features">Every new feature</a>
+      <div class="group">How it works</div>
+      <a href="#architecture">The moving parts</a>
+      <a href="#codebase">What changed in code</a>
+      <a href="#setup">Setting up a server</a>
+      <a href="#build">Building the image</a>
+      <a href="#release">Releasing it</a>
+      <a href="#commands">Every other command</a>
+      <a href="#healing">When things break</a>
+      <div class="group">Trust</div>
+      <a href="#safety">Safety guarantees</a>
+      <a href="#layout">What sits on the server</a>
+      <a href="#proof">Verified, and not yet</a>
+    </nav>
+  </aside>
+
+  <main>
+    <header class="hero" id="summary">
+      <div class="eyebrow">Branch feat/vm-target &middot; for Gowtham</div>
+      <h1>nextship now deploys to <span>any Linux server</span>, not just App Platform</h1>
+      <p class="lede">Version 1.0.2 could take a Next.js app to one place: DigitalOcean App Platform. This branch adds a second target, any Ubuntu or Debian machine reachable over SSH, and gives it the full lifecycle: setup, zero-downtime deploys behind Caddy with HTTPS, rollback, env, domains, logs with history, images, destroy, status, reboot and moving between servers. Every DigitalOcean behaviour stays as it was.</p>
+      <div class="byline"><span>6 commits on feat/vm-target</span><span>not pushed, not released</span><span>credited to Ragul D</span></div>
+
+      <div class="split">
+        <div>
+          <h2>Before: 1.0.2</h2>
+          <p class="big">One platform, one app per App Platform app.</p>
+          <ul>
+            <li>Needs a DigitalOcean API token</li>
+            <li>ISR cache and optimized images lost on every restart</li>
+            <li>The CDN can keep serving a page after <code>revalidatePath</code></li>
+            <li>Logs of a replaced deployment are gone</li>
+            <li>The Server Actions key lives on one laptop</li>
+          </ul>
+        </div>
+        <div>
+          <h2>After: this branch</h2>
+          <p class="big">Any VPS or cloud VM, many apps per server.</p>
+          <ul>
+            <li>Needs only an SSH key, no cloud token</li>
+            <li>ISR pages and optimized images survive restarts</li>
+            <li>No CDN in the way, so revalidation reaches visitors</li>
+            <li><code>logs --deployment</code> reads replaced deployments</li>
+            <li>The key lives on the server, shared by laptop and CI</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="figures">
+        <div class="figure"><b>2 <small>targets</small></b><span>was 1</span></div>
+        <div class="figure"><b>21 <small>commands</small></b><span>was 17</span></div>
+        <div class="figure"><b>286 <small>tests</small></b><span>was 191</span></div>
+        <div class="figure"><b>~10.1k <small>lines</small></b><span>CLI source, was ~5.9k</span></div>
+      </div>
+    </header>
+
+    <section id="compare">
+      <h2>Before and after, side by side</h2>
+      <p class="lede">The same questions, answered for App Platform (which still works exactly as before) and for the new server target.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Question</th><th>1.0.2, App Platform only</th><th>Now, on your own server</th></tr></thead>
+          <tbody>
+            <tr><td>Where can the app run?</td><td class="was">DigitalOcean App Platform</td><td>Hetzner, Hostinger, Droplets, EC2, Compute Engine, Azure VMs, your own hardware</td></tr>
+            <tr><td>What does it need?</td><td class="was"><code>DIGITALOCEAN_TOKEN</code></td><td>An SSH key, and root or passwordless sudo once for setup</td></tr>
+            <tr><td>Where is the image built?</td><td class="was">Your machine, then pushed to a registry</td><td>On the server's Docker by default, or here with <code>--build local</code></td></tr>
+            <tr><td>How does it reach the target?</td><td class="was"><code>docker push</code> to DOCR</td><td>Nothing to push (remote), or <code>docker save | ssh docker load</code></td></tr>
+            <tr><td>Who handles traffic and TLS?</td><td class="was">App Platform's router and Cloudflare edge</td><td>Caddy on the server, certificates from Let's Encrypt</td></tr>
+            <tr><td>How is downtime avoided?</td><td class="was">App Platform's rolling update</td><td>New container must be healthy before Caddy switches, then the old one stops</td></tr>
+            <tr><td>What does rollback restore?</td><td class="was">The old spec, env included</td><td>The old image, with the current env file</td></tr>
+            <tr><td>ISR cache after restart</td><td class="was">Cold</td><td>Kept in Docker volumes</td></tr>
+            <tr><td>Logs of a replaced deployment</td><td class="was">Gone</td><td>In the server journal, up to 500M</td></tr>
+            <tr><td>Server Actions key</td><td class="was"><code>.nextship/secrets.local.json</code>, per machine</td><td>On the server, one key for every machine</td></tr>
+            <tr><td>Apps per unit you pay for</td><td class="was">One</td><td>Many, each with its own domains and memory share</td></tr>
+            <tr><td>Failover and OS</td><td class="was">Managed by DigitalOcean</td><td>One server; OS, backups and disk are yours</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="features">
+      <h2>Every new feature</h2>
+      <p class="lede">Grouped by what a user is trying to do. Everything marked new exists only for the server target unless it says otherwise.</p>
+      <div class="features">
+        <div class="feature"><h4><code>server add</code> <span class="chip new">new</span></h4><p>Turns a fresh Ubuntu 22.04, 24.04 or Debian 12 box into a deploy target in about a minute. Pins its SSH host key.</p></div>
+        <div class="feature"><h4>Remote and local builds <span class="chip new">new</span></h4><p><code>--build remote</code> uses the server's Docker through an SSH tunnel; <code>--build local</code> builds here and streams the image.</p></div>
+        <div class="feature"><h4>Zero-downtime deploys <span class="chip new">new</span></h4><p>Health-gated switch through Caddy. A failed deploy leaves the old version serving and prints the new container's last 50 log lines.</p></div>
+        <div class="feature"><h4>Automatic HTTPS <span class="chip new">new</span></h4><p><code>domain add</code> writes a Caddy site; Caddy gets the certificate once DNS points at the server. A DNS pre-check warns first.</p></div>
+        <div class="feature"><h4>Rollback on a server <span class="chip new">new</span></h4><p>Starts an earlier image through the same health-gated sequence.</p></div>
+        <div class="feature"><h4>Env without downtime <span class="chip new">new</span></h4><p><code>env push</code> and <code>env rm</code> rewrite a 0600 file on the server and restart the live image with no dropped request.</p></div>
+        <div class="feature"><h4><code>logs --deployment</code> <span class="chip new">new</span></h4><p>Reads a replaced deployment's output from the journal, by deployment id or image tag.</p></div>
+        <div class="feature"><h4>Cache that survives restarts <span class="chip new">new</span></h4><p>Regenerated ISR pages in a per-image volume, optimized images and fetch cache in a per-app volume.</p></div>
+        <div class="feature"><h4>Server-held Server Actions key <span class="chip new">new</span></h4><p>Laptop and CI build with the same key. Disagreement is refused, never silently resolved.</p></div>
+        <div class="feature"><h4>Images and auto-prune <span class="chip new">new</span></h4><p>Keeps the newest 5 served deployments after every deploy; <code>--gc</code> trims build cache to 5 GB.</p></div>
+        <div class="feature"><h4>Many apps per server <span class="chip new">new</span></h4><p>Each gets its own domains, memory share and state directory. <code>destroy</code> removes one and leaves the rest.</p></div>
+        <div class="feature"><h4><code>server status</code> <span class="chip new">new</span></h4><p>Server health plus every app, with warnings for low disk, stray published ports, outdated setup and unhealthy apps.</p></div>
+        <div class="feature"><h4><code>server reboot</code> <span class="chip new">new</span></h4><p>Reboots and waits until every app that was running is healthy again, up to 10 minutes.</p></div>
+        <div class="feature"><h4><code>server move</code> <span class="chip new">new</span></h4><p>Moves the app, env, key and domains to another server; <code>nextship.json</code> switches only once it serves there.</p></div>
+        <div class="feature"><h4>Self-healing <span class="chip new">new</span></h4><p>Docker restarts crashed apps; a watchdog timer restarts apps that hang with failing health checks.</p></div>
+        <div class="feature"><h4>Disk and memory guards <span class="chip new">new</span></h4><p>Deploy refuses under 3 GB free; remote builds refuse under 2 GB RAM; containers get a fair memory limit.</p></div>
+        <div class="feature"><h4><code>doctor</code> knows the target <span class="chip same">both targets</span></h4><p>DigitalOcean-only advice stays DigitalOcean-only; server projects get single-server and <code>request.url</code> warnings.</p></div>
+        <div class="feature"><h4>End-to-end conformance <span class="chip new">new</span></h4><p><code>conformance/vm/e2e.sh</code> runs the whole lifecycle against a real SSH server, and a <code>vm</code> CI job runs it.</p></div>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <h2>The moving parts</h2>
+      <p class="lede">Your machine runs the CLI and nothing else long-lived. Everything it does to the server goes through one SSH connection with a pinned host key.</p>
+      <div class="arch">
+        <div class="zone">
+          <h4>Your machine or CI</h4>
+          <div class="box hot"><b>nextship CLI</b><span>plans, decides, orchestrates</span></div>
+          <div class="box"><b>Your ssh + agent</b><span>nextship never reads a private key</span></div>
+          <div class="box"><b>Project</b><span>source, env files, <code>nextship.json</code> with the pinned key</span></div>
+          <div class="box"><b>Local Docker</b><span>only for <code>--build local</code></span></div>
+        </div>
+        <div class="wire"><div class="line"></div><p>ssh as nextship<br>strict host key<br>batch mode</p></div>
+        <div class="zone server">
+          <h4>Your server</h4>
+          <div class="boxes2">
+            <div class="box hot"><b>Caddy</b><span>ports 80 and 443, HTTPS, the only way in</span></div>
+            <div class="box"><b>Docker daemon</b><span>builds, runs, stores images</span></div>
+          </div>
+          <div class="boxes2">
+            <div class="box"><b>app-r20260915-&hellip;</b><span>live container, no published port</span></div>
+            <div class="box"><b>app-r20260914-&hellip;</b><span>previous one, stopped</span></div>
+          </div>
+          <div class="boxes2">
+            <div class="box"><b>/etc/nextship</b><span>app record, history, env, key, sites</span></div>
+            <div class="box"><b>Volumes</b><span>ISR pages per image, image cache per app</span></div>
+          </div>
+          <div class="box"><b>journald + watchdog timer</b><span>log history, restarts hung containers</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="codebase">
+      <h2>What changed in the code</h2>
+      <div class="prose stack">
+        <p>In 1.0.2 there was already a <code>Target</code> interface, but commands still carried DigitalOcean knowledge: <code>deploy</code> printed App Platform plan lines and pushed to a registry, <code>logs</code> opened App Platform's websocket, <code>images</code> and <code>destroy</code> warned about registry garbage collection, <code>env push</code> said values go to "your DigitalOcean account". A second target would have meant editing every command.</p>
+        <p>Phase 0 moved all of that behind the interface. Commands now ask the driver for its plan lines, build platform, Docker daemon, image delivery, log stream, storage wording, destroy plan and Server Actions key. Against a stubbed API, <code>main</code> and the branch print byte-identical output for 20 DigitalOcean commands, which is how "nothing changed for DigitalOcean" was checked rather than assumed.</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>File</th><th>Its one job</th></tr></thead>
+          <tbody>
+            <tr><td><code>targets/target.ts</code></td><td>The interface, now expressed as intent every command needs, with no platform wording</td></tr>
+            <tr><td><code>targets/vm/vm-target.ts</code></td><td>The server driver: orchestrates release, rollback, env, domains, images, logs, destroy, status, reboot, move</td></tr>
+            <tr><td><code>targets/vm/ssh.ts</code></td><td>Every byte sent to a server: pinned-key options, quoting, validators, error mapping</td></tr>
+            <tr><td><code>targets/vm/host-key.ts</code></td><td>Scans, picks and fingerprints host keys exactly as <code>ssh-keygen -lf</code> prints them</td></tr>
+            <tr><td><code>targets/vm/caddy.ts</code></td><td>Renders an app's Caddy site from its recorded domains</td></tr>
+            <tr><td><code>targets/vm/deployments.ts</code></td><td>Deployment history transitions: started, live, failed, which images to keep</td></tr>
+            <tr><td><code>targets/vm/lock.ts</code></td><td>One change per app at a time, and when a lock looks abandoned</td></tr>
+            <tr><td><code>targets/vm/actions-key.ts</code></td><td>The Server Actions key decision table</td></tr>
+            <tr><td><code>targets/vm/env-file.ts</code></td><td>Docker's env-file format, refusing values it cannot hold</td></tr>
+            <tr><td><code>server.ts</code></td><td><code>server add</code>, <code>status</code>, <code>reboot</code>, <code>move</code></td></tr>
+            <tr><td><code>runtime/vm/setup.sh</code></td><td>15 check-then-apply steps, sent to the server over SSH and run as root</td></tr>
+            <tr><td><code>runtime/vm/watchdog.sh</code></td><td>Restarts nextship containers unhealthy for 3 checks in a row</td></tr>
+            <tr><td><code>config.ts</code></td><td><code>nextship.json</code> version 2 with <code>server</code> and <code>build</code>; DigitalOcean files stay version 1</td></tr>
+            <tr><td><code>conformance/vm/e2e.sh</code></td><td>The whole lifecycle against a real server, for CI and by hand</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="setup">
+      <h2>Setting up a server</h2>
+      <p class="lede"><code>nextship server add root@203.0.113.10</code> prints a plan and changes nothing. The same command with <code>--yes</code> applies it. Order matters here: it is designed so the user cannot be locked out.</p>
+
+      <div class="term"><span class="p">&gt;</span> <span class="c">Checking 203.0.113.10</span>
+<span class="p">&gt;</span> <span class="c">Plan for 203.0.113.10</span>
+<span class="d">  server        root@203.0.113.10:22</span>
+<span class="d">  host key      ssh-ed25519 SHA256:YrbhoPLtpPr48BI8g70C+hbCmMMSZBOCv009n/FJyiY, trusted from now on if you continue</span>
+<span class="d">  os            ok     ubuntu 24.04</span>
+<span class="d">  arch          ok     arm64</span>
+<span class="d">  resources     ok     7836 MiB RAM, 1023 MiB swap, 827 GB free</span>
+<span class="d">  ports         ok     80 and 443 are free for Caddy</span>
+<span class="d">  docker        CHANGE install Docker CE from Docker's apt repository</span>
+<span class="d">  user          CHANGE create the nextship user in the docker and systemd-journal groups</span>
+<span class="d">  ...</span>
+<span class="d">  ssh-hardening CHANGE turn off password logins and allow root by key only</span>
+<span class="w">!</span> Membership of the docker group is root-equivalent: whoever can log in as nextship controls this server.
+<span class="w">!</span> Compare SHA256:YrbhoPL&hellip; with the host key your provider shows for this server before you continue.
+<span class="v">v</span> This was a plan only. Nothing was changed.</div>
+
+      <h3>Before anything changes</h3>
+      <ol class="steps">
+        <li><div><h4>Parse and validate the address</h4><p><code>user@host[:port]</code>, IPv6 in brackets. A host starting with a hyphen, a space or anything shell-like is refused.</p></div></li>
+        <li><div><h4>Scan and fingerprint the host key</h4><p><code>ssh-keyscan</code>, strongest key first (ed25519, then ECDSA, then RSA). The SHA256 fingerprint is printed so it can be compared with the provider's console. If <code>nextship.json</code> already pins a different key for this server, it stops.</p></div></li>
+        <li><div><h4>Connect and check sudo</h4><p>Through the user's own <code>ssh</code>, batch mode, no passwords, strict checking against the scanned key. Refuses if the user lacks passwordless sudo.</p></div></li>
+        <li><div><h4>Run the setup plan as root</h4><p><code>setup.sh</code> travels over stdin and runs <code>plan</code>: every step checks and reports <code>ok</code>, <code>CHANGE</code>, <code>skip</code> or <code>REFUSE</code>. Nothing is copied onto the server.</p></div></li>
+      </ol>
+
+      <h3>With --yes, in this order</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Step</th><th>What it does</th><th>Opt out</th></tr></thead>
+          <tbody>
+            <tr><td><code>os</code></td><td>Refuses anything but Ubuntu 22.04, 24.04 or Debian 12</td><td></td></tr>
+            <tr><td><code>arch</code></td><td>Records amd64 or arm64 so images are built for the right CPU</td><td></td></tr>
+            <tr><td><code>resources</code></td><td>Refuses under about 1 GB RAM or 5 GB free disk</td><td></td></tr>
+            <tr><td><code>ports</code></td><td>Refuses if another process holds 80 or 443, and names it</td><td></td></tr>
+            <tr><td><code>docker</code></td><td>Installs Docker CE from Docker's repository; refuses an existing Docker older than 23 rather than replace it</td><td></td></tr>
+            <tr><td><code>user</code></td><td>Creates <code>nextship</code> in the docker and journal groups, copies the admin's authorized keys, allows only <code>systemctl reboot</code> through sudo</td><td></td></tr>
+            <tr><td><strong>login check</strong></td><td><strong>Logs in as <code>nextship</code> from your machine and reaches Docker. Nothing continues unless this works.</strong></td><td></td></tr>
+            <tr><td><code>dirs</code></td><td><code>/etc/nextship</code>, owned by nextship, mode 0700</td><td></td></tr>
+            <tr><td><code>network</code></td><td>Docker network <code>nextship</code> for Caddy and apps</td><td></td></tr>
+            <tr><td><code>caddy</code></td><td><code>caddy:2.10</code> on 80, 443 and 443/udp, certificates in named volumes</td><td></td></tr>
+            <tr><td><code>journald</code></td><td>Caps the journal at 500M, only if no limit exists</td><td></td></tr>
+            <tr><td><code>swap</code></td><td>2 GB swap file when RAM is under 4 GB</td><td><code>--no-swap</code></td></tr>
+            <tr><td><code>updates</code></td><td>Unattended security updates</td><td><code>--no-auto-updates</code></td></tr>
+            <tr><td><code>firewall</code></td><td>ufw: allows SSH first, then 80 and 443, then enables</td><td><code>--no-firewall</code></td></tr>
+            <tr><td><code>watchdog</code></td><td>systemd timer every minute</td><td></td></tr>
+            <tr><td><code>ssh-hardening</code></td><td>Last: no password logins, root by key only, validated with <code>sshd -t</code></td><td><code>--no-ssh-hardening</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="prose" style="margin-top:16px;color:var(--ink-soft)">Afterwards the plan runs again and every step must report <code>ok</code>. Then <code>nextship.json</code> records <code>target: "vm"</code> and the server with <code>user: "nextship"</code>, its pinned key line and its architecture. A second <code>server add</code> changes nothing; running it from another project just records the same server.</p>
+    </section>
+
+    <section id="build">
+      <h2>From source to image</h2>
+      <p class="lede">The build pipeline is the part both targets share. What the VM target changes is where it runs, which CPU it builds for, and where the Server Actions key comes from.</p>
+
+      <div class="term"><span class="p">&gt;</span> <span class="c">Plan</span>
+<span class="d">  target        your server 203.0.113.10, arm64, Docker 29.8.0</span>
+<span class="d">  build         on the server's Docker 29.8.0, for linux/arm64, over SSH</span>
+<span class="d">  image         kept on the server as acme-web:&lt;deployment id&gt;</span>
+<span class="d">  app           UPDATE "acme-web" (354832e1-&hellip;), which nextship created</span>
+<span class="d">  memory        up to 6268m of 7836 MiB</span>
+<span class="d">  address       http://203.0.113.10</span>
+<span class="d">  switch        Caddy moves traffic only once the new container is healthy; until then the current one serves</span>
+<span class="d">  untouched     1 existing app(s) on this server</span></div>
+
+      <ol class="steps">
+        <li><div><h4>Read the plan <span class="where">deploy.ts, vm-target.ts</span></h4><p>One SSH round trip reads RAM, free disk, Docker version and the default app. Refuses under 3 GB free, refuses a remote build under 2 GB RAM, refuses an app name that exists on the server but was not created by this project. Nothing past this point runs without <code>--yes</code>.</p></div></li>
+        <li><div><h4>Detect the project <span class="where">detect.ts</span> <span class="chip same">unchanged</span></h4><p>Finds the project and workspace roots, the installed Next.js version, package manager, lockfile, build command, Node major and env files, all from disk.</p></div></li>
+        <li><div><h4>Resolve the Server Actions key <span class="where">actions-key.ts</span> <span class="chip new">new</span></h4>
+          <p>A decision table, so a key is never rotated silently:</p>
+          <ul>
+            <li><code>NEXT_SERVER_ACTIONS_ENCRYPTION_KEY</code> set: use it, warn if the server's differs</li>
+            <li>Server has one, no local file: use the server's</li>
+            <li>Local file only: upload it to the server</li>
+            <li>Both exist and differ: refuse</li>
+            <li>Neither: generate once, store only on the server</li>
+          </ul>
+          <p>It travels over SSH stdin into a 0600 file, never on a command line.</p></div></li>
+        <li><div><h4>Choose where to build <span class="where">vm-target.ts builder()</span> <span class="chip new">new</span></h4>
+          <p><b>Remote (default):</b> opens <code>ssh -L local.sock:/var/run/docker.sock</code> with the same pinned key and sets <code>DOCKER_HOST</code> to it. Docker on your machine becomes a client of the server's daemon, so the build runs natively on the server's CPU and only the build context leaves your machine. Plain <code>DOCKER_HOST=ssh://</code> was avoided because it bypasses the pinned key.</p>
+          <p><b>Local:</b> the local daemon builds with <code>--platform linux/&lt;server arch&gt;</code>.</p></div></li>
+        <li><div><h4>Prepare the context and identity <span class="where">prepare.ts, identity.ts</span> <span class="chip same">unchanged</span></h4><p>Writes a generated <code>.nextship/Dockerfile</code> and ignore file, copies the adapter and prune script in, and computes the deployment id: <code>dpl-&lt;commit&gt;-&lt;digest&gt;</code> over the Dockerfile, helpers, key and env files, so two different images never share a tag.</p></div></li>
+        <li><div><h4>Builder stage <span class="where">docker build --target manifest</span> <span class="chip same">unchanged</span></h4>
+          <ul>
+            <li>Copies manifests before sources so edits do not re-run the install; package store and Next.js cache are BuildKit cache mounts</li>
+            <li>Runs the project's own build with the adapter injected via <code>NEXT_ADAPTER_PATH</code>; <code>next.config.js</code> is never touched</li>
+            <li>Env files, the key, <code>.npmrc</code> are secret mounts that never enter a layer</li>
+            <li>Prunes to <code>/out</code> from Next.js's trace files and writes <code>server.cjs</code>, replacing standalone output</li>
+            <li>Exports <code>manifest.json</code>; a build whose manifest lacks the deployment id fails</li>
+          </ul>
+          <p>On a server, the Next.js build cache is now named by app and server, so a laptop and CI share one warm cache there.</p></div></li>
+        <li><div><h4>Runtime stage <span class="where">docker build --target runtime</span> <span class="chip same">unchanged</span></h4><p><code>node:&lt;major&gt;-slim</code>, tini as PID 1, jemalloc for sharp, npm removed, non-root user, a <code>HEALTHCHECK</code>, <code>node server.cjs</code>. Served mostly from the builder stage's cache.</p></div></li>
+        <li><div><h4>Deliver the image <span class="where">vm-target.ts deliverImage()</span> <span class="chip new">new</span></h4><p>Remote: already on the server, tagged <code>&lt;app&gt;:&lt;deployment id&gt;</code>. Local: <code>docker save | ssh docker load</code> through a pipeline that checks both exit codes, so a transfer that died half way cannot pass as a load. App Platform still pushes to its registry here.</p></div></li>
+      </ol>
+    </section>
+
+    <section id="release">
+      <h2>Releasing without dropping a request</h2>
+      <p class="lede">This is the heart of the VM target. The right column shows what a visitor gets at each moment: nothing they see changes until the new container has proved itself.</p>
+      <div class="release" role="table" aria-label="Release sequence">
+        <div class="head" role="columnheader">Step on the server</div><div class="head" role="columnheader">Visitors get</div>
+        <div class="act"><span class="n">1</span><div><h4>Lock</h4><p><code>mkdir /etc/nextship/apps/&lt;app&gt;/lock</code>, atomic, with an owner file. A second deploy is refused; a lock older than 30 minutes is reported, never broken automatically.</p></div></div><div class="vis old">old</div>
+        <div class="act"><span class="n">2</span><div><h4>Verify ownership</h4><p>Creates <code>app.json</code> with a new id on first deploy, otherwise checks its id matches <code>nextship.json</code>. A different id is refused.</p></div></div><div class="vis old">old</div>
+        <div class="act"><span class="n">3</span><div><h4>Start the new container</h4><p><code>docker run &lt;app&gt;-r&lt;time&gt;-&lt;rand&gt;</code> on the <code>nextship</code> network with no published port, the env file, a memory limit, journald logging, nextship labels, both cache volumes and a health check on the adapter's cheap path. Recorded as started.</p></div></div><div class="vis old">old</div>
+        <div class="act"><span class="n">4</span><div><h4>Wait for healthy</h4><p>Polls <code>docker inspect</code> every 2 seconds for up to 5 minutes. Exited, restarting or unhealthy means failure.</p></div></div><div class="vis old">old</div>
+        <div class="fail"><b>If step 4 fails:</b> print the last 50 log lines, remove the new container, record the deployment as failed, release the lock. The old container never stopped serving.</div>
+        <div class="act"><span class="n">5</span><div><h4>Switch Caddy</h4><p>Render the site, validate it against every other app's site with <code>caddy validate</code>, move it into place, <code>caddy reload</code>. A failed reload restores the previous file and reloads again.</p></div></div><div class="vis new">new</div>
+        <div class="act"><span class="n">6</span><div><h4>Stop the previous container</h4><p><code>docker stop -t 30</code>, so in-flight requests and <code>after()</code> callbacks finish. Then confirm the new container is still running.</p></div></div><div class="vis new">new</div>
+        <div class="act"><span class="n">7</span><div><h4>Record and tidy</h4><p>Mark the deployment live, prune images beyond the newest 5 served deployments, keep one stopped container, release the lock.</p></div></div><div class="vis new">new</div>
+      </div>
+
+      <div class="term"><span class="p">&gt;</span> <span class="c">Waiting for the deployment to go live</span>
+<span class="d">  running, starting</span>
+<span class="d">  running, healthy</span>
+<span class="d">  Caddy now sends traffic to the new container</span>
+<span class="d">  stopped acme-web-r20260914-192215-54408f</span>
+<span class="v">v</span> Deployed: http://203.0.113.10</div>
+
+      <h3>The Caddy site it writes</h3>
+      <div class="term"><span class="d"># Written by nextship for acme-web. Regenerated on every deployment.</span>
+<span class="c">http://:80 {</span>                              <span class="d"># only the server's first app</span>
+  reverse_proxy acme-web-r20260915-100000-abcdef:3000 {
+    flush_interval -1                     <span class="d"># stream every chunk, keeps Suspense and PPR real</span>
+    lb_try_duration 5s                    <span class="d"># covers the instant of the switch</span>
+  }
+<span class="c">}</span>
+<span class="c">app.example.com, www.example.com {</span>
+  tls {
+    protocols tls1.2
+  }
+  reverse_proxy acme-web-r20260915-100000-abcdef:3000 { &hellip; }
+<span class="c">}</span></div>
+
+      <h3>Why the cache survives</h3>
+      <div class="prose stack">
+        <p>Measured with <code>docker diff</code>: ISR rewrites files under <code>.next/server/app</code>, the image optimizer writes <code>.next/cache/images</code>. Two named volumes hold them:</p>
+      </div>
+      <dl class="kv">
+        <dt>nextship-&lt;app&gt;-build-&lt;image&gt;</dt><dd>Mounted over <code>.next</code>. Regenerated pages belong to one build, so a restart, env change or rollback to that image keeps them, but a new build never serves an old build's pages. Removed with its image.</dd>
+        <dt>nextship-&lt;app&gt;-cache</dt><dd>Mounted over <code>.next/cache</code>. Optimized images and the fetch cache, shared across deployments the way Next.js shares <code>.next/cache</code> between builds.</dd>
+      </dl>
+    </section>
+
+    <section id="commands">
+      <h2>Every other command, step by step</h2>
+      <p class="lede">Same flags and plans as on App Platform, with a different mechanism underneath. Open any one.</p>
+
+      <details class="cmd"><summary><code>nextship rollback</code><span>return to an earlier image</span></summary><div class="body">
+        <ol>
+          <li>Reads <code>deployments.json</code> and offers deployments that served before.</li>
+          <li>The plan says the current env file is used, not the one that deployment first had.</li>
+          <li>Checks the image still exists on the server; a pruned one is refused with how to rebuild it.</li>
+          <li>Runs release steps 1 to 7 with that image, recorded as <code>rollback to &lt;id&gt;</code>.</li>
+        </ol></div></details>
+
+      <details class="cmd"><summary><code>nextship env push</code> / <code>env rm</code><span>change runtime variables</span></summary><div class="body">
+        <ol>
+          <li>Reads the project's env files through Next.js's own loader, as before.</li>
+          <li>Plans add or update per key, and says values are readable by the server's root and nextship users.</li>
+          <li>Refuses a value with a line break, which Docker's env file cannot hold.</li>
+          <li>Under the lock, rewrites <code>/etc/nextship/apps/&lt;app&gt;/env</code> from stdin with mode 0600.</li>
+          <li>Runs the release sequence with the same live image, so the new env takes effect with no downtime. Measured: 40 of 40 requests answered 200 during the switch.</li>
+        </ol></div></details>
+
+      <details class="cmd"><summary><code>nextship domain add</code> / <code>domain rm</code><span>attach a hostname with HTTPS</span></summary><div class="body">
+        <ol>
+          <li>Validates the domain and resolves it; warns if it does not point at the server yet.</li>
+          <li>Under the lock, computes the domain list (the first domain is always primary).</li>
+          <li>Renders and validates the Caddy site, reloads Caddy, and only then records the domain in <code>app.json</code>, so a domain Caddy refused is never recorded.</li>
+          <li>Prints the <code>A</code> record, plus an <code>AAAA</code> note when the server has IPv6.</li>
+          <li>Caddy requests the certificate once DNS resolves. <code>nextship domain</code> reports it live only when a real TLS handshake presents a valid certificate.</li>
+        </ol></div></details>
+
+      <details class="cmd"><summary><code>nextship logs</code><span>live output and history</span></summary><div class="body">
+        <ul>
+          <li><code>logs</code>: <code>docker logs --tail 500</code> of the live container.</li>
+          <li><code>logs --follow</code>: streams <code>docker logs -f</code> over SSH; Ctrl+C stops it cleanly.</li>
+          <li><code>logs --deployment &lt;id or tag&gt;</code>: <code>journalctl CONTAINER_NAME=&lt;container&gt;</code>, so a replaced deployment's output is still there until the 500M journal rotates it out.</li>
+        </ul></div></details>
+
+      <details class="cmd"><summary><code>nextship images</code> / <code>images prune</code><span>what is stored on the server</span></summary><div class="body">
+        <ul>
+          <li><code>images</code> lists this app's images: deployed now, or kept for rollback.</li>
+          <li><code>images prune --keep N</code> removes older images with their stopped containers and build volumes. The live image is never removed.</li>
+          <li>After every successful deploy, images beyond the newest 5 served deployments are pruned automatically.</li>
+          <li><code>--gc</code> trims Docker's build cache to 5 GB.</li>
+        </ul></div></details>
+
+      <details class="cmd"><summary><code>nextship destroy &lt;app&gt;</code><span>remove one app and nothing else</span></summary><div class="body">
+        <ol>
+          <li>Needs the app name and <code>--yes</code>, as before.</li>
+          <li>The plan lists what goes and what stays: the server, Caddy, every other app and DNS.</li>
+          <li>Under the lock: removes containers labelled with this app, removes its site (validated and reloaded), releases the default address if it held it, removes its volumes and <code>/etc/nextship/apps/&lt;app&gt;</code>.</li>
+          <li>With <code>--images</code>, removes its images too. Clears <code>appId</code> from <code>nextship.json</code>.</li>
+        </ol></div></details>
+
+      <details class="cmd"><summary><code>nextship server status</code><span>health of the server and every app</span></summary><div class="body">
+        <ul>
+          <li>Server: OS, uptime, reboot required, load, memory, disk, Docker and Caddy versions, setup version.</li>
+          <li>Per app: live deployment, health, restart count, memory use, domains and certificate state.</li>
+          <li>Warns on under 3 GB free, ports published around Caddy, outdated setup, pending reboot, unhealthy app.</li>
+        </ul></div></details>
+
+      <details class="cmd"><summary><code>nextship server reboot</code><span>prove every app comes back</span></summary><div class="body">
+        <ol>
+          <li>Records a boot marker (kernel boot id and PID 1's start time) and the running containers.</li>
+          <li>Runs <code>sudo systemctl reboot</code>, the only command <code>nextship</code> may run through sudo.</li>
+          <li>Polls SSH every 5 seconds until the boot marker changes.</li>
+          <li>Waits until every container that was running is healthy, up to 10 minutes in total.</li>
+        </ol></div></details>
+
+      <details class="cmd"><summary><code>nextship server move user@newhost</code><span>relocate an app</span></summary><div class="body">
+        <ol>
+          <li>Reads from the old server into memory only: app record and domains, env file, key, live deployment.</li>
+          <li>Runs the full <code>server add</code> flow on the new host.</li>
+          <li>Writes the record, env and key to the new server, never to local disk.</li>
+          <li>Streams the exact live image: <code>ssh old docker save | ssh new docker load</code>, no rebuild.</li>
+          <li>Runs the release sequence there and waits for healthy.</li>
+          <li>Only then updates <code>nextship.json</code>; a failure earlier leaves the project pointed at the old server.</li>
+          <li>Prints the DNS records to change. The old server is only read and keeps serving until destroyed there.</li>
+        </ol></div></details>
+    </section>
+
+    <section id="healing">
+      <h2>When things break</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Failure</th><th>What recovers it</th><th>Seen on the test server</th></tr></thead>
+          <tbody>
+            <tr><td>Build crashes on start</td><td>Health gate refuses it; old deployment keeps serving</td><td>158 of 158 requests 200 during the failed deploy</td></tr>
+            <tr><td>App process is killed</td><td>Docker <code>--restart unless-stopped</code></td><td>Back and healthy within seconds</td></tr>
+            <tr><td>App hangs, health failing</td><td>Watchdog restarts after 3 consecutive unhealthy minutes</td><td>Unhealthy after 90 s, restarted 3 minutes later</td></tr>
+            <tr><td>Server reboots</td><td>Docker at boot, restart policies, Caddy, watchdog timer</td><td>App healthy again (container restart, not a real kernel)</td></tr>
+            <tr><td>Deploy killed half way</td><td>Lock reported with owner after 30 minutes; removed by a person</td><td>Unit tested</td></tr>
+            <tr><td>Caddy rejects a site</td><td>Previous site restored and reloaded</td><td>Validation tested live; reload failure path not forced</td></tr>
+            <tr><td>Server lost entirely</td><td><code>server add</code> a new one, restore saved env and key, deploy</td><td>Documented in <code>docs/vm.md</code>, not rehearsed</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="safety">
+      <h2>Safety guarantees</h2>
+      <p class="lede">The same stance as App Platform, extended to a machine nextship has root on.</p>
+      <div class="two">
+        <div class="panel"><h4>Nothing surprising</h4><ul>
+          <li>Nothing changes without <code>--yes</code>; a plan always prints first</li>
+          <li>Only the app whose id matches <code>nextship.json</code> is touched</li>
+          <li>Only containers labelled <code>sh.nextship.managed</code> and <code>sh.nextship.app=&lt;name&gt;</code> are stopped or removed</li>
+          <li>The Docker daemon's config, other workloads and DNS are never modified</li>
+          <li>A failed deployment leaves the previous one serving</li>
+        </ul></div>
+        <div class="panel"><h4>Nothing exposed</h4><ul>
+          <li>Host key pinned; a changed key is a hard error, never a prompt</li>
+          <li>Your own <code>ssh</code>, batch mode, no passwords; nextship never reads a private key</li>
+          <li>No shell interprets anything on your machine; remote values are validated or single-quoted, tested with hostile input</li>
+          <li>Secrets travel only on stdin into 0600 files, never on a command line or in a layer</li>
+          <li>Setup cannot lock you out: login proven before hardening</li>
+        </ul></div>
+      </div>
+      <div class="note"><b>Worth saying out loud:</b> the <code>nextship</code> user is in the docker group, which is root-equivalent. Anyone holding its keys controls the server. The plan warns about this, and the docs say it plainly.</div>
+    </section>
+
+    <section id="layout">
+      <h2>What sits on the server</h2>
+      <div class="term"><span class="c">/etc/nextship/</span>                         <span class="d">owned by nextship, 0700</span>
+  server.json                           <span class="d">setup version that last ran</span>
+  default-app                           <span class="d">app answering http://&lt;server&gt;</span>
+  caddy/Caddyfile                       <span class="d">imports sites/*.caddy</span>
+  caddy/sites/&lt;app&gt;.caddy               <span class="d">generated per app</span>
+  apps/&lt;app&gt;/app.json                   <span class="d">id, name, domains: the ownership record</span>
+  apps/&lt;app&gt;/deployments.json           <span class="d">history for rollback</span>
+  apps/&lt;app&gt;/env                        <span class="d">runtime variables, 0600</span>
+  apps/&lt;app&gt;/secrets                    <span class="d">Server Actions key, 0600</span>
+  apps/&lt;app&gt;/lock/                      <span class="d">present only during a change</span>
+<span class="c">/usr/local/lib/nextship/watchdog.sh</span>    <span class="d">plus its systemd timer</span>
+<span class="c">/etc/sudoers.d/nextship</span>                <span class="d">systemctl reboot only</span>
+<span class="c">Docker</span>   network nextship &middot; nextship-caddy &middot; &lt;app&gt;-r&hellip; containers
+         volumes nextship-&lt;app&gt;-build-&lt;image&gt;, nextship-&lt;app&gt;-cache, caddy data and config</div>
+      <p class="prose" style="margin-top:14px;color:var(--ink-soft)">Two of these exist nowhere else and should be backed up: the <code>env</code> and <code>secrets</code> files. Everything else is either in the repository or regenerated.</p>
+    </section>
+
+    <section id="proof">
+      <h2>Verified, and not yet</h2>
+      <p class="lede">Tested against local Ubuntu 24.04 and Debian 12 containers (arm64) running systemd, sshd and their own Docker, reached over SSH. That is a stand-in, not a provider.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Check</th><th>Result</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td>Full <code>e2e.sh</code> on a fresh server</td><td><span class="chip ok">passed</span></td><td>Every section, exit 0</td></tr>
+            <tr><td>Streaming through Caddy</td><td><span class="chip ok">passed</span></td><td>First byte 46 ms, last byte 2051 ms</td></tr>
+            <tr><td>No failed request during deploy</td><td><span class="chip ok">passed</span></td><td>249 of 249, long streams completing across the switch</td></tr>
+            <tr><td>Crashing build refused</td><td><span class="chip ok">passed</span></td><td>Old version kept serving</td></tr>
+            <tr><td><code>server add</code> on Debian 12</td><td><span class="chip ok">passed</span></td><td>46 s fresh, second run no changes</td></tr>
+            <tr><td>Watchdog, move, reboot, two apps</td><td><span class="chip ok">passed</span></td><td>By hand on the stand-in</td></tr>
+            <tr><td>DigitalOcean output unchanged</td><td><span class="chip ok">passed</span></td><td>20 commands byte-identical to <code>main</code> against a stubbed API</td></tr>
+            <tr><td>Real provider (Hetzner arm64, amd64 elsewhere)</td><td><span class="chip no">not run</span></td><td>Required before release</td></tr>
+            <tr><td>Real certificate for a real domain</td><td><span class="chip no">not run</span></td><td>Needs public DNS</td></tr>
+            <tr><td>Real kernel reboot</td><td><span class="chip no">not run</span></td><td>Stand-in restarts a container</td></tr>
+            <tr><td>CI <code>vm</code> job, GitHub Actions workflow</td><td><span class="chip no">not run</span></td><td>Branch not pushed</td></tr>
+            <tr><td>Live DigitalOcean execute paths, Windows</td><td><span class="chip no">not run</span></td><td>No token, no Windows machine</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note"><b>Three bugs running it found, all fixed and tested:</b> <code>docker ps -q</code> overrides <code>--format</code>, which stopped the new container with the old one; a crash-looping container reports <code>restarting</code>, not <code>exited</code>; and the watchdog timer drifted under systemd's default accuracy.</div>
+    </section>
+
+    <footer>nextship VM target on <code>feat/vm-target</code>. Design reference: <code>docs/design.md</code> §9.3 and <code>docs/vm.md</code>. Not released; the live checklist is in <code>docs/roadmap.md</code>.</footer>
+  </main>
+</div>
+</body>
+</html>
