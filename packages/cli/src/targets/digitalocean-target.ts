@@ -455,6 +455,11 @@ export class DigitalOceanTarget implements Target {
    */
   readonly platformSuffixes = ['.ondigitalocean.app', '.awsapprunner.com', '.amazonaws.com']
 
+  // An App Platform app is only without an ingress before its first deployment,
+  // and it is always given one, so "none" would be a false statement about the
+  // platform rather than a fact about this app.
+  readonly noPlatformHost = 'platform   unknown  (always works, managed by DigitalOcean)'
+
   async domainWarnings(): Promise<string[]> {
     return []
   }
@@ -540,7 +545,12 @@ export class DigitalOceanTarget implements Target {
    * The server ends the stream on its own because these URLs expire, and that
    * is reported rather than left to look like the app went quiet.
    */
-  async followLogs(appId: string, write: (text: string) => void, signal: AbortSignal): Promise<string | null> {
+  async followLogs(
+    appId: string,
+    write: (text: string) => void,
+    signal: AbortSignal,
+    onReady: () => void
+  ): Promise<string | null> {
     const url = await this.api.runLogStreamUrl(appId)
     if (!url) {
       throw new NextshipError(
@@ -577,6 +587,7 @@ export class DigitalOceanTarget implements Target {
       if (signal.aborted) stop()
       else signal.addEventListener('abort', stop, { once: true })
 
+      socket.onopen = () => onReady()
       socket.onmessage = (event) => write(frameText(event.data))
       socket.onclose = finish
       socket.onerror = () => {
