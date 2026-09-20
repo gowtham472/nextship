@@ -237,6 +237,19 @@ export interface Target {
   /** What a successful deploy removes, for the plan's last line, or null when it removes nothing. */
   readonly deployRemoves: string | null
 
+  /**
+   * What a successful rollback removes, for the same line in a rollback plan,
+   * or null when it removes nothing.
+   *
+   * Separate from `deployRemoves` rather than reusing it. The two happen to
+   * describe the same housekeeping on a server today, but they are different
+   * sentences in different plans: a rollback reads as returning to something
+   * that already ran, and "once this one is live" is deploy wording inside it.
+   * A target whose rollback removes something else, or nothing, would otherwise
+   * print a false line with no change here at all.
+   */
+  readonly rollbackRemoves: string | null
+
   // ----------------------------------------------------------------- build
 
   /**
@@ -285,6 +298,10 @@ export interface Target {
    *
    * Whether that means merging a whole spec or patching fields is the driver's
    * problem. `appId` is null for an app that does not exist yet.
+   *
+   * A driver may hold a resource from here until `awaitRelease` or
+   * `abandonRelease` ends the release. Every caller has to reach exactly one of
+   * those two on every path out.
    */
   release(appId: string | null, request: ReleaseRequest): Promise<{ appId: string; deploymentId: string | null }>
 
@@ -292,9 +309,28 @@ export interface Target {
    * Waits for a deployment to finish, reporting each phase change as it goes.
    *
    * `replacing` says whether a deployment of this app is serving now, so a failure can
-   * say truthfully whether anything still is.
+   * say truthfully whether anything still is. An aborted `signal` stops the wait
+   * and leaves the release undone: the deployment does not go live, and whatever
+   * `release` held is given back before this returns.
    */
-  awaitRelease(appId: string, deploymentId: string, onPhase: PhaseReporter, replacing: boolean): Promise<void>
+  awaitRelease(
+    appId: string,
+    deploymentId: string,
+    onPhase: PhaseReporter,
+    replacing: boolean,
+    signal?: AbortSignal
+  ): Promise<void>
+
+  /**
+   * Ends a release that will never be waited on, giving back anything `release`
+   * held and removing what it started.
+   *
+   * Only for the paths where `awaitRelease` is not reached at all: a driver that
+   * reported no deployment to follow, or a failure between the two calls. It
+   * never throws, because it runs while another failure is already being
+   * reported and replacing that error with this one would hide the real cause.
+   */
+  abandonRelease(appId: string, deploymentId: string | null): Promise<void>
 
   /**
    * Refuses when the app has a deployment the platform has not finished, since a
@@ -327,8 +363,12 @@ export interface Target {
    * and a failure anywhere in that sequence must clear the pin or the app
    * refuses every later deployment. AWS redeploys a previous image tag. A
    * command should not have to know which of those it is talking to.
+   *
+   * A rollback waits for the same health check a deploy does, so it takes the
+   * same `signal`: an aborted one stops the wait and gives back whatever the
+   * driver took, rather than leaving it held by a process that is gone.
    */
-  rollback(appId: string, deploymentId: string, onPhase: PhaseReporter): Promise<void>
+  rollback(appId: string, deploymentId: string, onPhase: PhaseReporter, signal?: AbortSignal): Promise<void>
 
   // ------------------------------------------------------------------- env
 

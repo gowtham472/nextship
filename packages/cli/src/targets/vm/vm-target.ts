@@ -388,6 +388,11 @@ export class VmTarget implements Target {
   readonly appScope = 'on this server'
   readonly deployRemoves = `removes images older than the newest ${DEFAULT_KEEP} served deployments once this one is live; nothing else is deleted`
 
+  // The same housekeeping, said as a rollback: what is returned to is an image
+  // that is already on the server, and it is the newest served deployments that
+  // are kept, which is the sentence that matters when choosing how far back to go.
+  readonly rollbackRemoves = `keeps the images of the newest ${DEFAULT_KEEP} served deployments and removes the rest once this one is serving; the deployment you are leaving stays in the history`
+
   private readonly server: ServerRecord
   private readonly name: string
   private readonly build: 'remote' | 'local'
@@ -437,7 +442,15 @@ export class VmTarget implements Target {
 
   // ------------------------------------------------------------ connection
 
-  private ssh(): Promise<Ssh> {
+  /**
+   * The one connection every step of a command shares.
+   *
+   * `protected` so a test can put a recording stand-in behind it. The
+   * orchestration that matters here — what order Caddy, the deployment history
+   * and the containers are touched in — is only visible as a sequence of remote
+   * commands, and there is no other seam that shows it.
+   */
+  protected ssh(): Promise<Ssh> {
     this.connection ??= Ssh.open({ host: this.server.host, port: this.server.port, user: this.server.user, hostKey: this.server.hostKey })
     return this.connection
   }
@@ -696,11 +709,43 @@ export class VmTarget implements Target {
     return { appId: started.appId, deploymentId: started.releaseId }
   }
 
-  async awaitRelease(appId: string, deploymentId: string, onPhase: PhaseReporter, replacing: boolean): Promise<void> {
+  async awaitRelease(
+    appId: string,
+    deploymentId: string,
+    onPhase: PhaseReporter,
+    replacing: boolean,
+    signal?: AbortSignal
+  ): Promise<void> {
     try {
-      await this.finishRelease(appId, deploymentId, onPhase, replacing)
+      await this.finishRelease(appId, deploymentId, onPhase, replacing, signal)
     } finally {
       await this.unlock()
+    }
+  }
+
+  /**
+   * Gives back the lock `release` took, and removes the container it started.
+   *
+   * The container was never pointed at by Caddy, so nothing is serving from it
+   * and removing it takes no traffic down. This runs while another failure is
+   * being reported, so it reports its own problems and returns rather than
+   * throwing over the error that brought us here; the worst case is the lock
+   * message naming this process, which tells the user exactly what to remove.
+   */
+  async abandonRelease(_appId: string, deploymentId: string | null): Promise<void> {
+    try {
+      if (deploymentId) {
+        await this.discard(`${this.name}-${deploymentId}`, deploymentId, 'was interrupted before it served', () => {})
+      }
+    } catch {
+      // Reported by the unlock below if it also fails; the container is named in
+      // the deployment history either way.
+    }
+    try {
+      await this.unlock()
+    } catch {
+      // Nothing useful is left to do: the held-lock error already tells the next
+      // command which process holds it and how to remove it.
     }
   }
 
@@ -806,13 +851,27 @@ export class VmTarget implements Target {
   }
 
   /** Steps 4 to 6. Expects the lock to be held, and leaves releasing it to the caller. */
-  private async finishRelease(appId: string, releaseId: string, onPhase: PhaseReporter, replacing: boolean): Promise<void> {
+  private async finishRelease(
+    appId: string,
+    releaseId: string,
+    onPhase: PhaseReporter,
+    replacing: boolean,
+    signal?: AbortSignal
+  ): Promise<void> {
     const container = `${this.name}-${releaseId}`
     const keeps = replacing ? 'The previous deployment keeps serving.' : 'This was the first deployment, so nothing is serving yet.'
 
-    const healthy = await this.awaitHealthy(container, onPhase)
+    // Interruptible up to here and no further. Once Caddy has been switched the
+    // steps below are what make the server consistent again, so they finish.
+    const healthy = await this.awaitHealthy(container, onPhase, signal)
     if (!healthy.ok) {
       await this.discard(container, releaseId, healthy.reason, onPhase)
+      if (healthy.interrupted) {
+        throw new NextshipError(
+          'Stopped while waiting for the new container to become healthy.',
+          `${keeps} The new container was removed and the lock released, so nothing is left behind.`
+        )
+      }
       throw new NextshipError(`The new container ${healthy.reason}.`, `${keeps} Its last log lines are above.`)
     }
 
@@ -828,8 +887,19 @@ export class VmTarget implements Target {
     }
     onPhase('Caddy now sends traffic to the new container')
 
+    // Recorded here, not after the previous container is stopped. From the reload
+    // above this container is what the server serves, and everything below takes
+    // time: a CLI that dies in between would otherwise leave deployments.json
+    // naming a stopped container as live, which `domain add` would then rebuild
+    // the site from and point the proxy back at something that is not running.
+    const history = recordLive(await this.readDeployments(), releaseId)
+    await this.writeDeployments(history)
+
+    // A previous container that is restarting or paused is not serving, but it
+    // still holds the app's resources and would come back on its own, so it is
+    // stopped exactly like a running one. Docker ORs repeated status filters.
     const running = await this.run(
-      `docker ps --filter label=sh.nextship.managed=true --filter ${q(`label=sh.nextship.app=${this.name}`)} --filter status=running --format '{{.Names}}'`,
+      `docker ps --filter label=sh.nextship.managed=true --filter ${q(`label=sh.nextship.app=${this.name}`)} --filter status=running --filter status=restarting --filter status=paused --format '{{.Names}}'`,
       'list the running containers'
     )
     const previous = previousContainers(running, this.name, container)
@@ -847,15 +917,30 @@ export class VmTarget implements Target {
       )
     }
 
-    const history = recordLive(await this.readDeployments(), releaseId)
-    await this.writeDeployments(history)
-    await this.pruneBeyond(history, onPhase)
+    // Reclaiming space happens after the deployment is already live and serving,
+    // so it cannot fail it. A container Docker will not remove, or an image it
+    // will not untag, is a housekeeping problem: reporting it as a failed deploy
+    // would send someone rolling back a deployment that is working, and every
+    // later deploy of this app would report the same failure.
+    try {
+      await this.pruneBeyond(history, onPhase)
+    } catch (error) {
+      onPhase(`could not remove old images: ${error instanceof Error ? error.message : String(error)}`)
+      onPhase('The deployment is live. Run `nextship images prune --yes` once the server is happy.')
+    }
   }
 
-  private async awaitHealthy(container: string, onPhase: PhaseReporter): Promise<{ ok: true } | { ok: false; reason: string }> {
+  private async awaitHealthy(
+    container: string,
+    onPhase: PhaseReporter,
+    signal?: AbortSignal
+  ): Promise<{ ok: true } | { ok: false; reason: string; interrupted?: boolean }> {
     const deadline = Date.now() + HEALTH_TIMEOUT_MS
     let last = ''
     for (;;) {
+      // Checked each round rather than racing the poll, so a stop always lands
+      // between two whole remote commands and never half way through one.
+      if (signal?.aborted) return { ok: false, reason: 'was interrupted', interrupted: true }
       const state = (await this.run(
         `docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' ${q(container)}`,
         'read the new container\'s health'
@@ -865,12 +950,16 @@ export class VmTarget implements Target {
         last = state
       }
       const [status, health] = state.split(' ')
-      if (health === 'healthy') return { ok: true }
       // With --restart unless-stopped a container that exits on start is never
       // seen as exited: Docker restarts it in a loop and reports `restarting`.
       if (status === 'exited' || status === 'dead' || status === 'restarting') {
         return { ok: false, reason: 'exited before it became healthy' }
       }
+      // Checked after the status, and against it: Docker keeps the last health
+      // result for the whole restarting window, so a container that answered one
+      // probe and then began crash-looping still reads `healthy` here. Requiring
+      // both is what tells the two apart.
+      if (status === 'running' && health === 'healthy') return { ok: true }
       if (health === 'unhealthy') return { ok: false, reason: 'failed its health check' }
       if (Date.now() > deadline) return { ok: false, reason: `did not become healthy within ${HEALTH_TIMEOUT_MS / 60000} minutes` }
       await sleep(HEALTH_POLL_MS)
@@ -892,38 +981,78 @@ export class VmTarget implements Target {
    * takes the proxy down for every app on the server.
    */
   private async switchSite(record: AppRecord, container: string): Promise<void> {
-    const facts = await this.facts()
-    let defaultApp = facts.defaultApp
-    if (defaultApp === null) {
-      await this.run(`printf '%s\\n' ${q(this.name)} > ${DEFAULT_APP_FILE}`, 'record the default app')
-      defaultApp = this.name
-    }
-    const site = renderSite({ name: this.name, container, domains: record.domains, isDefault: defaultApp === this.name })
+    const site = renderSite({
+      name: this.name,
+      container,
+      domains: record.domains,
+      isDefault: (await this.claimDefaultApp()) === this.name,
+    })
     await this.applySite(site)
   }
 
+  /**
+   * Records this app as the server's default if the server has none, and returns
+   * whichever app holds it.
+   *
+   * One remote command rather than a read and then a write, because the deploy
+   * lock is per app and two apps deploying at once are not serialised against
+   * each other. `set -C` makes the create fail rather than truncate when the file
+   * already exists, which is the kernel's own O_EXCL, so exactly one of them
+   * wins, and both then read back the same winner instead of each believing it
+   * is the default and writing a site that claims the server's address.
+   */
+  private async claimDefaultApp(): Promise<string> {
+    const script = [
+      'set -eu',
+      `f=${DEFAULT_APP_FILE}`,
+      // An empty file is not a claim, and nothing nextship writes leaves one, so
+      // it is cleared rather than left to make every app a non-default app for good.
+      '[ ! -e "$f" ] || [ -s "$f" ] || rm -f "$f"',
+      `(set -C; printf '%s\\n' ${q(this.name)} > "$f") 2> /dev/null || true`,
+      'cat "$f"',
+    ].join('\n')
+    return (await this.run(script, 'record the default app')).trim()
+  }
+
+  /**
+   * Writes this app's site file, after validating it against every other site on
+   * the server, and reloads Caddy.
+   *
+   * The scratch copy of the validation set is named after the app, not shared.
+   * The deploy lock is per app, so two apps on one server deploy at the same
+   * time by design; a single `check` directory meant each one deleted the
+   * other's set mid-validation, and the one that lost threw away a healthy new
+   * container and reported a Caddy failure that had not happened. Nothing but
+   * this command reads either path, and the live Caddyfile imports `sites/`
+   * alone, so the name is free to be per app.
+   */
   private async applySite(site: string | null): Promise<void> {
     const sites = `${CADDY_DIR}/sites`
     const current = `${sites}/${this.name}.caddy`
+    // Both are safe to interpolate: assertAppName allows only lowercase letters,
+    // digits, dots, hyphens and underscores.
+    const checkDir = `check-${this.name}`
+    const checkFile = `Caddyfile.check-${this.name}`
     const script = [
       'set -eu',
       `d=${CADDY_DIR}; cur=${q(current)}; next="$cur.next"; prev="$cur.prev"`,
+      `chk=${q(checkDir)}; chkfile=${q(checkFile)}`,
       site === null ? 'rm -f "$next"' : 'install -m 644 /dev/stdin "$next"',
-      'rm -rf "$d/check" && mkdir "$d/check"',
-      'for f in "$d"/sites/*.caddy; do [ -e "$f" ] || continue; [ "$f" = "$cur" ] || cp "$f" "$d/check/"; done',
-      `[ -e "$next" ] && cp "$next" "$d/check/${this.name}.caddy"`,
-      "printf 'import check/*.caddy\\n' > \"$d/Caddyfile.check\"",
-      'if ! out=$(docker exec nextship-caddy caddy validate --config /etc/caddy/Caddyfile.check --adapter caddyfile 2>&1); then',
-      '  rm -rf "$next" "$d/check" "$d/Caddyfile.check"; printf "%s\\n" "$out" | grep -v "^{" | tail -3 >&2; exit 10',
+      'rm -rf "$d/$chk" && mkdir "$d/$chk"',
+      'for f in "$d"/sites/*.caddy; do [ -e "$f" ] || continue; [ "$f" = "$cur" ] || cp "$f" "$d/$chk/"; done',
+      `[ -e "$next" ] && cp "$next" "$d/$chk/${this.name}.caddy"`,
+      'printf \'import %s/*.caddy\\n\' "$chk" > "$d/$chkfile"',
+      'if ! out=$(docker exec nextship-caddy caddy validate --config "/etc/caddy/$chkfile" --adapter caddyfile 2>&1); then',
+      '  rm -rf "$next" "$d/$chk" "$d/$chkfile"; printf "%s\\n" "$out" | grep -v "^{" | tail -3 >&2; exit 10',
       'fi',
       'rm -f "$prev"; [ -e "$cur" ] && cp "$cur" "$prev"',
       'if [ -e "$next" ]; then mv "$next" "$cur"; else rm -f "$cur"; fi',
       'if ! out=$(docker exec nextship-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1); then',
       '  if [ -e "$prev" ]; then mv "$prev" "$cur"; else rm -f "$cur"; fi',
       '  docker exec nextship-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null 2>&1 || true',
-      '  rm -rf "$d/check" "$d/Caddyfile.check"; printf "%s\\n" "$out" | grep -v "^{" | tail -3 >&2; exit 11',
+      '  rm -rf "$d/$chk" "$d/$chkfile"; printf "%s\\n" "$out" | grep -v "^{" | tail -3 >&2; exit 11',
       'fi',
-      'rm -rf "$prev" "$d/check" "$d/Caddyfile.check"',
+      'rm -rf "$prev" "$d/$chk" "$d/$chkfile"',
     ].join('\n')
     await this.run(script, 'update the Caddy site', site ?? '')
   }
@@ -990,7 +1119,7 @@ export class VmTarget implements Target {
     return (await this.readDeployments()).map(({ healthPath: _healthPath, ...entry }) => entry)
   }
 
-  async rollback(appId: string, deploymentId: string, onPhase: PhaseReporter): Promise<void> {
+  async rollback(appId: string, deploymentId: string, onPhase: PhaseReporter, signal?: AbortSignal): Promise<void> {
     const target = (await this.readDeployments()).find((entry) => entry.id === deploymentId)
     if (!target?.served || !target.imageTag) {
       throw new NextshipError(`Deployment ${deploymentId} never served, so there is nothing to return to.`, 'Run `nextship rollback` to see the deployments you can roll back to.')
@@ -1010,7 +1139,7 @@ export class VmTarget implements Target {
       healthPath: target.healthPath ?? null,
     })
     try {
-      await this.finishRelease(appId, started.releaseId, onPhase, live)
+      await this.finishRelease(appId, started.releaseId, onPhase, live, signal)
     } finally {
       await this.unlock()
     }
@@ -1172,7 +1301,18 @@ export class VmTarget implements Target {
     return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   }
 
-  /** Removes the stopped containers made from each image, then the image. A running container is never touched. */
+  /**
+   * Removes the containers made from each image, then the image itself. A
+   * *running* container is never touched, so an image that is serving survives.
+   *
+   * `restarting` and `paused` are removed along with `exited` and `created`.
+   * They are not serving, and Docker refuses to untag an image while any
+   * container of it exists, so leaving them behind meant one container stuck in
+   * a restart loop made `docker rmi` fail for good: every later deploy of the
+   * app pruned, failed, and printed a Docker error no nextship command cleared.
+   * Neither state can be removed without `-f`, which is safe here precisely
+   * because `running` is excluded.
+   */
   async removeImages(repository: string, ids: string[]): Promise<void> {
     const images = await this.images(repository)
     for (const id of ids) {
@@ -1180,7 +1320,7 @@ export class VmTarget implements Target {
       if (!image) continue
       for (const tag of image.tags) {
         await this.run(
-          `docker ps -aq --filter label=sh.nextship.managed=true --filter ${q(`label=sh.nextship.app=${this.name}`)} --filter ${q(`label=sh.nextship.image=${tag}`)} --filter status=exited --filter status=created | xargs -r docker rm`,
+          `docker ps -aq --filter label=sh.nextship.managed=true --filter ${q(`label=sh.nextship.app=${this.name}`)} --filter ${q(`label=sh.nextship.image=${tag}`)} --filter status=exited --filter status=created --filter status=restarting --filter status=paused | xargs -r docker rm -f`,
           'remove the containers of an old image'
         )
       }
@@ -1484,13 +1624,17 @@ export class VmTarget implements Target {
     await this.lock()
     try {
       await this.appRecord(appId)
+      // The site comes down first. Removing the containers first left Caddy
+      // proxying to a container that no longer existed, which answers 502
+      // instead of falling through to the server's default app, and a failure
+      // between the two steps left that site file on the server for good.
+      await this.applySite(null)
+      const facts = await this.facts()
+      if (facts.defaultApp === this.name) await this.run(`rm -f ${DEFAULT_APP_FILE}`, 'release the default address')
       await this.run(
         `docker ps -aq --filter label=sh.nextship.managed=true --filter ${q(`label=sh.nextship.app=${this.name}`)} | xargs -r docker rm -f > /dev/null`,
         'remove the app\'s containers'
       )
-      await this.applySite(null)
-      const facts = await this.facts()
-      if (facts.defaultApp === this.name) await this.run(`rm -f ${DEFAULT_APP_FILE}`, 'release the default address')
       await this.run(
         `docker volume ls -q --filter label=sh.nextship.managed=true --filter ${q(`label=sh.nextship.app=${this.name}`)} | xargs -r docker volume rm > /dev/null`,
         'remove the app\'s volumes'

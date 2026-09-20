@@ -211,23 +211,45 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
   })
   const appId = released.appId
 
-  // Written before waiting, so a timeout still leaves the app recorded as ours
-  // rather than orphaned and unadoptable on the next run.
-  const config: ProjectConfig = {
-    ...settings,
-    ...(delivered.store ? { registry: delivered.store } : {}),
-    appId,
-  }
-  await writeConfig(project.root, config)
-  detail('recorded in nextship.json')
+  // From here to the end of the release, every path out has to reach either
+  // awaitRelease or abandonRelease. A driver may be holding something for this
+  // release: on a server it is the app's deploy lock, which nothing breaks
+  // automatically, so an early return or a thrown error here used to leave a
+  // lock a person had to go and remove by hand, with the new container still
+  // running beside it.
+  //
+  // Ctrl+C is the same problem arriving from outside. Handled rather than left
+  // to kill the process mid-wait, so the release is given back the same way.
+  const stopping = new AbortController()
+  const interrupt = (): void => stopping.abort()
+  process.on('SIGINT', interrupt)
 
-  if (!released.deploymentId) {
-    warn(`${client.displayName} reported no deployment to follow. Check its control panel.`)
-    return
-  }
+  let handedOff = false
+  try {
+    // Written before waiting, so a timeout still leaves the app recorded as ours
+    // rather than orphaned and unadoptable on the next run.
+    const config: ProjectConfig = {
+      ...settings,
+      ...(delivered.store ? { registry: delivered.store } : {}),
+      appId,
+    }
+    await writeConfig(project.root, config)
+    detail('recorded in nextship.json')
 
-  step('Waiting for the deployment to go live')
-  await client.awaitRelease(appId, released.deploymentId, detail, serving)
+    if (!released.deploymentId) {
+      warn(`${client.displayName} reported no deployment to follow. Check its control panel.`)
+      return
+    }
+
+    step('Waiting for the deployment to go live')
+    handedOff = true
+    await client.awaitRelease(appId, released.deploymentId, detail, serving, stopping.signal)
+  } finally {
+    process.off('SIGINT', interrupt)
+    // awaitRelease ends the release itself, whether it succeeded or threw, so
+    // this only covers the paths that never reached it.
+    if (!handedOff) await client.abandonRelease(appId, released.deploymentId)
+  }
 
   await reportUrls(client, appId)
 }

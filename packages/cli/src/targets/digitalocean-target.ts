@@ -137,6 +137,8 @@ export class DigitalOceanTarget implements Target {
 
   readonly deployRemoves = null
 
+  readonly rollbackRemoves = null
+
   readonly rollbackNotes: string[] = []
 
   async actionsKey(): Promise<string | null> {
@@ -233,15 +235,27 @@ export class DigitalOceanTarget implements Target {
     return { appId, deploymentId: updated.deploymentId }
   }
 
-  async awaitRelease(appId: string, deploymentId: string, onPhase: PhaseReporter, replacing: boolean): Promise<void> {
+  async awaitRelease(
+    appId: string,
+    deploymentId: string,
+    onPhase: PhaseReporter,
+    replacing: boolean,
+    signal?: AbortSignal
+  ): Promise<void> {
     const logs = 'Check the build and runtime logs in the DigitalOcean control panel.'
     await this.poll(appId, deploymentId, onPhase, DEPLOY_TIMEOUT_MS, {
       failed: replacing
         ? `The previous revision keeps serving. ${logs}`
         : `This was the app's first deployment, so nothing is serving yet. ${logs}`,
       timedOut: 'It may still succeed. Nothing was rolled back or deleted. Check the control panel.',
-    })
+    }, signal)
   }
+
+  /**
+   * Nothing to give back: App Platform owns the deployment from the moment it is
+   * created, and it carries on with or without this process watching.
+   */
+  async abandonRelease(): Promise<void> {}
 
   async assertIdle(appId: string): Promise<void> {
     const running = (await this.api.getAppStatus(appId))?.deploymentInProgress
@@ -319,7 +333,7 @@ export class DigitalOceanTarget implements Target {
    * before it is taken, committed the moment the deployment reports active, and
    * reverted on every failure path in between.
    */
-  async rollback(appId: string, deploymentId: string, onPhase: PhaseReporter): Promise<void> {
+  async rollback(appId: string, deploymentId: string, onPhase: PhaseReporter, _signal?: AbortSignal): Promise<void> {
     const validation = await this.api.validateRollback(appId, deploymentId)
     if (!validation.valid) {
       throw new NextshipError(
@@ -680,12 +694,22 @@ export class DigitalOceanTarget implements Target {
     deploymentId: string,
     onPhase: PhaseReporter,
     timeoutMs: number,
-    messages: { failed: string; timedOut: string }
+    messages: { failed: string; timedOut: string },
+    signal?: AbortSignal
   ): Promise<void> {
     const deadline = Date.now() + timeoutMs
     let lastPhase = ''
 
     for (;;) {
+      // App Platform keeps deploying whether or not anything is watching, so a
+      // stop here stops the watching and says so, rather than claiming to have
+      // cancelled something that is still running.
+      if (signal?.aborted) {
+        throw new NextshipError(
+          'Stopped waiting for the deployment.',
+          'The deployment is still running on App Platform. Check its control panel, or run `nextship deploy` again once it settles.'
+        )
+      }
       const status = await this.api.deploymentStatus(appId, deploymentId)
       if (status.phase !== lastPhase) {
         onPhase(status.phase.toLowerCase().replace(/_/g, ' '))
