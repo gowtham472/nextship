@@ -5,7 +5,8 @@
 # the proxy, a new deployment drops no request, a deployment that cannot start leaves the
 # previous one serving, rollback returns to the previous deployment, env push takes effect
 # without downtime, a replaced deployment's logs are still readable, pruning keeps the
-# live image, a domain gets its own site, and destroying one app leaves another serving.
+# live image, a regenerated ISR page and an optimized image survive a container restart,
+# a domain gets its own site, and destroying one app leaves another serving.
 #
 # It ends by destroying both apps it created, so a server it ran against is left with only
 # what `server add` set up.
@@ -50,7 +51,7 @@ cleanup() {
   rm -rf "${WORK}"
 }
 trap cleanup EXIT
-cp -R "${FIXTURE}/app" "${FIXTURE}/package.json" "${FIXTURE}/package-lock.json" "${WORK}/"
+cp -R "${FIXTURE}/app" "${FIXTURE}/public" "${FIXTURE}/package.json" "${FIXTURE}/package-lock.json" "${WORK}/"
 ln -s "$(cd "${FIXTURE}" && pwd)/node_modules" "${WORK}/node_modules"
 cd "${WORK}"
 printf 'node_modules\n.nextship\n' > .gitignore
@@ -61,6 +62,13 @@ commit fixture
 nextship() { NO_COLOR=1 node "${NEXTSHIP}" "$@"; }
 check() { echo "$1: ok, $2"; }
 fail() { echo "$1: FAIL, $2" >&2; exit 1; }
+
+# Runs a command on the server. Only used for the things nextship deliberately
+# does not do, such as restarting one container to see what survives it.
+SSH_PORT="22"
+case "${SERVER}" in *:*) SSH_PORT="${SERVER##*:}";; esac
+SSH_TARGET="${SERVER%:*}"
+on_server() { ssh -o BatchMode=yes -o StrictHostKeyChecking=no -p "${SSH_PORT}" "${SSH_TARGET}" "$@"; }
 
 # Requests a path every 100 ms into a file until the file named "<file>.stop" exists.
 poll() {
@@ -194,6 +202,82 @@ grep -q 'deployed now' <<< "${IMAGES}" || fail "images prune" "the live image wa
 curl -sf -o /dev/null "${URL}/" || fail "images prune" "the app stopped serving"
 check "images prune" "one image kept, the live one, and the app still serves"
 
+# --------------------------------------------------------------- durability
+
+# The headline claim of the VM target: what Next.js writes at runtime is kept,
+# so a restart does not throw away regenerated pages and optimized images the
+# way a platform that gives each container a fresh filesystem does. Two volumes
+# carry it, one per image over .next and one per app over .next/cache, and
+# nothing else in this suite or in the unit tests checks that they work.
+
+# `server add` needs a login that is root or has passwordless sudo; it does not
+# need that login to be in the docker group, and on a fresh provider image it
+# usually is not. So docker is reached through whichever of the two works, asked
+# here rather than at the top of the script because `server add` is what installs it.
+DOCKER="docker"
+on_server "docker ps > /dev/null 2>&1" || DOCKER="sudo -n docker"
+on_server "${DOCKER} ps > /dev/null" || fail "durability" "cannot reach docker on the server as ${SSH_TARGET}"
+
+# The value x-nextjs-cache reports for a URL, empty when there is no header.
+cache_state() { curl -s -D - -o /dev/null "$1" | tr -d '\r' | grep -i '^x-nextjs-cache:' | awk '{print $2}'; }
+
+BUILT="$(curl -s "${URL}/isr")"
+grep -q 'isr-' <<< "${BUILT}" || fail "isr" "/isr did not render: ${BUILT:-nothing}"
+
+# Regenerated on demand rather than by waiting out the revalidate window, so the
+# entry on disk is known to differ from the one the build produced.
+curl -sf -X POST -o /dev/null "${URL}/revalidate" || fail "isr" "the revalidate route did not answer"
+
+# Polled rather than slept on: an invalidated entry can be served stale once
+# while it regenerates behind the request, so the change is not guaranteed to be
+# visible to the first read after the revalidation.
+REGENERATED="${BUILT}"
+for _ in $(seq 1 20); do
+  REGENERATED="$(curl -s "${URL}/isr")"
+  [ "${REGENERATED}" != "${BUILT}" ] && break
+  sleep 1
+done
+[ "${REGENERATED}" != "${BUILT}" ] || fail "isr" "/isr did not change within 20s of revalidation, so nothing was regenerated"
+grep -q 'isr-' <<< "${REGENERATED}" || fail "isr" "/isr stopped rendering after revalidation: ${REGENERATED}"
+
+# The optimizer writes into .next/cache/images. The first request encodes it and
+# the ones after it should be answered from that entry, which is what there is
+# to survive a restart.
+IMAGE_URL="${URL}/_next/image?url=%2Fnextship.png&w=128&q=75"
+TYPE="$(curl -s -o /dev/null -w '%{content_type}' "${IMAGE_URL}")"
+grep -q 'image/' <<< "${TYPE}" || fail "image" "the optimizer answered ${TYPE:-nothing}"
+CACHED=""
+for _ in $(seq 1 10); do
+  CACHED="$(cache_state "${IMAGE_URL}")"
+  [ "${CACHED}" = "HIT" ] && break
+  sleep 1
+done
+[ "${CACHED}" = "HIT" ] || fail "image" "the optimized image was not cached before the restart: ${CACHED:-no header}"
+check "durability" "an ISR page was regenerated and an image was optimized and cached"
+
+# A restart, not a redeploy: a redeploy builds a new image and so a new build
+# volume, which would prove nothing about what is kept.
+CONTAINER="$(on_server "${DOCKER} ps --filter label=sh.nextship.app=nextship-streaming-fixture --filter status=running --format '{{.Names}}'" | head -1)"
+[ -n "${CONTAINER}" ] || fail "durability" "no running container found for the app"
+
+# The restart and the wait are one connection: sixty round trips to poll a
+# health status is slower than the restart itself.
+on_server "${DOCKER} restart ${CONTAINER} > /dev/null &&
+  for _ in \$(seq 1 60); do
+    [ \"\$(${DOCKER} inspect -f '{{.State.Health.Status}}' ${CONTAINER})\" = healthy ] && exit 0
+    sleep 2
+  done
+  exit 1" || fail "durability" "${CONTAINER} did not become healthy again within 2 minutes"
+
+AFTER="$(curl -s "${URL}/isr")"
+[ "${AFTER}" = "${REGENERATED}" ] ||
+  fail "durability" "the regenerated ISR page did not survive the restart: was ${REGENERATED}, now ${AFTER}"
+
+AFTER_CACHED="$(cache_state "${IMAGE_URL}")"
+[ "${AFTER_CACHED}" = "HIT" ] ||
+  fail "durability" "the optimized image was re-encoded after the restart rather than read from the cache: ${AFTER_CACHED:-no header}"
+check "durability" "the regenerated page and the optimized image both survived a container restart"
+
 # ------------------------------------------------------------------ domains
 
 nextship domain add e2e.nextship.test --yes
@@ -205,7 +289,7 @@ check "domain add" "the domain redirects to HTTPS through its own site"
 
 SECOND_APP="${WORK}/second"
 mkdir -p "${SECOND_APP}"
-cp -R "${FIXTURE}/app" "${FIXTURE}/package-lock.json" "${SECOND_APP}/"
+cp -R "${FIXTURE}/app" "${FIXTURE}/public" "${FIXTURE}/package-lock.json" "${SECOND_APP}/"
 sed 's/"nextship-streaming-fixture"/"nextship-e2e-second"/' "${FIXTURE}/package.json" > "${SECOND_APP}/package.json"
 ln -s "$(cd "${FIXTURE}" && pwd)/node_modules" "${SECOND_APP}/node_modules"
 (
