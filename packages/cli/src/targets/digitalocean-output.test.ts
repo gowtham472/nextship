@@ -25,6 +25,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import type { ProjectInfo } from '../detect.js'
@@ -37,9 +38,10 @@ import { NextshipError } from '../errors.js'
 
 /** A project on disk with a nextship.json, which is what `ownedApp` reads. */
 async function project(config: Record<string, unknown>): Promise<ProjectInfo & { cleanup: () => Promise<void> }> {
-  // The project only has to exist and hold a nextship.json; os.tmpdir() would do
-  // as well, and is used where a test needs the platform's own location.
-  const root = await mkdtemp(path.join('/tmp', 'nextship-output-'))
+  // tmpdir(), not a hardcoded /tmp: Windows has no /tmp, and mkdtemp fails with
+  // ENOENT there. Nothing here needs a short path — that constraint belongs to
+  // the SSH control socket, not to a fixture directory.
+  const root = await mkdtemp(path.join(tmpdir(), 'nextship-output-'))
   await writeFile(path.join(root, 'nextship.json'), `${JSON.stringify(config, null, 2)}\n`)
   return {
     root,
