@@ -50,7 +50,7 @@ destroyed afterwards, so its URL no longer serves.
 | Local pipeline: `detect`, `build`, `package`, `run` | Done. Verified on a real production project and a purpose-built feature app |
 | DigitalOcean deployment: `deploy`, `rollback`, `logs` | Done. Verified against a live app, including two rollbacks in opposite directions, and deployed from an Apple Silicon Mac (M3 Max) with 0.4.4 from npm, on the second attempt |
 | Any Linux server over SSH | v1.1, built and not released. `server add`, deploy, rollback and every day-two command pass end to end against a local Ubuntu 24.04 test server over SSH; not yet run on a real provider. See [`docs/vm.md`](./docs/vm.md) |
-| AWS | On demand, after a streaming experiment on Lightsail. The server target already runs on EC2 |
+| AWS | On demand, after a streaming experiment on Lightsail. EC2 is one of the machines the v1.1 server target is built for, but it has not been run there: see the row above |
 | Official Next.js adapter compatibility suite | Passes in full on 16.4.0-canary.22: 1123 of 1123 suites and 3599 of 3599 assertions, with 9 Vercel-specific tests skipped and each reason published. See the results below |
 
 Verified on real containers: every route serves, image optimization produces WebP,
@@ -1028,7 +1028,6 @@ docs/
   costs.md             costed comparison against Vercel at three traffic tiers
   digitalocean.md      the API token, its scopes, and what deploying costs
   vm.md                deploying to your own server: setup, security, CI, backups
-  vm-target-overview.html  a walkthrough of the VM target: before and after, and every workflow step by step
 conformance/           scripts for the official Next.js adapter compatibility suite,
                        streaming conformance, and vm/e2e.sh against a server over SSH
 packages/

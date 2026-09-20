@@ -75,19 +75,37 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 - **A `vm` CI job and `conformance/vm/e2e.sh`,** which set the runner up over `ssh
   localhost` and check a second `server add` changes nothing. The script ran against the
   local stand-in; the job has not run yet. (Ragul D)
+- **Tests for what the commands print and what order a release touches a server in.**
+  `digitalocean-output.test.ts` drives the real command path against a stubbed `fetch` and
+  asserts the printed lines, which is where the four regressions above lived and where no
+  driver test could have found them. `vm-release.test.ts` puts a recording stand-in behind
+  the SSH connection and asserts the sequence: that the deployment history is written
+  between the Caddy reload and the stop, that a container that never served is removed and
+  the lock given back, that the validation scratch space is per app, and that `destroy`
+  takes the site down first. Both were checked against the unfixed code and fail on it.
+  (Ragul D)
+- **`e2e.sh` checks the durability claim the VM target is built on.** The streaming fixture
+  gains an ISR page, an on-demand revalidation route and an image, and the script
+  regenerates the page, has the image optimized and cached, restarts the container, and
+  fails unless both survived. Neither a unit test nor the script checked this before, and
+  it is the one thing the server target offers that App Platform does not. (Ragul D)
 
 - **Commands no longer carry DigitalOcean wording or choices.** The deploy plan's target
   lines, where an image is built and for which platform, how it reaches the target, how
   logs are followed, what reclaiming storage costs, and where `env push` stores values are
   now asked of the target's driver. This is what lets a second target plug in without
-  editing every command. DigitalOcean output is unchanged: against the same stubbed API
-  responses, `main` and this change printed byte for byte identical output for 20 read-only
-  and plan-only commands, among them `deploy` for an existing app and a first deploy,
-  `rollback`, `logs`, `env`, `env push`, `env rm`, `domain` and `domain add` and `rm`,
-  `images`, `images prune`, `destroy` with and without `--images`, and `doctor`. The execute path changed in two small ways: a missing registry is created
-  after the build succeeds rather than before it, so a failed build no longer leaves a new
-  billable registry behind, and the push step is now called "Delivering image". Not yet
-  re-run against a live App Platform app. (Ragul D)
+  editing every command. Against the same stubbed API responses, `main` and this change
+  printed byte for byte identical output for 20 read-only and plan-only commands, among
+  them `deploy` for an existing app and a first deploy, `rollback`, `logs`, `env`,
+  `env push`, `env rm`, `domain` and `domain add` and `rm`, `images`, `images prune`,
+  `destroy` with and without `--images`, and `doctor`. That comparison was narrower than
+  it read: it used one set of responses, all of them describing a deployed app with a
+  valid config, and four paths outside that set did change. They are listed under Fixed
+  below, and `digitalocean-output.test.ts` now pins the lines rather than leaving the
+  comparison as something that was run once. The execute path changed in two small ways:
+  a missing registry is created after the build succeeds rather than before it, so a
+  failed build no longer leaves a new billable registry behind, and the push step is now
+  called "Delivering image". Not yet re-run against a live App Platform app. (Ragul D)
 - **`nextship.json` has a version 2.** It adds the `vm` target with a `server` and a
   `build` mode, and makes `region` and `registry` DigitalOcean fields. A file is written as
   version 1 whenever it holds nothing version 2 introduced, so an existing DigitalOcean
@@ -111,15 +129,68 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   one, pauses on hover or focus, and does not move at all for visitors who ask for reduced
   motion. Every step's text is in the page without JavaScript. (Gowtham)
 
+### Fixed
+
+- **An App Platform app with no ingress yet reads as `platform unknown` again,** not as
+  "this app answers only on the domains attached to it". An app is without an ingress only
+  before its first deployment and App Platform always assigns one, so the new wording was a
+  false statement about the platform. It is now the driver's sentence: DigitalOcean says
+  `unknown`, a server says `none`, which is true there because only the server's default
+  app answers on the server's own address. (Ragul D)
+- **`logs --follow` no longer says it is following a stream it has not opened.** The line
+  is printed when the driver reports the stream established, so an app with no running
+  container prints the failure alone instead of announcing a stream and then reporting
+  there was none. (Ragul D)
+- **A malformed domain is reported as malformed, with or without a token.** `domain add`
+  checked the domain's shape only after resolving the target, which authenticates, so a
+  typo was reported as a missing `DIGITALOCEAN_TOKEN`. The shape is checked first; the
+  platform-suffix check still needs a target and still runs after one. (Ragul D)
+- **`doctor` diagnoses a nextship.json it cannot read instead of throwing on it.** It is
+  the command someone runs when something is already wrong, and reading the project's
+  target made an unreadable config fail the whole run. The config problem is now the first
+  finding, and every other check still runs. (Ragul D)
+- **A deployment is recorded live the moment Caddy serves it,** rather than after the
+  previous container is stopped, which takes up to 30 seconds. A CLI that died in that
+  window left `deployments.json` naming the stopped container as live, and `domain add`
+  would rebuild the site from that record and point the proxy back at it. (Ragul D)
+- **Two apps can deploy at once on one server again.** The Caddy validation scratch space
+  was one directory for the whole server while the deploy lock is per app, so each run
+  deleted the other's validation set and the loser discarded a healthy new container and
+  reported a Caddy failure that had not happened. It is now named after the app, and
+  claiming the server's default address is a single exclusive create rather than a read
+  followed by a write. (Ragul D)
+- **Ctrl+C during a deployment leaves no lock and no orphan container.** `release` returns
+  holding the app's lock and nothing breaks a lock automatically, so an interrupt, an early
+  return or a failure between starting and waiting left a lock a person had to remove by
+  hand. `deploy` and `rollback` now handle SIGINT and always end the release, removing the
+  container that never served. (Ragul D)
+- **A prune that fails no longer fails a deployment that is already serving.** Reclaiming
+  space runs after the deployment is live, so a container Docker would not remove made
+  every later deploy of that app go live and then report a failure. It is a warning now.
+  A container stuck `restarting` or `paused` is also stopped with the previous ones and
+  removed with its old image, which is what left `docker rmi` failing for good. (Ragul D)
+- **A container that went healthy once and then began crash-looping is not accepted.**
+  Docker keeps the last health result through the restarting window, so `healthy` alone
+  was not enough; the container has to be running as well. (Ragul D)
+- **`destroy` takes the Caddy site down before the containers it points at.** The other
+  order left Caddy proxying to a container that no longer existed, which answers 502
+  rather than falling through to the server's default app. (Ragul D)
+- **A rollback plan says what a rollback removes,** rather than reusing the deploy
+  sentence, which described the housekeeping as happening "once this one is live". (Ragul D)
+- **The Windows CI jobs pass.** A test asserted the control socket directory stays under
+  40 characters, which is a Unix socket limit; Windows has no connection multiplexing and
+  `Ssh.open` deliberately uses `tmpdir()` there, which is longer. The assertion is now
+  skipped on win32. (Ragul D)
+- **The README and roadmap no longer claim the server target runs on EC2.** It has not
+  been run on any provider's image; `design.md` §9.3 and the roadmap checklist say so, and
+  these two lines contradicted them. (Ragul D)
+
 ### Docs
 
 - **The setup instructions link the CLI in a way that works.** `npm link --workspace
   packages/cli` in the README and CONTRIBUTING failed with "No workspaces found": this is a
   pnpm workspace, so npm has none to resolve. Both now link from the package directory, and
   CONTRIBUTING names running `dist/index.js` directly as the alternative. (Ragul D)
-- **`docs/vm-target-overview.html`** walks through the VM target for the maintainers: what
-  changed from 1.0.2, how building, releasing and every command work step by step, the
-  safety guarantees, and what is verified and what is not. Open it in a browser. (Ragul D)
 - **The site documents the server target** on a new "Your own server" page, and the CLI
   reference, requirements and security pages name it, each saying it is not in 1.0.2. (Ragul D)
 - **`design.md` §9.3 records what was verified and what was not,** including the first run on

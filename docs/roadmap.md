@@ -211,9 +211,11 @@ a live app.
 
 ## AWS: on demand, after the Lightsail streaming experiment
 
-Previously v1.1. Moved behind the VM target: the VM target already runs on EC2, so AWS as a
-managed target is built only when someone needs Lightsail or ECS specifically, and only after
-the streaming experiment below settles whether Lightsail can serve Next.js correctly at all.
+Previously v1.1. Moved behind the VM target: an EC2 instance is a Linux server over SSH, which
+is what the VM target deploys to, so AWS as a managed target is built only when someone needs
+Lightsail or ECS specifically, and only after the streaming experiment below settles whether
+Lightsail can serve Next.js correctly at all. The VM target has not been run on EC2, or on any
+other provider's image: the live checklist above is what would establish that.
 
 **Deferred past v1.0 deliberately.** v1.0 is defined as trustworthy for personal use, and
 the person using it deploys to DigitalOcean. Holding a release for a second cloud nobody
