@@ -187,6 +187,14 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Docs
 
+- **The VM target's runs on a real DigitalOcean Droplet are recorded** in `design.md` §9.3,
+  `docs/roadmap.md` and the README. `server add` applied every step on a clean Droplet,
+  including the swap step for the first time anywhere, and a second run changed nothing.
+  `deploy` served the app directly at 110 ms to first byte. `conformance/vm/e2e.sh` passed in
+  full, `server move` to a fresh Droplet kept the env file and Server Actions key, and
+  `server reboot` on a real kernel, a killed and a hung process recovering, and the disk
+  guard refusing at 2.4 GB free all passed. A real certificate, Hetzner, arm64 and Debian 12
+  are still listed as not run. (Ragul D)
 - **The setup instructions link the CLI in a way that works.** `npm link --workspace
   packages/cli` in the README and CONTRIBUTING failed with "No workspaces found": this is a
   pnpm workspace, so npm has none to resolve. Both now link from the package directory, and

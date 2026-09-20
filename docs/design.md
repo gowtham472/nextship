@@ -533,7 +533,7 @@ Desktop for Windows, so images are pushed through `localhost:5100`.
 The probe is not in CI yet. Until a driver exists it exercises the emulator rather than
 nextship, and a failure would say nothing about this code.
 
-### 9.3 VM target over SSH (Implemented, verified on a local test server)
+### 9.3 VM target over SSH (Implemented, verified on a local test server and DigitalOcean Droplets)
 
 One generic target: **any Ubuntu or Debian server nextship can reach over SSH.** It covers
 a Hetzner or Hostinger VPS, a DigitalOcean Droplet, EC2, Compute Engine, an Azure VM and a
@@ -709,8 +709,8 @@ without nextship. `server reboot` checks it: it records a boot marker (the kerne
 PID 1's start time), reboots through a sudoers rule that allows `systemctl reboot` and
 nothing else, waits for the marker to change, and waits until every container that was
 running reports healthy. On the local stand-in it came back in 5 s with the app healthy, but
-the stand-in is a container whose init restarts on the same kernel, so a real kernel reboot
-is on the v1.1 checklist.
+the stand-in is a container whose init restarts on the same kernel. On a DigitalOcean Droplet
+a real kernel reboot came back in 37 s with every app healthy (§9.3, "What is verified, and what is not").
 
 `server move` reads the app record, env file and key from the old server into memory,
 writes them to the new one, and streams the live image between the servers with the same
@@ -763,17 +763,80 @@ failure; the full log of that run was not captured. This is the first run on a r
 a real firewall and a cloud-init image, whose `50-cloud-init.conf` did not override the
 hardening drop-in.
 
+**On a real cloud Droplet (Ragul D, 2026-09-20).** A DigitalOcean Droplet, `s-1vcpu-2gb-70gb`,
+Ubuntu 24.04.5 LTS, x86_64, 1967 MiB RAM, 41 GB free, with no swap configured: `server add
+--yes` applied every step from a clean machine, and the swap step applied for the first time
+anywhere rather than reporting `ok`: this Droplet had no existing swap, and setup added the
+2 GB file, confirmed afterward with `swapon --show` (`/swapfile`, 2G, priority -2) and `free
+-h`. A second `server add` reported every step `ok` and changed nothing. `deploy --yes`, run
+by hand from a separate test project (`nextship-ichigo`) rather than through `e2e.sh`, served
+the app directly at the Droplet's address: 200 OK, 110 ms to first byte, 176 ms total, no CDN
+or proxy in front. `server status` reported the container running healthy; ufw active with
+only 22, 80 and 443 allowed on both address families; `passwordauthentication no` and
+`permitrootlogin without-password` confirmed on the live `sshd -T`; unattended-upgrades
+enabled; and the watchdog timer firing every 60 seconds. Not run against this Droplet:
+`conformance/vm/e2e.sh` itself, a real domain and certificate, a deployment under a
+concurrent request loop, `server reboot`, the killed and hung process recovery paths, and the
+disk guard. The Droplet reports a reboot required to finish installing security updates, not
+yet actioned.
+
+**The same Droplet, recovery and the disk guard (Ragul D, 2026-09-23).** Run against the
+Droplet as `root`, with `nextship-ichigo` deployed on it. `server add` again reported every
+step `ok`, with 2047 MiB of swap in place, and a second run changed nothing. A process killed
+with `SIGKILL` from the host was restarted by Docker within 2 seconds and was healthy within
+10. A hung server, `next-server` stopped with `SIGSTOP` so nothing answered, went unhealthy
+within 96 seconds, and the watchdog restarted it after three consecutive unhealthy checks,
+logging `restarting nextship-ichigo-...: unhealthy for 3 consecutive checks` under
+`nextship-watchdog`; it served again 4 minutes 52 seconds after it hung. With the disk filled
+to 2.4 GB free, `deploy --yes` refused with "The server has 2.4 GB free, below the 3 GB a
+deployment needs." before building anything, and the running app kept serving. `server
+reboot --yes` rebooted a real kernel, 6.8.0-124 to 6.8.0-139, which also finished the pending
+security updates: SSH was back and both running containers healthy again 37 seconds after
+it started, and the app served. A first `conformance/vm/e2e.sh` run did not complete: it
+deployed the fixture as a second app, which gets no address of its own because the server's
+bare IP already served `nextship-ichigo`, so its streaming check read `/stream` from the wrong
+app and got 404. The script needs a server with no other app on it.
+
+**`server move` to a fresh Droplet, then `e2e.sh` (Ragul D, 2026-09-23).** A second Droplet,
+Ubuntu 24.04.4, amd64, 1967 MiB RAM, with no Docker and no swap. With a marker variable
+pushed to `nextship-ichigo` first, `server move root@167.71.206.46 --yes` set the new server
+up from nothing (Docker 29.8.1, Caddy, ufw, the watchdog, SSH hardening and a 2 GB
+`/swapfile`), copied the app record, env file and Server Actions key, streamed the live image
+and served the app on the new address in 1 minute 34 seconds, 200 at 117 ms to first byte.
+The env file and the key have the same SHA-256 on both servers, and the old server's copy was
+unchanged, since the move only reads it. A second `server add` against the new server changed
+nothing. Destroying the app on the old server from the pre-move `nextship.json`, as the move
+tells you to, left it with only Caddy, and `conformance/vm/e2e.sh` then passed in full against
+it in 8 minutes: streaming through Caddy with first byte 260 ms against a last byte of 2137 ms,
+579 requests and 51 streams across a deployment all 2xx, a build whose server exits on start
+refused with 558 requests all 2xx, rollback, `env push`, a replaced deployment's logs,
+`images prune`, a regenerated ISR page and an optimized image surviving a container restart,
+`domain add`, and a second app destroyed while the first kept serving. The moved app kept
+serving on the new Droplet throughout.
+
+Measured on the Droplets, all `s-1vcpu-2gb-70gb`, amd64, Ubuntu 24.04:
+
+| Check | Result |
+|---|---|
+| `deploy`, first byte straight to the Droplet | 110 ms, 176 ms total |
+| Streaming through Caddy, `/stream` | first byte 260 ms, last byte 2137 ms, shell before tail |
+| Requests across a deployment | 579 of 579 2xx, and 51 of 51 streams |
+| Requests across a failed startup | 558 of 558 2xx, previous deployment stayed live |
+| Requests across `env push` | 47 of 47 2xx |
+| `server move` to a fresh Droplet, setup included | 1 min 34 s, env file and key byte for byte identical |
+| `conformance/vm/e2e.sh`, full run | 8 min 6 s |
+| `server reboot --yes`, real kernel | 37 s until every app was healthy |
+| Killed process, restarted by Docker | healthy within 10 s |
+| Hung process, restarted by the watchdog | serving again 4 min 52 s after it hung |
+| `deploy` with 2.4 GB free | refused before building, the app kept serving |
+
 Not verified, and required before release:
 
 | Not verified | Why |
 |---|---|
-| A hosting provider: a Hetzner arm64 VM and an amd64 VM elsewhere | An amd64 Proxmox VM has passed (above). arm64 has run only against the container stand-in, and no provider's images or networking have been used |
-| The swap step | Both the stand-in and the Proxmox image already had swap, so the step reported `ok` and its apply path has never run |
-| A certificate issued for a real domain, and streaming over HTTPS | Needs public DNS pointing at a reachable server; the Proxmox VM is on a private network |
-| A real kernel reboot | On the stand-in a reboot restarts a container on the same kernel; not yet run on the Proxmox VM |
-| `server move` between two real machines | Run on the stand-in only |
-| Deploy refusing a server under 3 GB free | Unit tested; neither machine's disk was filled |
-| The `vm` CI job, and the GitHub Actions workflow in `vm.md` | Not run until this branch is pushed |
+| A hosting provider: a Hetzner VM, and arm64 on any real machine | An amd64 Proxmox VM and an amd64 DigitalOcean Droplet have passed (above). arm64 has run only against the container stand-in, and Hetzner has not been used |
+| A certificate issued for a real domain, and streaming over HTTPS | Needs public DNS pointing at a reachable server; neither the Proxmox VM nor the Droplet used so far has had a domain pointed at it |
+| The GitHub Actions workflow in `vm.md` | Not yet run; the `vm` CI job itself now passes on every push to `main` (`ssh localhost` stands in for a server) |
 | `--build remote` from Windows over a loopback forward | No Windows machine was used |
 
 #### Limitations
