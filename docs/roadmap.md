@@ -181,11 +181,11 @@ stays identical.
 | Phase | Deliverable | State |
 |---|---|---|
 | 0 | Commands target-agnostic, `nextship.json` version 2, the build platform and Docker daemon chosen by the target, and this design | **Done.** DigitalOcean plan output checked byte for byte against recorded API responses before and after |
-| 1 | SSH layer with a pinned host key, and `nextship server add` | **Done.** Verified end to end against a local Ubuntu 24.04 arm64 stand-in over SSH, not yet on a provider. The CI job exists but has not run, since the branch is not pushed |
-| 2 | VM driver: remote or local builds, zero-downtime release behind Caddy, rollback, the Server Actions key kept on the server | **Done.** Verified on the local stand-in: streaming through Caddy, no failed request across a deployment, a failed startup leaving the previous deployment serving, and rollback. Not yet on a provider |
-| 3 | Day-two commands on a server: env, domains, logs with history, images, destroy, `server status`, a disk guard | **Done.** Verified on the local stand-in, including two apps on one server and destroying one. A real certificate being issued is not verified |
-| 4 | Reboot resilience, `server move`, GitHub Actions usage, VM checks in `doctor` | **Done.** `server reboot` and `server move` verified on the local stand-in, where a reboot restarts a container rather than a kernel. The GitHub Actions workflow in `vm.md` has not run |
-| 5 | A CI job and `conformance/vm/e2e.sh` that run all of it against a real SSH server, docs | **Done.** `e2e.sh` passes in full against a fresh local stand-in. The CI job has not run, since the branch is not pushed |
+| 1 | SSH layer with a pinned host key, and `nextship server add` | **Done.** Verified end to end against a local Ubuntu 24.04 arm64 stand-in over SSH, and on two fresh DigitalOcean Droplets, amd64. The CI job passes on every push to `main` |
+| 2 | VM driver: remote or local builds, zero-downtime release behind Caddy, rollback, the Server Actions key kept on the server | **Done.** Verified on the local stand-in: streaming through Caddy, no failed request across a deployment, a failed startup leaving the previous deployment serving, and rollback. The same passed on a DigitalOcean Droplet through `e2e.sh` |
+| 3 | Day-two commands on a server: env, domains, logs with history, images, destroy, `server status`, a disk guard | **Done.** Verified on the local stand-in and a DigitalOcean Droplet, including two apps on one server and destroying one, and the disk guard refusing a real disk at 2.4 GB free. A real certificate being issued is not verified |
+| 4 | Reboot resilience, `server move`, GitHub Actions usage, VM checks in `doctor` | **Done.** `server reboot` and `server move` verified on the local stand-in and on DigitalOcean Droplets, the reboot on a real kernel. The GitHub Actions workflow in `vm.md` has not run |
+| 5 | A CI job and `conformance/vm/e2e.sh` that run all of it against a real SSH server, docs | **Done.** `e2e.sh` passes in full against a fresh local stand-in and a DigitalOcean Droplet, and the `vm` CI job passes on every push to `main` (`ssh localhost` stands in for a server) |
 
 **Not claimed until run on real providers.** Before release, record each result or "not
 done" in the pull request and in `design.md` §9.3:
@@ -205,7 +205,39 @@ done" in the pull request and in `design.md` §9.3:
 Items 2, 3, 5, 6, 7, 9 and 10 passed on the local stand-in, which is not a provider. On
 2026-09-16, items 2 and 3 also passed on an Ubuntu 24.04 amd64 VM on a Proxmox cluster:
 `server add` applied every step on a clean machine and `e2e.sh` ran to its final line. The
-swap step has still never applied, because every machine tried so far already had swap. The regression check on DigitalOcean before merge: `deploy --yes`, `rollback
+swap step has still never applied, because every machine tried so far already had swap.
+
+On 2026-09-20, item 2 passed on a real DigitalOcean Droplet (`s-1vcpu-2gb-70gb`, Ubuntu
+24.04.5, amd64, 1967 MiB RAM, no swap configured going in): `server add --yes` applied every
+step from a clean machine, and for the first time on any machine tried, the swap step itself
+reported `CHANGE` and added the 2 GB `/swapfile`, confirmed afterward with `swapon --show`. A
+second `server add` reported every step `ok` and changed nothing. `deploy --yes`, run by
+hand from a separate test project rather than through `e2e.sh`, served the app directly at
+the Droplet's address: 200 OK, 110 ms to first byte, 176 ms total, no CDN or proxy in front.
+`server status` reported the container running healthy, ufw allowing only 22, 80 and 443 on
+both address families, `passwordauthentication no` and `permitrootlogin without-password` on
+the live `sshd` config, unattended-upgrades enabled, and the watchdog timer firing every 60
+seconds. Not run against this Droplet: `conformance/vm/e2e.sh` itself, a real domain and
+certificate, a deployment under a concurrent request loop, `server reboot`, the killed and
+hung process recovery paths, and the disk guard. The Droplet reports a reboot required to
+finish installing security updates, not yet actioned. Still needed for item 1: a Hetzner VM,
+and arm64 on any real machine rather than the container stand-in.
+
+On 2026-09-23, items 6, 7 and 8 passed on the same Droplet. `server reboot --yes` rebooted a
+real kernel (6.8.0-124 to 6.8.0-139) and every app was healthy again in 37 seconds. A killed
+app process was restarted by Docker within 2 seconds; a hung one was restarted by the
+watchdog after three unhealthy checks and served again 4 minutes 52 seconds after it hung.
+`deploy --yes` refused at 2.4 GB free, before building. Item 9 passed the same day:
+`server move` to a second, fresh Droplet set it up from nothing, including the swap file,
+and the app served there in 1 minute 34 seconds with the env file and Server Actions key
+identical on both servers. With the app then destroyed on the first Droplet, items 3, 5 and
+10 passed there: `e2e.sh` ran in full in 8 minutes, with 579 requests across a deployment all
+2xx. `e2e.sh` needs a server with no other app: a first run on the Droplet, while it still
+held `nextship-ichigo`, deployed the fixture without an address and failed its streaming
+check. Still to run on a provider: items 1 (a Hetzner VM, and arm64), 4 and 11, and item 2
+on Debian 12.
+
+The regression check on DigitalOcean before merge: `deploy --yes`, `rollback
 --yes`, `logs --follow`, `env push --yes`, `domain` and `images` behave as on `main`, against
 a live app.
 
