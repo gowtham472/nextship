@@ -124,7 +124,13 @@ test('every connection pins the recorded key under an alias and never prompts', 
 
     const knownHosts = value('UserKnownHostsFile')?.split('=')[1] ?? ''
     assert.equal(await readFile(knownHosts, 'utf8'), `nextship-server ssh-ed25519 ${ED25519}\n`)
-    assert.ok(path.dirname(knownHosts).length < 40, 'the control socket directory has to stay short')
+    // The length budget is a Unix socket's 104 byte limit, which OpenSSH spends
+    // on a 40 character connection hash under this directory. Windows has no
+    // connection multiplexing, so `options()` sets no ControlPath there and
+    // `open` deliberately uses tmpdir(), which is already longer than this.
+    if (process.platform !== 'win32') {
+      assert.ok(path.dirname(knownHosts).length < 40, 'the control socket directory has to stay short')
+    }
     assert.deepEqual(ssh.destination(), ['--', 'nextship@203.0.113.10'])
   } finally {
     await ssh.close()
