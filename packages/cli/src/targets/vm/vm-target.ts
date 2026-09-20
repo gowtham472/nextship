@@ -422,6 +422,10 @@ export class VmTarget implements Target {
   /** A server has no hostname of its own that could be mistaken for a custom domain. */
   readonly platformSuffixes: string[] = []
 
+  // Only the server's default app answers on the server's own address. Every
+  // other app on it is reachable at its domains and nowhere else.
+  readonly noPlatformHost = 'platform   none: this app answers only on the domains attached to it'
+
   readonly emptyLogs = [
     'The running container has written nothing yet.',
     'Earlier deployments keep their output in the journal: `nextship logs --deployment <id>`.',
@@ -1250,9 +1254,17 @@ export class VmTarget implements Target {
     )
   }
 
-  async followLogs(appId: string, write: (text: string) => void, signal: AbortSignal): Promise<string | null> {
+  async followLogs(
+    appId: string,
+    write: (text: string) => void,
+    signal: AbortSignal,
+    onReady: () => void
+  ): Promise<string | null> {
     await this.appRecord(appId)
+    // Both of these throw when there is nothing to follow, so readiness is only
+    // announced once a container is known.
     const container = await this.liveContainer()
+    onReady()
     const code = await (await this.ssh()).stream(`docker logs -f --tail 50 ${q(container)} 2>&1`, write, signal)
     if (signal.aborted) return null
     return code === 0

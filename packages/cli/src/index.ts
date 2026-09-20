@@ -17,7 +17,7 @@ import { runImage } from './run.js'
 import { diagnose, type Finding } from './doctor.js'
 import { deploy } from './deploy.js'
 import { closeTargets } from './owned-app.js'
-import { readConfig, type BuildMode } from './config.js'
+import { readConfig, type BuildMode, type TargetId } from './config.js'
 import { listEnv, pushEnv, removeEnv } from './env.js'
 import { addDomain, listDomains, removeDomain, DEFAULT_MIN_TLS } from './domain.js'
 import { listImages, pruneImages, DEFAULT_KEEP } from './images.js'
@@ -238,7 +238,31 @@ async function runPackage(): Promise<void> {
 async function runDoctor(): Promise<void> {
   step('Checking this project')
   const project = await detectProject(process.cwd())
-  const findings = await diagnose(project, (await readConfig(project.root))?.target ?? 'digitalocean')
+
+  // doctor is the command someone runs when something is already wrong, so a
+  // nextship.json it cannot read is a finding to report, not a reason to refuse
+  // to diagnose anything else. The rest of the checks do not depend on it; only
+  // the target-specific wording does, which falls back to the default target.
+  let target: TargetId = 'digitalocean'
+  let configFinding: Finding | null = null
+  try {
+    target = (await readConfig(project.root))?.target ?? target
+  } catch (error) {
+    configFinding = {
+      level: 'blocker',
+      title: 'nextship.json cannot be read.',
+      consequence:
+        `${error instanceof Error ? error.message : String(error)} ` +
+        'Every command that needs the recorded app will refuse to run until this is fixed. ' +
+        `The checks below assume the ${target} target.`,
+      action:
+        error instanceof NextshipError
+          ? error.action
+          : 'Restore nextship.json from version control, or delete it and run `nextship deploy` to recreate it.',
+    }
+  }
+
+  const findings = [...(configFinding ? [configFinding] : []), ...(await diagnose(project, target))]
 
   const blockers = findings.filter((finding) => finding.level === 'blocker')
   const warnings = findings.filter((finding) => finding.level === 'warning')

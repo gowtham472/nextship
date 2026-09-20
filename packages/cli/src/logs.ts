@@ -56,17 +56,26 @@ export async function logs(project: ProjectInfo, options: LogOptions): Promise<v
  * Ctrl+C aborts the stream rather than letting the process die under it, so the
  * command reports a stop as a stop, and a stream the target ended is reported
  * rather than left to look like the app went quiet.
+ *
+ * Nothing is printed until the driver reports a stream, so a failure to open
+ * one is the only thing the user sees.
  */
 async function follow(target: Target, appId: string): Promise<void> {
-  detail('following, press Ctrl+C to stop')
-
+  // Printed when the driver reports the stream open, not before it is asked
+  // for: an app with no running container has no stream, and saying we are
+  // following one and then failing describes something that never happened.
   const controller = new AbortController()
   const stop = (): void => controller.abort()
   process.on('SIGINT', stop)
 
   let ended: string | null
   try {
-    ended = await target.followLogs(appId, (text) => process.stdout.write(text), controller.signal)
+    ended = await target.followLogs(
+      appId,
+      (text) => process.stdout.write(text),
+      controller.signal,
+      () => detail('following, press Ctrl+C to stop')
+    )
   } finally {
     process.off('SIGINT', stop)
   }

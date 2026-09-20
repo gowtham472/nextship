@@ -50,13 +50,19 @@ export interface RemoveDomainOptions {
 // ------------------------------------------------------------------- pure
 
 /**
- * Checks a hostname before it reaches the target.
+ * Checks the shape of a hostname, which needs no target and so runs before one
+ * is resolved.
  *
  * The API would reject most of these too, but only after the request, and its
  * message describes a spec field rather than the thing the user typed. A URL
  * pasted instead of a hostname is the common case and deserves to be named.
+ *
+ * Split from the platform check below because resolving a target authenticates
+ * against it, and something the user mistyped should not first be reported as a
+ * missing token: the domain is wrong whether or not there is a token to check
+ * it with.
  */
-export function validateDomain(domain: string, platformSuffixes: string[]): void {
+export function validateDomainShape(domain: string): void {
   if (domain !== domain.trim() || domain.length === 0) {
     throw new NextshipError('The domain is empty or has surrounding whitespace.', 'Pass the hostname on its own.')
   }
@@ -66,18 +72,31 @@ export function validateDomain(domain: string, platformSuffixes: string[]): void
       'Pass just the hostname, for example preview.example.com.'
     )
   }
-  if (platformSuffixes.some((suffix) => domain.endsWith(suffix))) {
-    throw new NextshipError(
-      `${domain} is a platform domain, which the target manages itself.`,
-      'It always works and cannot be attached. Add a domain you own instead.'
-    )
-  }
   if (!/^(?=.{4,253}$)[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(domain)) {
     throw new NextshipError(
       `"${domain}" is not a valid domain name.`,
       'Use lowercase letters, digits, hyphens and dots, for example preview.example.com.'
     )
   }
+}
+
+/**
+ * Refuses a hostname the target manages itself, which can only be asked of a
+ * resolved target.
+ */
+export function assertNotPlatformDomain(domain: string, platformSuffixes: string[]): void {
+  if (platformSuffixes.some((suffix) => domain.endsWith(suffix))) {
+    throw new NextshipError(
+      `${domain} is a platform domain, which the target manages itself.`,
+      'It always works and cannot be attached. Add a domain you own instead.'
+    )
+  }
+}
+
+/** Both checks, for callers that already hold a target. */
+export function validateDomain(domain: string, platformSuffixes: string[]): void {
+  validateDomainShape(domain)
+  assertNotPlatformDomain(domain, platformSuffixes)
 }
 
 // --------------------------------------------------------------- commands
@@ -89,10 +108,15 @@ export async function listDomains(project: ProjectInfo): Promise<void> {
   const configured = address?.domains ?? []
 
   step(`Domains for ${app.name}`)
+  // An app nextship cannot read at all is unknown on every target. One that
+  // reads back without a platform host is the driver's to describe, because
+  // what that means differs by target.
   detail(
-    address === null || address.platformHost !== null
-      ? `platform   ${address?.platformHost ?? 'unknown'}  (always works, managed by ${app.target.displayName})`
-      : 'platform   none: this app answers only on the domains attached to it'
+    address?.platformHost
+      ? `platform   ${address.platformHost}  (always works, managed by ${app.target.displayName})`
+      : address === null
+        ? `platform   unknown  (always works, managed by ${app.target.displayName})`
+        : app.target.noPlatformHost
   )
 
   if (configured.length === 0) {
@@ -117,8 +141,12 @@ export async function addDomain(project: ProjectInfo, options: AddDomainOptions)
     )
   }
 
+  // Before the target is resolved, so a mistyped domain is reported as a
+  // mistyped domain rather than as whatever authenticating would have failed on.
+  validateDomainShape(options.domain)
+
   const app = await ownedApp(project)
-  validateDomain(options.domain, app.target.platformSuffixes)
+  assertNotPlatformDomain(options.domain, app.target.platformSuffixes)
   const address = await app.target.address(app.appId)
   const existing = address?.domains ?? []
   // The first custom domain becomes primary whatever is asked for, so the plan

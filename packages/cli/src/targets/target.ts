@@ -369,6 +369,18 @@ export interface Target {
   /** Hostnames the target manages itself, which cannot be attached as custom domains. */
   readonly platformSuffixes: string[]
 
+  /**
+   * The `platform` line `domain` prints when the app exists but `address`
+   * reports no platform host.
+   *
+   * It is the driver's because the same fact means opposite things: on App
+   * Platform an app without an ingress yet is one that has not deployed, and it
+   * will get one, so the honest word is that nextship does not know it. On a
+   * server only the default app answers on the server's address, so an app
+   * without one really does answer on its custom domains alone.
+   */
+  readonly noPlatformHost: string
+
   /** Anything a `domain add` plan should warn about for this domain before it is attached. */
   domainWarnings(appId: string, domain: string): Promise<string[]>
 
@@ -408,8 +420,17 @@ export interface Target {
    * stream. Resolves with a note to print when the target ended it, so a stream
    * that expired is not mistaken for an app that went quiet, or null when it
    * stopped because `signal` aborted.
+   *
+   * `onReady` is called once the stream is actually established and never if
+   * opening it fails, so the command does not announce that it is following
+   * something and then report that there was nothing to follow.
    */
-  followLogs(appId: string, write: (text: string) => void, signal: AbortSignal): Promise<string | null>
+  followLogs(
+    appId: string,
+    write: (text: string) => void,
+    signal: AbortSignal,
+    onReady: () => void
+  ): Promise<string | null>
 
   // --------------------------------------------------------------- destroy
 
