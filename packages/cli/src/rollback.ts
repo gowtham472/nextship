@@ -59,7 +59,7 @@ export async function rollback(project: ProjectInfo, options: RollbackOptions): 
   }
   detail('no build, no push: this reuses an image that already ran')
   for (const note of app.target.rollbackNotes) detail(note)
-  detail(app.target.deployRemoves ?? 'nothing is deleted; the current deployment stays in the history')
+  detail(app.target.rollbackRemoves ?? 'nothing is deleted; the current deployment stays in the history')
 
   if (!options.confirmed) {
     ok('This was a plan only. Nothing changed.')
@@ -72,7 +72,17 @@ export async function rollback(project: ProjectInfo, options: RollbackOptions): 
   }
 
   step('Rolling back')
-  await app.target.rollback(app.appId, target.id, detail)
+  // A rollback starts a container and waits for it exactly as a deploy does, so
+  // Ctrl+C here is handled rather than left to kill the process holding the
+  // server's deploy lock.
+  const stopping = new AbortController()
+  const interrupt = (): void => stopping.abort()
+  process.on('SIGINT', interrupt)
+  try {
+    await app.target.rollback(app.appId, target.id, detail, stopping.signal)
+  } finally {
+    process.off('SIGINT', interrupt)
+  }
 
   const address = await app.target.address(app.appId)
   ok(
