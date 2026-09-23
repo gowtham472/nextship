@@ -157,7 +157,7 @@ target that is built, verified live, and actually used. The second target is v1.
 **Explicitly not in v1.0:** AWS, a second compute option, CDN assets, and anything from
 "Beyond v1.0". Shipping one target honestly beats shipping two badly.
 
-## v1.1: any Linux server over SSH (Built on `feat/vm-target`, awaiting live verification)
+## v1.1: any Linux server over SSH (Merged to `main`, awaiting the rest of its live checklist)
 
 The second target, decided by Ragul D: **one generic target for any Ubuntu or Debian server
 reached over SSH**, instead of a driver per managed cloud. It covers Hetzner, a Hostinger

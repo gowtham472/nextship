@@ -187,6 +187,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Docs
 
+- **The README and the roadmap no longer point at a branch that was merged.** Both described
+  the server target as living on `feat/vm-target` and as having run only on a local test
+  server, which stopped being true when it landed on `main` and again when the Droplet runs
+  were recorded. The three places that said so now name what is left before release instead:
+  Hetzner, arm64, Debian 12 and a certificate for a real domain. (Gowtham)
 - **The VM target's runs on a real DigitalOcean Droplet are recorded** in `design.md` §9.3,
   `docs/roadmap.md` and the README. `server add` applied every step on a clean Droplet,
   including the swap step for the first time anywhere, and a second run changed nothing.

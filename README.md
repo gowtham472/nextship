@@ -43,7 +43,7 @@ destroyed afterwards, so its URL no longer serves.
 
 ## Status
 
-**Version 1.0.2, for Next.js on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. Next is v1.1, a target for any Linux server reached over SSH, built on `feat/vm-target` and not released until it has run on real providers.
+**Version 1.0.2, for Next.js on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. Next is v1.1, a target for any Linux server reached over SSH, merged to `main` and not released until the rest of its checklist has run: Hetzner, arm64, Debian 12 and a certificate for a real domain.
 
 | Area | State |
 |---|---|
@@ -1149,7 +1149,7 @@ Bun's adapter keeps a list of its own the same way.
 | **v0.3** | First cloud deployment to DigitalOcean: deploy, rollback, logs | Done, verified live. Image retention and a health endpoint were moved to v0.4 with reasons |
 | **v0.4** | Day-two operations: domains and TLS, env, images, destroy, logs | Done, verified live |
 | **v1.0** | Trustworthy for personal use: compatibility suite results, streaming conformance, honest limitations | Done. The suite passes in full (1123 of 1123 suites), the package is on npm under Apache-2.0, and streaming conformance passes in CI and on a live App Platform app |
-| **v1.1** | Any Linux server over SSH | Built, and verified end to end on a local test server. Live verification on real providers comes before release |
+| **v1.1** | Any Linux server over SSH | Built, and verified end to end on a local test server and on DigitalOcean Droplets. Hetzner, arm64, Debian 12 and a certificate for a real domain come before release |
 
 Beyond v1.0, each with the trigger that would justify it: correctness at scale (a
 shared cache and distributed tags, needed once there is more than one instance),
