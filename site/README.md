@@ -32,6 +32,7 @@ to a marketing page.
 | `content/docs/*.mdx` | The documentation itself. Frontmatter needs `title` and `description` |
 | `lib/nav.ts` | The reading order, declared rather than derived from the filesystem |
 | `lib/docs.ts` | Loading, validation and heading extraction |
+| `app/llms.txt/`, `app/llms-full.txt/`, `app/md/[file]/`, `lib/markdown.ts` | The site as text for AI agents: `/llms.txt` indexes every page, `/llms-full.txt` is all of them in one file, and `/md/<slug>.md` is each page as markdown, which its HTML names in a `<link rel="alternate">`. A docs page using a component the converter does not know fails the build |
 | `components/mdx.tsx` | How each Markdown element renders |
 | `components/docs/` | The docs page parts: the outline that marks the section being read, code blocks with a copy button, callouts and the mobile menu |
 | `components/search.tsx`, `lib/search.ts` | Search, over an index of every page and heading built at build time |

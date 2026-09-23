@@ -13,6 +13,7 @@ import { TableOfContents } from '@/components/docs/toc'
 import { mdxComponents } from '@/components/mdx'
 import { darkTheme, lightTheme, outputLanguage } from '@/lib/code-themes'
 import { getDoc, getHeadings } from '@/lib/docs'
+import { markdownPath } from '@/lib/markdown'
 import { DOCS_SLUGS, getNeighbours, getSection } from '@/lib/nav'
 
 /**
@@ -92,8 +93,12 @@ export async function generateMetadata(
     title: doc.title,
     description: doc.description,
     // The introduction is served at /docs and at /docs/introduction. Pointing
-    // both at /docs stops the two addresses competing for the same page.
-    alternates: { canonical: slug === 'introduction' ? '/docs' : `/docs/${slug}` },
+    // both at /docs stops the two addresses competing for the same page. The
+    // markdown alternate is how an agent on this page finds its text version.
+    alternates: {
+      canonical: slug === 'introduction' ? '/docs' : `/docs/${slug}`,
+      types: { 'text/markdown': markdownPath(slug) },
+    },
     openGraph: { title: doc.title, description: doc.description, type: 'article', images },
   }
 }

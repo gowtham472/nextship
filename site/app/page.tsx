@@ -18,6 +18,7 @@ import { ServerFlow } from '@/components/landing/server-flow'
 import { SpotlightCard } from '@/components/spotlight-card'
 import { Marquee } from '@/components/ui/marquee'
 import { NumberTicker } from '@/components/ui/number-ticker'
+import { SITE_URL } from '@/lib/site'
 
 const INSTALL = 'npm install -g nextship-cli'
 
@@ -112,6 +113,32 @@ const LEAVING = [
   { area: 'Analytics and Speed Insights', state: 'Not available. Those are Vercel products, not Next.js features.' },
 ]
 
+/**
+ * What nextship is, as schema.org data, so a search engine or an agent can read it without
+ * parsing the design. Only facts the docs state: the operating systems are the ones the
+ * CLI has deployed from and CI runs on.
+ */
+const STRUCTURED_DATA = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'nextship',
+  description:
+    'An open-source CLI that deploys a Next.js app to a server you own over SSH, or to DigitalOcean App Platform, with no Dockerfile, no next.config edits and no infrastructure code.',
+  url: SITE_URL,
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'Windows, macOS, Linux',
+  softwareRequirements: 'Node.js 22 or newer, Docker 23 or newer, Next.js 16.2 or newer',
+  downloadUrl: 'https://www.npmjs.com/package/nextship-cli',
+  license: 'https://www.apache.org/licenses/LICENSE-2.0',
+  isAccessibleForFree: true,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  author: [
+    { '@type': 'Person', name: 'Gowtham' },
+    { '@type': 'Person', name: 'Ragul D' },
+  ],
+  sameAs: ['https://github.com/gowtham472/nextship', 'https://www.npmjs.com/package/nextship-cli'],
+}
+
 /** An entrance delay for the hero's staged animation, read by .fade-up in globals.css. */
 function delay(ms: number): React.CSSProperties {
   return { '--delay': `${ms}ms` } as React.CSSProperties
@@ -120,6 +147,11 @@ function delay(ms: number): React.CSSProperties {
 export default function HomePage() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        // A constant, never user input. Escaping < keeps a string in it from closing the tag.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA).replace(/</g, '\\u003c') }}
+      />
       <section className="relative isolate overflow-hidden border-b border-border">
         <div className="hero-glow -z-10" aria-hidden="true">
           <span />

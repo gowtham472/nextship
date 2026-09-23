@@ -10,3 +10,17 @@
 # copy can never be stale.
 /_next/static/*
   Cache-Control: public, max-age=31536000, immutable
+
+# The text versions of the site, for AI agents. Served as UTF-8 text, and readable from
+# any origin, because an agent running in a browser fetches them cross-origin.
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+  Access-Control-Allow-Origin: *
+
+/llms-full.txt
+  Content-Type: text/plain; charset=utf-8
+  Access-Control-Allow-Origin: *
+
+/md/*
+  Content-Type: text/markdown; charset=utf-8
+  Access-Control-Allow-Origin: *

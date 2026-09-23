@@ -28,6 +28,15 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   the hero is off screen. LightRays and its WebGL library, `ogl`, are removed, and
   `THIRD_PARTY_NOTICES.md` no longer lists two components deleted earlier. (Gowtham)
 
+### Added
+
+- **The site can be read by AI agents as text.** `/llms.txt` indexes every docs page with
+  the facts most often got wrong, `/llms-full.txt` is the whole documentation in one file,
+  and `/md/<slug>.md` is each page as markdown, named by a `<link rel="alternate">` in its
+  HTML so an agent on any page finds it. All are built from the same MDX and navigation as
+  the HTML, so they cannot drift from it, and a page using a component the converter does
+  not know fails the build. The landing page describes nextship as schema.org data. (Gowtham)
+
 ### Docs
 
 - **The site's security and evidence pages say where code goes on a server.** Both still
