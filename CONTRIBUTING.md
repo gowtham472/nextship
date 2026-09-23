@@ -21,8 +21,11 @@ beyond those two.
 CI runs the same build, typecheck and tests on every push to `main` and every pull
 request, on Linux and Windows with Node 22 and 24. It then packs the CLI and installs the
 tarball into an empty project, checking that the package a user receives is complete and
-that its `nextship` command runs, and it builds the site. Run the packed-install check
-locally after `pnpm build`:
+that its `nextship` command runs, and it builds the site. Two more jobs cover the targets
+end to end: one builds the streaming fixture and fails unless it streams, and one runs
+`conformance/vm/e2e.sh` against the runner itself over `ssh localhost`, which is how the
+server target is tested on every change. Run the packed-install check locally after
+`pnpm build`:
 
 ```bash
 node packages/cli/scripts/verify-pack.mjs

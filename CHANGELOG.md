@@ -17,7 +17,9 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 - **The site's quick start and the README's architecture section show both targets.** The
   quick start went straight to App Platform and the architecture section still called it the
-  only target; `design.md` still said swap had never applied on a real provider. (Gowtham)
+  only target; `design.md` still said swap had never applied on a real provider; and
+  CONTRIBUTING described CI without the streaming job or the server target's `e2e.sh` job.
+  (Gowtham)
 
 ## [1.1.0] - 2026-09-23
 
