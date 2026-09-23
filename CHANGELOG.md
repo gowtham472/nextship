@@ -36,6 +36,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   HTML so an agent on any page finds it. All are built from the same MDX and navigation as
   the HTML, so they cannot drift from it, and a page using a component the converter does
   not know fails the build. The landing page describes nextship as schema.org data. (Gowtham)
+- **The website counts page views**, with Cloudflare Web Analytics, which sets no cookies
+  and does not follow visitors to other sites, so no consent banner is needed. Until now
+  nothing measured whether anyone reached the site, so no post about it could be judged.
+  The security page says so, and that this is the website only: the CLI still sends
+  nothing. (Gowtham)
 
 ### Docs
 
