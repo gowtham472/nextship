@@ -157,7 +157,7 @@ target that is built, verified live, and actually used. The second target is v1.
 **Explicitly not in v1.0:** AWS, a second compute option, CDN assets, and anything from
 "Beyond v1.0". Shipping one target honestly beats shipping two badly.
 
-## v1.1: any Linux server over SSH (Merged to `main`, awaiting the rest of its live checklist)
+## v1.1: any Linux server over SSH (Released in 1.1.0, 2026-09-23)
 
 The second target, decided by Ragul D: **one generic target for any Ubuntu or Debian server
 reached over SSH**, instead of a driver per managed cloud. It covers Hetzner, a Hostinger
@@ -187,8 +187,9 @@ stays identical.
 | 4 | Reboot resilience, `server move`, GitHub Actions usage, VM checks in `doctor` | **Done.** `server reboot` and `server move` verified on the local stand-in and on DigitalOcean Droplets, the reboot on a real kernel. The GitHub Actions workflow in `vm.md` has not run |
 | 5 | A CI job and `conformance/vm/e2e.sh` that run all of it against a real SSH server, docs | **Done.** `e2e.sh` passes in full against a fresh local stand-in and a DigitalOcean Droplet, and the `vm` CI job passes on every push to `main` (`ssh localhost` stands in for a server) |
 
-**Not claimed until run on real providers.** Before release, record each result or "not
-done" in the pull request and in `design.md` §9.3:
+**The live checklist.** Each result is recorded here and in `design.md` §9.3, and nothing
+is claimed until it has run. The items that had not run when 1.1.0 was released moved to
+v1.1.1 below:
 
 1. A Hetzner arm64 VM and an amd64 VM from another provider, both Ubuntu 24.04
 2. `server add` twice on each (the second changes nothing), and once on Debian 12
@@ -237,17 +238,40 @@ held `nextship-ichigo`, deployed the fixture without an address and failed its s
 check. Still to run on a provider: items 1 (a Hetzner VM, and arm64), 4 and 11, and item 2
 on Debian 12.
 
-The regression check on DigitalOcean before merge: `deploy --yes`, `rollback
---yes`, `logs --follow`, `env push --yes`, `domain` and `images` behave as on `main`, against
-a live app.
+**The DigitalOcean regression check passed on 2026-09-23**, before 1.1.0 was tagged, against
+a throwaway App Platform app built with the merged code. `deploy --yes` created the app and
+served it, a second `deploy --yes` updated it, `rollback --yes` returned to the first
+deployment with no build or push, `logs` and `logs --follow` streamed, `env push --yes` set a
+variable the running app read about 60 seconds later, and `domain` and `images` listed what
+was there. The plan printed by the merged code was identical to 1.0.2's for the same
+project. The app and the registry created for it were removed afterwards. The same day, the
+compatibility suite on the merged code passed 1123 of 1123 suites on 16.4.0-canary.22 and
+1108 of 1108 on v16.3.5, as before the merge.
+
+## v1.1.1: the rest of the server target's live checklist (Planned)
+
+What had not run on a real provider when 1.1.0 was released. Each is recorded, pass or fail,
+in `design.md` §9.3 when it runs, and a defect it finds ships here as a fix:
+
+| Item | Why it matters |
+|---|---|
+| A Hetzner VM, and an arm64 machine that is not the container stand-in (checklist item 1) | Every real run so far was amd64, on DigitalOcean or Proxmox |
+| `server add` on Debian 12 (item 2) | Debian 12 is a supported distribution that has only run on the stand-in |
+| `domain add` with a real domain: the certificate is issued, and streaming works over HTTPS (item 4) | No server used so far had a domain pointed at it |
+| A deployment from the GitHub Actions workflow in `vm.md` with `--build local` (item 11) | The documented CI path has never run |
+| `--build remote` from Windows over the loopback forward | No Windows machine has built on a server |
+
+Known from the Droplet runs, to fix or document here: `conformance/vm/e2e.sh` needs a server
+with no other app on it, and after adding swap `server add` prints `done   swap already on`,
+the post-apply check's wording rather than what it did.
 
 ## AWS: on demand, after the Lightsail streaming experiment
 
 Previously v1.1. Moved behind the VM target: an EC2 instance is a Linux server over SSH, which
 is what the VM target deploys to, so AWS as a managed target is built only when someone needs
 Lightsail or ECS specifically, and only after the streaming experiment below settles whether
-Lightsail can serve Next.js correctly at all. The VM target has not been run on EC2, or on any
-other provider's image: the live checklist above is what would establish that.
+Lightsail can serve Next.js correctly at all. The VM target has run on DigitalOcean Droplets but
+not on EC2: the live checklist above is what would establish that.
 
 **Deferred past v1.0 deliberately.** v1.0 is defined as trustworthy for personal use, and
 the person using it deploys to DigitalOcean. Holding a release for a second cloud nobody

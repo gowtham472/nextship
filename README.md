@@ -12,7 +12,7 @@
 
 **[Documentation](https://nextship.doodlebytestudio.in/docs)** and a [quick start](https://nextship.doodlebytestudio.in/docs/quick-start).
 
-> Vercel's zero-config experience, in your own DigitalOcean account.
+> Vercel's zero-config experience, in your own DigitalOcean account or on your own server.
 > Your code, your data, your bill, your region.
 
 nextship takes a Next.js app and puts it on infrastructure you own, with no
@@ -43,13 +43,13 @@ destroyed afterwards, so its URL no longer serves.
 
 ## Status
 
-**Version 1.0.2, for Next.js on DigitalOcean.** Verified against live App Platform deployments, including streaming through App Platform itself, and deployed from both Windows and an Apple Silicon Mac. Next is v1.1, a target for any Linux server reached over SSH, merged to `main` and not released until the rest of its checklist has run: Hetzner, arm64, Debian 12 and a certificate for a real domain.
+**Version 1.1.0, for Next.js on DigitalOcean App Platform or on any Linux server over SSH.** App Platform is verified against live deployments, including streaming through App Platform itself, re-checked against a live app for this release, and deployed from both Windows and an Apple Silicon Mac. The server target is new in 1.1.0 and verified on a local test server, a Proxmox VM and DigitalOcean Droplets. Hetzner, arm64, Debian 12 and a certificate for a real domain have not run yet, and are the v1.1.1 checklist.
 
 | Area | State |
 |---|---|
 | Local pipeline: `detect`, `build`, `package`, `run` | Done. Verified on a real production project and a purpose-built feature app |
-| DigitalOcean deployment: `deploy`, `rollback`, `logs` | Done. Verified against a live app, including two rollbacks in opposite directions, and deployed from an Apple Silicon Mac (M3 Max) with 0.4.4 from npm, on the second attempt |
-| Any Linux server over SSH | v1.1, built and not released. `server add`, deploy, rollback and every day-two command pass end to end against a local Ubuntu 24.04 test server over SSH. On a real DigitalOcean Droplet (2 GB RAM, Ubuntu 24.04.5, amd64), `server add` applied every step including swap for the first time anywhere, a second run changed nothing, and `deploy` served the app directly at 110 ms to first byte. On Droplets, `conformance/vm/e2e.sh` passed in full, `server move` to a fresh one kept the env and Server Actions key, `server reboot` brought every app back in 37 seconds, the watchdog restarted a hung app, and `deploy` refused a nearly full disk. A real certificate, Hetzner, arm64 and Debian 12 are still on the checklist. See [`docs/vm.md`](./docs/vm.md) and [`docs/roadmap.md`](./docs/roadmap.md) |
+| DigitalOcean deployment: `deploy`, `rollback`, `logs` | Done. Verified against a live app, including two rollbacks in opposite directions, and deployed from an Apple Silicon Mac (M3 Max) with 0.4.4 from npm, on the second attempt. Re-checked for 1.1.0 against a live app: deploy, a second deploy, rollback, `logs`, `logs --follow`, `env push`, `domain` and `images` |
+| Any Linux server over SSH | New in 1.1.0. `server add`, deploy, rollback and every day-two command pass end to end against a local Ubuntu 24.04 test server over SSH. On a real DigitalOcean Droplet (2 GB RAM, Ubuntu 24.04.5, amd64), `server add` applied every step including swap for the first time anywhere, a second run changed nothing, and `deploy` served the app directly at 110 ms to first byte. On Droplets, `conformance/vm/e2e.sh` passed in full, `server move` to a fresh one kept the env and Server Actions key, `server reboot` brought every app back in 37 seconds, the watchdog restarted a hung app, and `deploy` refused a nearly full disk. A real certificate, Hetzner, arm64 and Debian 12 have not run yet, and are the v1.1.1 checklist. See [`docs/vm.md`](./docs/vm.md) and [`docs/roadmap.md`](./docs/roadmap.md) |
 | AWS | On demand, after a streaming experiment on Lightsail. EC2 is one of the machines the v1.1 server target is built for, but it has not been run there: see the row above |
 | Official Next.js adapter compatibility suite | Passes in full on 16.4.0-canary.22: 1123 of 1123 suites and 3599 of 3599 assertions, with 9 Vercel-specific tests skipped and each reason published. See the results below |
 
@@ -61,14 +61,15 @@ on-demand revalidation needs a revalidate time on the page, as the limitations b
 is 591 MB uncompressed against 1.13 GB before pruning.
 
 **It was built for its author's own apps, and it works for yours** if you deploy
-Next.js to DigitalOcean and one instance is enough. Everything that only matters once
+Next.js to DigitalOcean or to a server of your own, and one instance is enough. Everything that only matters once
 many people depend on it, multiple instances above all, is recorded in
 [`docs/roadmap.md`](./docs/roadmap.md) under "Beyond v1.0", each with the trigger that
 would justify building it.
 
-**v1.0 is DigitalOcean only.** That is the target that is built, verified against a live
-app, and actually used. A second cloud is built on the proven one rather than beside it,
-so the next target, any Linux server over SSH, follows as v1.1.
+**Two targets as of 1.1.0:** DigitalOcean App Platform, and any Ubuntu or Debian server
+reached over SSH. The second is built on the same target interface as the first rather
+than beside it, and is claimed only as far as the runs above go. On a server you also
+become its administrator; [`docs/vm.md`](./docs/vm.md) says what stays yours to run.
 
 ---
 
@@ -119,6 +120,14 @@ nextship run               # build, package and start it locally on :3000
 export DIGITALOCEAN_TOKEN=dop_v1_...
 nextship deploy            # print the plan, change nothing
 nextship deploy --yes      # execute it
+```
+
+Or to your own server, with no cloud token at all:
+
+```bash
+nextship server add root@203.0.113.10         # the setup plan and the host key fingerprint
+nextship server add root@203.0.113.10 --yes   # prepare the server and record it
+nextship deploy --yes
 ```
 
 `deploy` prints a plan and stops. Nothing is created, changed or charged until you
@@ -721,9 +730,9 @@ It takes the same options as `server add`.
 
 ### Planned
 
-v1.0 is complete. Next is v1.1, one target for any Ubuntu or Debian server reached over SSH,
-which is where the claim that this ports beyond DigitalOcean is either proven or shown to
-cost more than it looked.
+1.1.0 added the server target. Next is v1.1.1, which runs the rest of its live checklist:
+a Hetzner VM, an arm64 machine, Debian 12, a certificate for a real domain, and the GitHub
+Actions workflow in [`docs/vm.md`](./docs/vm.md).
 See [`docs/roadmap.md`](./docs/roadmap.md), which also records what is
 deliberately not being built and why.
 
@@ -1089,6 +1098,7 @@ file. Run against `16.4.0-canary.22` in
 | **Skipped by our list** | 9 tests that assert what Vercel's CDN or proxy does, listed below |
 | **Reproducible** | A second run, [34757301752](https://github.com/gowtham472/nextship/actions/runs/34757301752), matched suite by suite |
 | **Stable release** | On `v16.3.5`, the latest stable Next.js, [run 34761218201](https://github.com/gowtham472/nextship/actions/runs/34761218201) passed 1108 of 1108 suites and 3489 of 3489 assertions. That release has fewer suites than the canary |
+| **1.1.0** | Re-run on the release's code, after the server target merged: [run 35874136358](https://github.com/gowtham472/nextship/actions/runs/35874136358) passed 1123 of 1123 on `16.4.0-canary.22` and [run 35874125412](https://github.com/gowtham472/nextship/actions/runs/35874125412) passed 1108 of 1108 on `v16.3.5`, the same as before |
 
 The counts come from the results file Next.js's test runner writes for every suite. The
 1033 tests it reports as pending are the ones deploy mode skips: those in Next.js's own
@@ -1149,7 +1159,8 @@ Bun's adapter keeps a list of its own the same way.
 | **v0.3** | First cloud deployment to DigitalOcean: deploy, rollback, logs | Done, verified live. Image retention and a health endpoint were moved to v0.4 with reasons |
 | **v0.4** | Day-two operations: domains and TLS, env, images, destroy, logs | Done, verified live |
 | **v1.0** | Trustworthy for personal use: compatibility suite results, streaming conformance, honest limitations | Done. The suite passes in full (1123 of 1123 suites), the package is on npm under Apache-2.0, and streaming conformance passes in CI and on a live App Platform app |
-| **v1.1** | Any Linux server over SSH | Built, and verified end to end on a local test server and on DigitalOcean Droplets. Hetzner, arm64, Debian 12 and a certificate for a real domain come before release |
+| **v1.1** | Any Linux server over SSH | Released in 1.1.0. Verified end to end on a local test server, a Proxmox VM and DigitalOcean Droplets |
+| **v1.1.1** | The rest of the server target's live checklist | Planned: a Hetzner VM, an arm64 machine, Debian 12, a certificate for a real domain, and the GitHub Actions workflow |
 
 Beyond v1.0, each with the trigger that would justify it: correctness at scale (a
 shared cache and distributed tags, needed once there is more than one instance),

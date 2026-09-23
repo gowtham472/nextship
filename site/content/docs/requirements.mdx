@@ -11,7 +11,7 @@ description: What nextship needs, why it needs each thing, and which of them are
 | **Docker 23 or newer** | Every build runs inside BuildKit, so nothing compiles on your machine | Yes. nextship queries the daemon and refuses older versions by name |
 | **Next.js 16.2 or newer** | The Deployment Adapter API became stable in 16.2 | Yes, with the reason in the error |
 | **A DigitalOcean API token** | Only for `deploy`, `rollback`, `logs`, `env` and `domain` | Yes, the error names the variable |
-| **Or your own server** | An OpenSSH client, and an Ubuntu 22.04, 24.04 or Debian 12 server you can reach as root or a sudo user. Not in 1.0.2; see [Your own server](/docs/vm) | Yes, `server add` refuses anything else by name |
+| **Or your own server** | An OpenSSH client, and an Ubuntu 22.04, 24.04 or Debian 12 server you can reach as root or a sudo user. New in 1.1.0; see [Your own server](/docs/vm) | Yes, `server add` refuses anything else by name |
 
 Docker must be running. The local commands need nothing else.
 

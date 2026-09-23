@@ -153,7 +153,7 @@ export default function HomePage() {
           >
             No Dockerfile. No <code className="font-mono text-[0.9em] text-muted-strong">next.config</code> edits. No
             Terraform, and no IAM archaeology. One command builds your app, prunes it to what it actually needs, and puts
-            it on your own cloud account.
+            it on your own cloud account or your own server.
           </p>
 
           <div className="fade-up mt-10 flex flex-wrap items-center justify-center gap-3" style={delay(800)}>
@@ -318,8 +318,8 @@ export default function HomePage() {
             />
             <h2 className="text-title font-extrabold tracking-[-0.03em] text-balance">Deploy your first app</h2>
             <p className="mx-auto mt-4 max-w-xl text-lg text-white/80 text-pretty">
-              You need Node 22, a running Docker, and a DigitalOcean token. The local commands need nothing but the first
-              two.
+              You need Node 22, a running Docker, and a DigitalOcean token or a server you can SSH into. The local commands
+              need nothing but the first two.
             </p>
             <div className="mt-9 flex flex-wrap justify-center gap-3">
               <Link

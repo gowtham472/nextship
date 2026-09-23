@@ -22,6 +22,7 @@ builds a real container per test file and deploys it.
 | Mode | `deploy`, a real container per test file |
 | Reproduced | Two runs, the second on a later commit, matching suite by suite in passed, failed and skipped tests |
 | Stable Next.js | On 16.3.5, 1108 of 1108 suites and 3489 of 3489 assertions, against that release's own, smaller test corpus |
+| Re-run for 1.1.0 | Both again on the release's code, after the server target merged, with the same results |
 
 1.0.1's run passed 1051 of 1115 suites. Researching all 64 failures found most in our test
 harness rather than in nextship: the Docker build never received the variables a test sets
@@ -95,6 +96,30 @@ fixture:
 - **Runtime logs**, both the snapshot and `--follow`.
 - **Destroy**, which refuses unless you name the app.
 
+Before 1.1.0 was tagged, the same commands ran again against a throwaway app built with the
+release's code: deploy, a second deploy, rollback with no build or push, `logs` and
+`logs --follow`, `env push` read by the running app about a minute later, `domain` and
+`images`. The app and its registry were removed afterwards.
+
+## Your own server
+
+The server target, new in 1.1.0, ran on DigitalOcean Droplets between 2026-09-20 and
+2026-09-23 (`s-1vcpu-2gb-70gb`, amd64, Ubuntu 24.04), after a local test server and a
+Proxmox VM. Ragul D ran these.
+
+| Checked on a Droplet | Result |
+|---|---|
+| `server add` on a clean machine | Every step applied, swap included; a second run changed nothing |
+| `deploy`, straight to the Droplet | 110 ms to first byte, 176 ms total |
+| Streaming through Caddy | First byte 260 ms against a last byte of 2137 ms |
+| Requests across a deployment | 579 of 579 succeeded, and 51 of 51 streams |
+| A deployment whose server exits on start | Refused; 558 of 558 requests to the previous one succeeded |
+| `server reboot`, a real kernel | Every app healthy again in 37 s |
+| A hung app process | Restarted by the watchdog, serving again 4 min 52 s after it hung |
+| `deploy` on a nearly full disk | Refused at 2.4 GB free, before building; the app kept serving |
+| `server move` to a fresh Droplet | 1 min 34 s including setup, env file and Server Actions key identical |
+| `conformance/vm/e2e.sh` in full | 8 min 6 s, including an ISR page and an optimized image surviving a restart |
+
 ## An end-to-end test on macOS
 
 On 2026-09-11 we installed nextship 0.4.4 from npm on a MacBook Pro with an M3 Max,
@@ -145,6 +170,10 @@ sends nothing.
   the full run, 481 assertions pass in suites named for middleware and 122 in suites for
   Cache Components, in containers on the CI runner. Deploy mode skips most PPR tests,
   leaving 10. None has been exercised on a live App Platform app.
+- **The server target has not run on Hetzner, on an arm64 machine, on Debian 12, with a
+  certificate for a real domain, or from the GitHub Actions workflow in its guide.** Every
+  real run so far was amd64, on DigitalOcean or Proxmox. Those are the next release's
+  checklist.
 - **Multi-instance behaviour is not supported.** One instance is correct; a shared cache
   is the next major version's work.
 - **No third party penetration test**, and no dependency vulnerability scan in CI.

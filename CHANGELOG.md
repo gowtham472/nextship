@@ -4,6 +4,17 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-23
+
+A second target: any Ubuntu 22.04, Ubuntu 24.04 or Debian 12 server reached over SSH, with
+zero-downtime deployments behind Caddy, automatic HTTPS and every day-two command. It is
+verified on a local test server, a Proxmox VM and DigitalOcean Droplets. Hetzner, arm64,
+Debian 12, a certificate for a real domain and the GitHub Actions workflow have not run yet,
+and are the v1.1.1 checklist. DigitalOcean App Platform behaves as in 1.0.2: its printed
+output is pinned by tests, a live app ran deploy, rollback, logs, env push, domain and images
+with this release's code, and the compatibility suite passes 1123 of 1123 suites on
+16.4.0-canary.22 and 1108 of 1108 on v16.3.5, as before.
+
 ### Added
 
 - **`nextship server add <user@host[:port]>`** prepares an Ubuntu 22.04, Ubuntu 24.04 or
@@ -187,6 +198,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Docs
 
+- **The README, the npm README and the site describe two targets.** The status, quick
+  start, commands and requirements name the server target as released, with exactly what it
+  has run on, and the evidence page carries the Droplet measurements beside the App Platform
+  ones. What has not run on a real provider moved from "before release" to a v1.1.1 section
+  of the roadmap, so nothing reads as verified that was not. (Gowtham)
 - **The README and the roadmap no longer point at a branch that was merged.** Both described
   the server target as living on `feat/vm-target` and as having run only on a local test
   server, which stopped being true when it landed on `main` and again when the Droplet runs

@@ -51,9 +51,11 @@ container, in your region, rather than on an edge network.
 
 ## Current state
 
-Version 1.0.2. The local pipeline and DigitalOcean deployment are verified against live
+Version 1.1.0. The local pipeline and DigitalOcean deployment are verified against live
 App Platform apps, including two rollbacks in opposite directions and streaming through
-App Platform itself, and have deployed from both Windows and an Apple Silicon Mac.
+App Platform itself, and have deployed from both Windows and an Apple Silicon Mac. The
+[server target](/docs/vm), new in 1.1.0, is verified on a local test server, a Proxmox VM
+and DigitalOcean Droplets.
 
 Every figure below has a source on the [evidence page](/docs/evidence), which also lists
 what has not been proven.
@@ -65,6 +67,6 @@ time based and on demand, Server Actions execute, and `after()` runs. The runtim
 also needs a revalidate time on the page, because its CDN
 [keeps fully static pages](/docs/deploying#pages-the-cdn-keeps).
 
-**v1.0 targets DigitalOcean only.** That is the target that is built, verified and
-actually used. A second cloud is built on the proven one rather than beside it: the driver
-interface exists, and v1.1 adds any Linux server reached over SSH.
+**Two targets as of 1.1.0:** DigitalOcean App Platform, and any Ubuntu or Debian server
+reached over SSH. The second is built on the same target interface as the first rather than
+beside it, and is claimed only as far as it has run.

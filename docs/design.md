@@ -533,7 +533,7 @@ Desktop for Windows, so images are pushed through `localhost:5100`.
 The probe is not in CI yet. Until a driver exists it exercises the emulator rather than
 nextship, and a failure would say nothing about this code.
 
-### 9.3 VM target over SSH (Implemented, verified on a local test server and DigitalOcean Droplets)
+### 9.3 VM target over SSH (Released in 1.1.0, verified on a local test server and DigitalOcean Droplets)
 
 One generic target: **any Ubuntu or Debian server nextship can reach over SSH.** It covers
 a Hetzner or Hostinger VPS, a DigitalOcean Droplet, EC2, Compute Engine, an Azure VM and a
@@ -830,7 +830,7 @@ Measured on the Droplets, all `s-1vcpu-2gb-70gb`, amd64, Ubuntu 24.04:
 | Hung process, restarted by the watchdog | serving again 4 min 52 s after it hung |
 | `deploy` with 2.4 GB free | refused before building, the app kept serving |
 
-Not verified, and required before release:
+Not verified yet, and the v1.1.1 checklist in `docs/roadmap.md`:
 
 | Not verified | Why |
 |---|---|
