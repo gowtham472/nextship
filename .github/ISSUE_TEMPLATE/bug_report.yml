@@ -28,12 +28,22 @@ body:
       description: The output of `nextship --version`.
     validations:
       required: true
+  - type: dropdown
+    id: target
+    attributes:
+      label: Target
+      options:
+        - DigitalOcean App Platform
+        - My own server over SSH
+        - None, it failed before deploying
+    validations:
+      required: true
   - type: input
     id: environment
     attributes:
       label: Environment
-      description: Operating system, Node.js, Docker and Next.js versions.
-      placeholder: Windows 11, Node 24.18, Docker 29.7, Next.js 16.3.4
+      description: Operating system, Node.js, Docker and Next.js versions. For a server, also its provider, distribution and architecture.
+      placeholder: Windows 11, Node 24.18, Docker 29.7, Next.js 16.3.5; server on Hetzner, Ubuntu 24.04, arm64
     validations:
       required: true
   - type: textarea

@@ -4,6 +4,21 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Changed
+
+- **The npm description and keywords name the server target.** They still described a tool
+  for your own cloud account only, so a search for self-hosting over SSH could not find it.
+  They reach npm with the next published version. (Gowtham)
+- **Bug and first-deploy reports ask which target was used**, and for a server, its
+  provider, distribution and architecture. A report from a Hetzner, arm64 or Debian 12
+  server is exactly what the v1.1.1 checklist is missing. (Gowtham)
+
+### Docs
+
+- **The site's quick start and the README's architecture section show both targets.** The
+  quick start went straight to App Platform and the architecture section still called it the
+  only target; `design.md` still said swap had never applied on a real provider. (Gowtham)
+
 ## [1.1.0] - 2026-09-23
 
 A second target: any Ubuntu 22.04, Ubuntu 24.04 or Debian 12 server reached over SSH, with

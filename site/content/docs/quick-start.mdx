@@ -88,6 +88,20 @@ Commit that file. It holds no secrets. It is how every later command knows which
 belongs to this project, and it is the only reason `destroy` can be certain it will not
 touch anything else in your account.
 
+### Or to your own server
+
+Since 1.1.0 the same app can go to any Ubuntu 22.04, Ubuntu 24.04 or Debian 12 server you
+can reach over SSH, with no cloud token:
+
+```bash
+nextship server add root@203.0.113.10         # the setup plan and the host key fingerprint
+nextship server add root@203.0.113.10 --yes   # prepare the server and record it
+nextship deploy --yes
+```
+
+Compare the fingerprint in the plan with the one your provider shows before you pass
+`--yes`. [Your own server](/docs/vm) covers what setup changes and what stays yours to run.
+
 ## Tell us how it went
 
 Every verification so far was run by the people who wrote nextship. If you deployed
@@ -97,6 +111,7 @@ the most useful thing anyone can contribute right now, including when everything
 ## Where to go next
 
 - [Deploying](/docs/deploying) for what the plan contains and how a release is verified
+- [Your own server](/docs/vm) for the server target: setup, deploying, and keeping it running
 - [Environment variables](/docs/environment-variables) for pushing secrets safely
 - [Custom domains](/docs/custom-domains) for attaching a domain with automatic TLS
 - [Rollbacks and logs](/docs/rollbacks-and-logs) for when something goes wrong

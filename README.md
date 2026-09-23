@@ -989,12 +989,16 @@ deploy:
 your machine or CI                         your DigitalOcean account
 detect -> build in Docker -> prune  ---->  container registry
           adapter injected                 App Platform runs next start
+
+                                     or    your own server, over SSH
+                                           Docker runs next start behind Caddy
 ```
 
-One image, one Node server, one lifecycle. DigitalOcean App Platform is the only target
-today. Every platform-specific call sits behind a single driver interface, so a second
-cloud is a new driver rather than a rewrite. Static files are served by the same
-container; there is no CDN tier. DigitalOcean has no Lambda, so a serverless-first
+One image, one Node server, one lifecycle. Two targets implement it: DigitalOcean App
+Platform, and since 1.1.0 any Ubuntu or Debian server reached over SSH. Every
+target-specific call sits behind one target interface, which is why the second target
+was a new driver rather than a rewrite. Static files are served by the same container;
+nextship adds no CDN tier. DigitalOcean has no Lambda, so a serverless-first
 design could not port there at all, and `next start` in a single process already
 supports every Next.js feature correctly.
 

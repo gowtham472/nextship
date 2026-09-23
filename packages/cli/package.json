@@ -6,7 +6,7 @@
   "contributors": [
     "Ragul D <raguld2105@gmail.com>"
   ],
-  "description": "Deploy any Next.js app to your own cloud account with no configuration.",
+  "description": "Deploy any Next.js app to your own cloud account or your own server, with no configuration.",
   "keywords": [
     "nextjs",
     "next",
@@ -14,7 +14,11 @@
     "deployment",
     "digitalocean",
     "docker",
-    "adapter"
+    "adapter",
+    "self-hosted",
+    "ssh",
+    "vps",
+    "caddy"
   ],
   "engines": {
     "node": ">=22"

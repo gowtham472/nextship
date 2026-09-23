@@ -21,6 +21,16 @@ body:
     validations:
       required: true
   - type: dropdown
+    id: target
+    attributes:
+      label: Where did you deploy?
+      options:
+        - DigitalOcean App Platform
+        - My own server over SSH
+        - Nowhere yet
+    validations:
+      required: true
+  - type: dropdown
     id: time
     attributes:
       label: From installing nextship to a live URL, roughly how long?
@@ -47,8 +57,8 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Operating system and chip, Node.js, Docker, Next.js and nextship versions.
-      placeholder: macOS 15 on M3, Node 24.18, Docker 29.7, Next.js 16.3.4, nextship 1.0.0
+      description: Operating system and chip, Node.js, Docker, Next.js and nextship versions. For a server, also its provider, distribution and architecture.
+      placeholder: macOS 15 on M3, Node 24.18, Docker 29.7, Next.js 16.3.5, nextship 1.1.0; server on Hetzner, Ubuntu 24.04, arm64
     validations:
       required: true
   - type: textarea

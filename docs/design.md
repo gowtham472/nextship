@@ -569,13 +569,15 @@ apply first, a login as that user is then proven from the user's machine, and SS
 hardening applies alone and last. The steps and their opt-out flags are listed in
 [`vm.md`](./vm.md) §3.
 
-Verified against a local stand-in, not yet a provider: a privileged Ubuntu 24.04.4 arm64
+Verified first against a local stand-in: a privileged Ubuntu 24.04.4 arm64
 container running systemd and sshd, reached over SSH on a forwarded port. From a fresh
 container, `server add --yes` installed Docker 29.8.0 and applied every step except swap
 in 46 s; a second run reported every step `ok`; ufw was active with SSH, 80 and 443
 allowed; `sshd -T` reported `passwordauthentication no`; a key swapped into `nextship.json`
 was refused with both fingerprints named. The same stand-in cannot exercise swap (a
-container may not `swapon`). Running it on real providers is on the v1.1 checklist.
+container may not `swapon`). On DigitalOcean Droplets with no swap, the step applied and
+added a 2 GB file, and a second run changed nothing (§9.3, the Droplet runs below). Other
+providers, arm64 and Debian 12 are the v1.1.1 checklist in `docs/roadmap.md`.
 
 #### Server layout (Implemented)
 
