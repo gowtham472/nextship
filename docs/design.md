@@ -577,7 +577,7 @@ allowed; `sshd -T` reported `passwordauthentication no`; a key swapped into `nex
 was refused with both fingerprints named. The same stand-in cannot exercise swap (a
 container may not `swapon`). On DigitalOcean Droplets with no swap, the step applied and
 added a 2 GB file, and a second run changed nothing (§9.3, the Droplet runs below). Other
-providers, arm64 and Debian 12 are the v1.1.1 checklist in `docs/roadmap.md`.
+providers, arm64 and Debian 12 are the v1.1.2 checklist in `docs/roadmap.md`.
 
 #### Server layout (Implemented)
 
@@ -832,7 +832,7 @@ Measured on the Droplets, all `s-1vcpu-2gb-70gb`, amd64, Ubuntu 24.04:
 | Hung process, restarted by the watchdog | serving again 4 min 52 s after it hung |
 | `deploy` with 2.4 GB free | refused before building, the app kept serving |
 
-Not verified yet, and the v1.1.1 checklist in `docs/roadmap.md`:
+Not verified yet, and the v1.1.2 checklist in `docs/roadmap.md`:
 
 | Not verified | Why |
 |---|---|

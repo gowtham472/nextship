@@ -4,6 +4,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-23
+
+No code changes: the CLI behaves exactly as in 1.1.0. This release carries the npm
+description and keywords that name the server target, which npm only takes from a published
+version, and the docs that describe both targets. The server target's remaining live
+checklist, called v1.1.1 in 1.1.0's docs, is now v1.1.2.
+
 ### Changed
 
 - **The npm description and keywords name the server target.** They still described a tool
