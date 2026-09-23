@@ -101,6 +101,17 @@
 }
 
 /* unDraw's colours, as theme tokens. See components/landing/illustrations.tsx. */
+
+/* A drawing on the brand-blue card, which is blue in both themes, keeps the light
+   palette in both: its window stays white and its blue sits inside the window, where
+   it cannot vanish into the card. */
+.undraw.undraw-light {
+  --illus-ink: #0b1220;
+  --illus-ink-soft: #55627a;
+  --illus-surface: #ffffff;
+  --illus-soft: #eef2fa;
+  --illus-mid: #d3dbeb;
+}
 .undraw .u-accent {
   fill: var(--accent);
 }

@@ -13,7 +13,7 @@ import {
 
 import { CopyButton } from '@/components/copy-button'
 import { HeroBackground } from '@/components/landing/hero-background'
-import { LocalServer } from '@/components/landing/illustrations'
+import { LocalServer, ShipIt } from '@/components/landing/illustrations'
 import { ServerFlow } from '@/components/landing/server-flow'
 import { SpotlightCard } from '@/components/spotlight-card'
 import { Marquee } from '@/components/ui/marquee'
@@ -183,7 +183,7 @@ export default function HomePage() {
           </div>
 
           <div
-            className="fade-up mx-auto mt-16 grid max-w-4xl grid-cols-1 items-center gap-8 rounded-2xl border border-border bg-card/80 p-6 text-left shadow-[0_24px_80px_-32px_rgba(0,58,160,0.45)] backdrop-blur sm:p-9 md:grid-cols-[1.1fr_1fr]"
+            className="fade-up mx-auto mt-16 grid max-w-4xl grid-cols-1 items-center gap-8 rounded-2xl border border-border bg-card p-6 text-left sm:p-9 md:grid-cols-[1fr_1.25fr]"
             style={delay(1000)}
           >
             <LocalServer className="h-auto w-full min-w-0" />
@@ -327,7 +327,7 @@ export default function HomePage() {
       <section>
         <div className="mx-auto max-w-6xl px-5 py-24 sm:px-8">
           {/* Brand blue in both themes: this card is the one place the page commits to the colour. */}
-          <div className="reveal relative isolate overflow-hidden rounded-3xl bg-accent px-6 py-16 text-center text-white shadow-[0_30px_90px_-40px_rgba(0,94,255,0.8)] sm:px-16">
+          <div className="reveal relative isolate grid grid-cols-1 items-center gap-12 overflow-hidden rounded-3xl bg-accent px-6 py-16 text-center text-white shadow-[0_30px_90px_-40px_rgba(0,94,255,0.8)] sm:px-16 lg:grid-cols-[1.15fr_1fr] lg:text-left">
             <div
               aria-hidden="true"
               className="absolute inset-0 -z-10 bg-[radial-gradient(rgb(255_255_255/0.2)_1px,transparent_1px)] [background-size:18px_18px] [mask-image:radial-gradient(ellipse_at_center,#000_30%,transparent_75%)]"
@@ -336,26 +336,29 @@ export default function HomePage() {
               aria-hidden="true"
               className="absolute -top-28 left-1/2 -z-10 h-64 w-[36rem] -translate-x-1/2 rounded-full bg-highlight/30 blur-3xl"
             />
-            <h2 className="text-title font-extrabold tracking-[-0.03em] text-balance">Deploy your first app</h2>
-            <p className="mx-auto mt-4 max-w-xl text-lg text-white/80 text-pretty">
-              You need Node 22, a running Docker, and a server you can SSH into, or a DigitalOcean token. The local commands
-              need nothing but the first two.
-            </p>
-            <div className="mt-9 flex flex-wrap justify-center gap-3">
-              <Link
-                href="/docs/quick-start"
-                className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-6 text-sm font-semibold text-[#003fb0] transition-transform hover:-translate-y-0.5"
-              >
-                Quick start
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-              <Link
-                href="/docs/commands"
-                className="inline-flex h-12 items-center rounded-full border border-white/35 px-6 text-sm font-semibold text-white transition-colors hover:bg-white/10"
-              >
-                CLI reference
-              </Link>
+            <div className="min-w-0">
+              <h2 className="text-title font-extrabold tracking-[-0.03em] text-balance">Deploy your first app</h2>
+              <p className="mx-auto mt-4 max-w-xl text-lg text-white/80 text-pretty lg:mx-0">
+                You need Node 22, a running Docker, and a server you can SSH into, or a DigitalOcean token. The local commands
+                need nothing but the first two.
+              </p>
+              <div className="mt-9 flex flex-wrap justify-center gap-3 lg:justify-start">
+                <Link
+                  href="/docs/quick-start"
+                  className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-6 text-sm font-semibold text-[#003fb0] transition-transform hover:-translate-y-0.5"
+                >
+                  Quick start
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+                <Link
+                  href="/docs/commands"
+                  className="inline-flex h-12 items-center rounded-full border border-white/35 px-6 text-sm font-semibold text-white transition-colors hover:bg-white/10"
+                >
+                  CLI reference
+                </Link>
+              </div>
             </div>
+            <ShipIt className="undraw-light mx-auto h-44 w-auto max-w-full min-w-0 sm:h-52 lg:h-60" />
           </div>
         </div>
       </section>

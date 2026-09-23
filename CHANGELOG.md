@@ -15,6 +15,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   unDraw, recoloured through theme tokens so it follows light and dark. One guarantee was
   rewritten rather than reworded: "Nothing is ever deleted" is true on App Platform but not
   on a server, where each deployment removes images older than the newest five. (Gowtham)
+- **The hero's command card sits flat, and "Deploy your first app" has a drawing beside
+  it.** The card's shadow and see-through background are gone, and its command column is
+  wider, so the longest command fits without a scrollbar. The call to action puts unDraw's
+  "Ship it" to the right of its text on wide screens and below it on phones, keeping a
+  light palette in both themes because the card is blue in both. (Gowtham)
 
 ### Docs
 
