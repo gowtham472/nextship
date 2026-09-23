@@ -36,7 +36,7 @@ to a marketing page.
 | `components/docs/` | The docs page parts: the outline that marks the section being read, code blocks with a copy button, callouts and the mobile menu |
 | `components/search.tsx`, `lib/search.ts` | Search, over an index of every page and heading built at build time |
 | `components/ui/` | Components adapted from Magic UI, credited in `THIRD_PARTY_NOTICES.md` |
-| `components/backgrounds/` | React Bits' LightRays, the hero's moving light, under its own licence in `THIRD_PARTY_NOTICES.md` |
+| `components/backgrounds/` | React Bits' DotGrid, the hero's field of dots, under its own licence in `THIRD_PARTY_NOTICES.md` |
 | `assets/` | The wordmark from `brand/nextship.png` and its white-lettered twin for the dark theme, copied so the site builds on its own |
 | `app/icon.png`, `app/apple-icon.png` | The favicon and home screen icon: `brand/nextship-favicon.png` scaled to 96 and 180 pixels |
 | `app/opengraph-image.png` | `brand/logo.png`, the image a shared link previews with |

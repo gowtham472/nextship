@@ -202,19 +202,6 @@ body {
   display: block;
 }
 
-/*
- * Backdrop used behind the hero and section headers. Two layers: a fine grid
- * that reads as blueprint paper, and a radial mask so it fades out rather than
- * ending on a hard line.
- */
-.grid-backdrop {
-  background-image:
-    linear-gradient(to right, var(--border) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 75%);
-}
-
 /* Shiki emits both themes as variables on each token, and these rules pick one, so
    only one set of colours is ever in the cascade. They select by the figure
    rehype-pretty-code marks rather than a .shiki class, which it does not emit here:
@@ -369,9 +356,9 @@ html:not([data-theme='dark']) [data-rehype-pretty-code-figure] code span {
   animation-delay: var(--delay);
 }
 
-/* The glow behind the hero: three soft lights, still. The rays over them carry the
-   motion, and the glow is what shows without them: under reduced motion, without
-   WebGL, and before the page's JavaScript has run. */
+/* The glow behind the hero: three soft lights, still. The dots over them carry the
+   motion, and the glow is what shows without them: under reduced motion, and before
+   the page's JavaScript has run. */
 .hero-glow {
   position: absolute;
   inset: -10% 0 auto;

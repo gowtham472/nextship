@@ -5,8 +5,8 @@ keep the licences they came with.
 
 ## React Bits
 
-`components/backgrounds/light-rays.tsx` is LightRays from React Bits
-(https://reactbits.dev), as its Background Studio exports it. It is not under Apache-2.0.
+`components/backgrounds/dot-grid.tsx` is DotGrid from React Bits
+(https://reactbits.dev), changed as its file header describes. It is not under Apache-2.0.
 It may be used and changed as part of this website, but the component itself may not be
 sold or redistributed on its own, including in a fork of this repository taken for that
 purpose:
@@ -46,8 +46,6 @@ in its file header:
 
 | File | Magic UI component |
 |---|---|
-| `components/ui/animated-beam.tsx` | AnimatedBeam |
-| `components/ui/border-beam.tsx` | BorderBeam |
 | `components/ui/marquee.tsx` | Marquee |
 | `components/ui/number-ticker.tsx` | NumberTicker |
 

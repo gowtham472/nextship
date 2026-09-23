@@ -126,7 +126,6 @@ export default function HomePage() {
           <span />
           <span />
         </div>
-        <div className="grid-backdrop pointer-events-none absolute inset-0 -z-10" aria-hidden="true" />
         <HeroBackground />
 
         <div className="mx-auto max-w-6xl px-5 pt-20 pb-24 text-center sm:px-8 sm:pt-28">

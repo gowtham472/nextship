@@ -20,6 +20,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   wider, so the longest command fits without a scrollbar. The call to action puts unDraw's
   "Ship it" to the right of its text on wide screens and below it on phones, keeping a
   light palette in both themes because the card is blue in both. (Gowtham)
+- **The hero's background is a field of dots instead of falling light.** React Bits'
+  DotGrid replaces its LightRays and the static line grid: dots light up in the brand blue
+  near the pointer, ripple on a fast sweep and on a click, and take their colours from the
+  theme. It is modified to move the dots on a small spring instead of GSAP's inertia
+  plugin, so no dependency that is not open source was added, and to stop drawing while
+  the hero is off screen. LightRays and its WebGL library, `ogl`, are removed, and
+  `THIRD_PARTY_NOTICES.md` no longer lists two components deleted earlier. (Gowtham)
 
 ### Docs
 

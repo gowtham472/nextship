@@ -3,17 +3,18 @@
 import { useEffect, useState } from 'react'
 import { useReducedMotion } from 'motion/react'
 
-import { LightRays } from '@/components/backgrounds/light-rays'
+import { DotGrid } from '@/components/backgrounds/dot-grid'
 
 /**
- * The hero's moving light: React Bits' LightRays, tuned in Background Studio, falling
- * from the top in the brand blue.
+ * The hero's field of dots: React Bits' DotGrid, lit in the brand blue where the pointer
+ * passes, rippling when it sweeps fast and when the page is clicked. Read as a rack of
+ * status lights, which is what a page about your own server should put behind its
+ * headline.
  *
- * It follows the theme. On a light page it draws in light mode, whose output is
- * opaque white with blue ink, so it is multiplied into the page and the grid behind
- * still shows through; on a dark page it adds its light. It is left out for visitors
- * who ask for reduced motion, and until the theme is known so it never draws in the
- * wrong mode for a frame. In both cases the hero's still glow stands in for it.
+ * It follows the theme, from the same tokens as the rest of the page. It fades out
+ * toward the edges and below the fold, so the headline always sits on a quiet patch.
+ * It is left out for visitors who ask for reduced motion, and until the theme is known
+ * so it never draws in the wrong colours for a frame; the hero's still glow stands in.
  *
  * Author: Gowtham
  */
@@ -25,22 +26,16 @@ export function HeroBackground() {
   return (
     <div
       aria-hidden="true"
-      className={`pointer-events-none absolute inset-x-0 top-0 -z-10 h-[48rem] [mask-image:linear-gradient(to_bottom,#000_50%,transparent)] ${
-        dark ? '' : 'mix-blend-multiply'
-      }`}
+      className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[52rem] [mask-image:radial-gradient(ellipse_80%_70%_at_50%_30%,#000_35%,transparent_85%)]"
     >
-      <LightRays
-        raysOrigin="top-center"
-        raysColor={dark ? '#6aa2ff' : '#005eff'}
-        lightMode={!dark}
-        raysSpeed={1}
-        lightSpread={0.9}
-        rayLength={1.4}
-        fadeDistance={1.1}
-        followMouse
-        mouseInfluence={0.08}
-        noiseAmount={0.08}
-        distortion={0.04}
+      <DotGrid
+        dotSize={3}
+        gap={22}
+        baseColor={dark ? '#1e2d57' : '#cfd9ee'}
+        activeColor={dark ? '#6aa2ff' : '#005eff'}
+        proximity={140}
+        speedTrigger={120}
+        shockRadius={220}
       />
     </div>
   )
