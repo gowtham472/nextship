@@ -3,29 +3,31 @@ import {
   ArrowRight,
   Check,
   ClipboardList,
+  Fingerprint,
   Info,
   KeyRound,
   Layers,
   PackageOpen,
-  ShieldCheck,
-  SlidersHorizontal,
+  RotateCcw,
 } from 'lucide-react'
 
 import { CopyButton } from '@/components/copy-button'
-import { DeployRecording } from '@/components/landing/deploy-recording'
-import { FlowDiagram } from '@/components/landing/flow-diagram'
 import { HeroBackground } from '@/components/landing/hero-background'
-import { Pipeline } from '@/components/landing/pipeline'
+import { LocalServer } from '@/components/landing/illustrations'
+import { ServerFlow } from '@/components/landing/server-flow'
 import { SpotlightCard } from '@/components/spotlight-card'
 import { Marquee } from '@/components/ui/marquee'
 import { NumberTicker } from '@/components/ui/number-ticker'
 
 const INSTALL = 'npm install -g nextship-cli'
 
-const HEADLINE = ['Deploy', 'Next.js', 'to', 'infrastructure', 'you', 'own']
+const HEADLINE = ['Deploy', 'Next.js', 'to', 'your', 'own', 'server']
 
 /** Where the headline turns blue: the part that is the point. */
-const HEADLINE_ACCENT_FROM = 4
+const HEADLINE_ACCENT_FROM = 3
+
+/** The whole path to a live app on a server, as the hero shows it. */
+const HERO_COMMANDS = ['nextship server add root@203.0.113.10', 'nextship server add root@203.0.113.10 --yes', 'nextship deploy --yes']
 
 const KEEPS_WORKING = [
   'Streaming',
@@ -73,37 +75,37 @@ const FEATURES = [
     title: 'A plan before anything changes',
     icon: ClipboardList,
     span: '',
-    body: 'deploy, rollback and env rm each print what they will do and stop. Nothing is created, changed or charged until you pass --yes.',
+    body: 'server add, deploy, rollback and env rm each print what they will do and stop. Nothing is created, changed or charged until you pass --yes.',
   },
   {
-    title: 'Nothing is ever deleted',
-    icon: ShieldCheck,
+    title: 'A rollback cannot add a fault',
+    icon: RotateCcw,
     span: '',
-    body: 'No command removes a cloud resource except destroy, which needs the app name and --yes. Rollback reuses an image that already ran, so it cannot introduce a new fault.',
+    body: 'Rollback reuses an image that already ran, with no build. On a server it refuses a deployment that never served, and a failed start leaves the current one serving.',
   },
   {
     title: 'Secrets stay out of the image',
     icon: KeyRound,
     span: 'lg:col-span-2',
-    body: 'Env files are mounted as BuildKit secrets, excluded from layers and from the cache key. The registry credential lives in a 0600 temp config that is removed afterwards.',
+    body: 'Env files are mounted as BuildKit secrets, excluded from layers and from the cache key. On a server, the runtime variables and the Server Actions key live in a directory only the nextship user can read.',
   },
   {
-    title: 'Your settings survive a deploy',
-    icon: SlidersHorizontal,
+    title: 'Your server is the one it talks to',
+    icon: Fingerprint,
     span: 'lg:col-span-2',
-    body: 'App Platform replaces the whole spec on update, so nextship merges rather than overwrites. Ingress rules, hand-added components and console-set variables are all preserved.',
+    body: 'The host key is pinned once you have seen its fingerprint, and a changed key is refused rather than prompted about. SSH runs with no passwords and no prompts, and anything secret travels on stdin, never in a command line.',
   },
   {
     title: 'No lock-in, by construction',
     icon: PackageOpen,
     span: '',
-    body: 'The output is an OCI image in your registry. If nextship disappears tomorrow, the image still runs anywhere that runs containers.',
+    body: 'The output is a standard OCI image. If nextship disappears tomorrow, the image still runs anywhere that runs containers.',
   },
 ]
 
 const LEAVING = [
   { area: 'Streaming and Suspense', state: 'Works. 27 ms to first byte against a 2.02 s total, measured on a real container.' },
-  { area: 'ISR, time based and on demand', state: "Works. On demand, give the page a revalidate time, or App Platform's CDN keeps it." },
+  { area: 'ISR, time based and on demand', state: "Works. On your own server nothing caches in front of it; on App Platform, give an on-demand page a revalidate time, or its CDN keeps it." },
   { area: 'Server Actions', state: 'Works. One encryption key is pinned across builds so actions stay decryptable.' },
   { area: 'Image optimization', state: 'Works, producing WebP. sharp is installed for the container platform, not yours.' },
   { area: 'Edge runtime', state: 'Works, in your region rather than at the edge. Next.js runs it inside its own server.' },
@@ -152,8 +154,8 @@ export default function HomePage() {
             style={delay(650)}
           >
             No Dockerfile. No <code className="font-mono text-[0.9em] text-muted-strong">next.config</code> edits. No
-            Terraform, and no IAM archaeology. One command builds your app, prunes it to what it actually needs, and puts
-            it on your own cloud account or your own server.
+            Terraform, and no cloud account to hand over. One command prepares any Ubuntu or Debian server over SSH; the
+            next builds your app, prunes it to what it actually needs, and puts it live behind automatic HTTPS.
           </p>
 
           <div className="fade-up mt-10 flex flex-wrap items-center justify-center gap-3" style={delay(800)}>
@@ -165,10 +167,10 @@ export default function HomePage() {
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
             <Link
-              href="/docs"
+              href="/docs/vm"
               className="inline-flex h-12 items-center rounded-full border border-border-strong bg-background/60 px-6 text-sm font-semibold backdrop-blur transition-colors hover:bg-card-hover"
             >
-              Read the docs
+              Server guide
             </Link>
           </div>
 
@@ -180,8 +182,30 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="fade-up mx-auto mt-16 max-w-3xl" style={delay(1000)}>
-            <DeployRecording />
+          <div
+            className="fade-up mx-auto mt-16 grid max-w-4xl grid-cols-1 items-center gap-8 rounded-2xl border border-border bg-card/80 p-6 text-left shadow-[0_24px_80px_-32px_rgba(0,58,160,0.45)] backdrop-blur sm:p-9 md:grid-cols-[1.1fr_1fr]"
+            style={delay(1000)}
+          >
+            <LocalServer className="h-auto w-full min-w-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-accent-text">From your machine to your server, over SSH</p>
+              <div className="mt-4 space-y-1.5 rounded-xl border border-border bg-background-subtle px-4 py-3 font-mono text-[13px] leading-6">
+                {HERO_COMMANDS.map((command) => (
+                  <p key={command} className="overflow-x-auto whitespace-nowrap text-muted-strong">
+                    <span className="mr-2 text-accent-text select-none">$</span>
+                    {command}
+                  </p>
+                ))}
+              </div>
+              <p className="mt-4 text-sm leading-relaxed text-muted text-pretty">
+                No cloud token involved. Prefer a managed platform? The same{' '}
+                <code className="font-mono text-[0.9em] text-muted-strong">deploy</code> goes to{' '}
+                <Link href="/docs/deploying" className="font-medium text-accent-text hover:underline">
+                  DigitalOcean App Platform
+                </Link>
+                .
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -224,16 +248,12 @@ export default function HomePage() {
         <div className="mx-auto max-w-6xl px-5 py-24 sm:px-8">
           <SectionHeading
             eyebrow="How it works"
-            title="What that one command does"
-            body="Five steps, each of which you can run on its own. Nothing is hidden behind a service you cannot inspect."
+            title="From your machine to your own server"
+            body="Four steps, each a command you can run on its own. Nothing goes through a service of ours: nextship reaches your server with your own SSH."
           />
 
-          <div className="reveal mt-14">
-            <FlowDiagram />
-          </div>
-
-          <div className="reveal mt-14">
-            <Pipeline />
+          <div className="mt-14">
+            <ServerFlow />
           </div>
         </div>
       </section>
@@ -318,7 +338,7 @@ export default function HomePage() {
             />
             <h2 className="text-title font-extrabold tracking-[-0.03em] text-balance">Deploy your first app</h2>
             <p className="mx-auto mt-4 max-w-xl text-lg text-white/80 text-pretty">
-              You need Node 22, a running Docker, and a DigitalOcean token or a server you can SSH into. The local commands
+              You need Node 22, a running Docker, and a server you can SSH into, or a DigitalOcean token. The local commands
               need nothing but the first two.
             </p>
             <div className="mt-9 flex flex-wrap justify-center gap-3">

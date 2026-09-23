@@ -60,7 +60,46 @@ background state to clean up. A stop is reported as a stop rather than a failure
 for Ctrl+C and 143 for `docker stop` are the codes Next.js exits with after draining
 connections.
 
-## 4. Deploy
+## 4. Deploy to your own server
+
+Any Ubuntu 22.04, Ubuntu 24.04 or Debian 12 server you can reach over SSH, as root or a user
+with passwordless sudo. No cloud token is involved.
+
+```bash
+nextship server add root@203.0.113.10         # the setup plan and the host key fingerprint
+nextship server add root@203.0.113.10 --yes   # prepare the server and record it
+nextship deploy        # prints the plan, changes nothing
+nextship deploy --yes  # executes it
+```
+
+Compare the fingerprint in the plan with the one your provider shows before you pass
+`--yes`: from then on, a server presenting any other key is refused. The plan is printed
+every time, and nothing on the server changes until `--yes`.
+
+`server add` records the server in `nextship.json`:
+
+```json title="nextship.json"
+{
+  "version": 2,
+  "target": "vm",
+  "name": "acme-web",
+  "server": {
+    "host": "203.0.113.10",
+    "port": 22,
+    "user": "nextship",
+    "hostKey": "203.0.113.10 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOAcvH/9nWZZCMAtztAmv9Rm8tknstGlFBaWtrS+QjI1",
+    "arch": "arm64"
+  }
+}
+```
+
+Commit that file. It holds no secrets, only the server's public host key. It is how every
+later command knows which server and app belong to this project.
+[Your own server](/docs/vm) covers what setup changes and what stays yours to run.
+
+### Or to DigitalOcean App Platform
+
+A managed platform instead of a server you run: set a token, and `deploy` creates the app.
 
 ```bash
 export DIGITALOCEAN_TOKEN=dop_v1_...
@@ -69,38 +108,9 @@ nextship deploy        # prints the plan, changes nothing
 nextship deploy --yes  # executes it
 ```
 
-The plan is printed every time. Nothing is created, changed or charged until `--yes`.
-
-On the first deploy nextship records the app name, region and registry in `nextship.json`:
-
-```json title="nextship.json"
-{
-  "version": 1,
-  "target": "digitalocean",
-  "region": "blr",
-  "name": "acme-web",
-  "registry": "acme-registry",
-  "appId": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
-}
-```
-
-Commit that file. It holds no secrets. It is how every later command knows which app
-belongs to this project, and it is the only reason `destroy` can be certain it will not
-touch anything else in your account.
-
-### Or to your own server
-
-Since 1.1.0 the same app can go to any Ubuntu 22.04, Ubuntu 24.04 or Debian 12 server you
-can reach over SSH, with no cloud token:
-
-```bash
-nextship server add root@203.0.113.10         # the setup plan and the host key fingerprint
-nextship server add root@203.0.113.10 --yes   # prepare the server and record it
-nextship deploy --yes
-```
-
-Compare the fingerprint in the plan with the one your provider shows before you pass
-`--yes`. [Your own server](/docs/vm) covers what setup changes and what stays yours to run.
+On the first deploy nextship records the app name, region and registry in `nextship.json`,
+which is the only reason `destroy` can be certain it will not touch anything else in your
+account. [Deploying to App Platform](/docs/deploying) covers the rest.
 
 ## Tell us how it went
 
@@ -110,8 +120,8 @@ the most useful thing anyone can contribute right now, including when everything
 
 ## Where to go next
 
-- [Deploying](/docs/deploying) for what the plan contains and how a release is verified
 - [Your own server](/docs/vm) for the server target: setup, deploying, and keeping it running
+- [Deploying to App Platform](/docs/deploying) for the plan and how a release is verified there
 - [Environment variables](/docs/environment-variables) for pushing secrets safely
 - [Custom domains](/docs/custom-domains) for attaching a domain with automatic TLS
 - [Rollbacks and logs](/docs/rollbacks-and-logs) for when something goes wrong

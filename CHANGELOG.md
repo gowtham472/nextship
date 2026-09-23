@@ -4,6 +4,24 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Changed
+
+- **The site leads with your own server.** The landing page's hero, "How it works" and
+  guarantees now describe deploying to a server over SSH, with App Platform as the managed
+  alternative, and the docs put the server guide first in the navigation and the quick
+  start. The App Platform flow diagram, the build line and the deployment recording are gone
+  from the landing page; the recording stays in the README. Four steps (prepare, build,
+  release, keep running) replace them, each with its real commands and an illustration from
+  unDraw, recoloured through theme tokens so it follows light and dark. One guarantee was
+  rewritten rather than reworded: "Nothing is ever deleted" is true on App Platform but not
+  on a server, where each deployment removes images older than the newest five. (Gowtham)
+
+### Docs
+
+- **The site's security and evidence pages say where code goes on a server.** Both still
+  said your code reaches only your cloud account, which SECURITY.md had already corrected.
+  (Gowtham)
+
 ## [1.1.1] - 2026-09-23
 
 No code changes: the CLI behaves exactly as in 1.1.0. This release carries the npm

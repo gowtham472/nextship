@@ -34,11 +34,11 @@ export const DOCS_NAV: NavSection[] = [
   {
     title: 'Guides',
     items: [
-      { slug: 'deploying', title: 'Deploying' },
+      { slug: 'vm', title: 'Your own server' },
+      { slug: 'deploying', title: 'Deploying to App Platform' },
       { slug: 'environment-variables', title: 'Environment variables' },
       { slug: 'custom-domains', title: 'Custom domains' },
       { slug: 'rollbacks-and-logs', title: 'Rollbacks and logs' },
-      { slug: 'vm', title: 'Your own server' },
     ],
   },
   {

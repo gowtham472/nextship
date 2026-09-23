@@ -35,6 +35,14 @@
   --glow-blue: rgba(0, 94, 255, 0.28);
   --glow-sky: rgba(106, 162, 255, 0.3);
   --glow-sun: rgba(253, 207, 24, 0.22);
+  /* The illustrations' fills. unDraw draws in near-black and pale grey, which on the
+     dark ground would be invisible outlines and glaring white slabs, so each tier of
+     grey has its own token and the dark theme inverts them. */
+  --illus-ink: #0b1220;
+  --illus-ink-soft: #55627a;
+  --illus-surface: #ffffff;
+  --illus-soft: #eef2fa;
+  --illus-mid: #d3dbeb;
 }
 
 /* The default setting is "system", which stamps nothing on the root element,
@@ -58,6 +66,11 @@
     --glow-blue: rgba(0, 94, 255, 0.45);
     --glow-sky: rgba(106, 162, 255, 0.25);
     --glow-sun: rgba(253, 207, 24, 0.14);
+    --illus-ink: #9fb0d3;
+    --illus-ink-soft: #6b7a99;
+    --illus-surface: #0f1a36;
+    --illus-soft: #131f3f;
+    --illus-mid: #27396b;
   }
 }
 
@@ -80,6 +93,34 @@
   --glow-blue: rgba(0, 94, 255, 0.45);
   --glow-sky: rgba(106, 162, 255, 0.25);
   --glow-sun: rgba(253, 207, 24, 0.14);
+  --illus-ink: #9fb0d3;
+  --illus-ink-soft: #6b7a99;
+  --illus-surface: #0f1a36;
+  --illus-soft: #131f3f;
+  --illus-mid: #27396b;
+}
+
+/* unDraw's colours, as theme tokens. See components/landing/illustrations.tsx. */
+.undraw .u-accent {
+  fill: var(--accent);
+}
+.undraw .u-ink {
+  fill: var(--illus-ink);
+}
+.undraw .u-ink-soft {
+  fill: var(--illus-ink-soft);
+}
+.undraw .u-surface {
+  fill: var(--illus-surface);
+}
+.undraw .u-soft {
+  fill: var(--illus-soft);
+}
+.undraw .u-mid {
+  fill: var(--illus-mid);
+}
+.undraw .u-highlight {
+  fill: var(--highlight);
 }
 
 @theme inline {
@@ -407,136 +448,12 @@ html:not([data-theme='dark']) [data-rehype-pretty-code-figure] code span {
   }
 }
 
-/*
- * The build line's scenes. Each plays once when its panel appears, since a panel
- * hidden with the hidden attribute restarts its animations when shown. --n orders
- * the parts of a scene.
- */
-@keyframes pipeline-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-
-@keyframes pipeline-drop {
-  from {
-    opacity: 0;
-    transform: translateY(-22px) scale(0.96);
-  }
-}
-
-@keyframes pipeline-fade {
-  0%,
-  30% {
-    opacity: 1;
-    transform: none;
-  }
-  to {
-    opacity: 0.25;
-    transform: scale(0.6);
-  }
-}
-
-@keyframes pipeline-shrink {
-  from {
-    width: 100%;
-  }
-}
-
-@keyframes pipeline-slide {
-  from {
-    opacity: 0;
-    transform: translateX(-28px);
-  }
-}
-
-@keyframes pipeline-scan {
-  from {
-    transform: translateY(-120%);
-  }
-  to {
-    transform: translateY(900%);
-  }
-}
-
-@keyframes pipeline-live {
-  to {
-    transform: scale(2.6);
-    opacity: 0;
-  }
-}
-
-@keyframes pipeline-progress {
-  from {
-    transform: scaleX(0);
-  }
-}
-
-.pipeline-in {
-  animation: pipeline-in 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-  animation-delay: calc(var(--n, 0) * 110ms);
-}
-
-.pipeline-drop {
-  animation: pipeline-drop 0.6s cubic-bezier(0.2, 0.8, 0.25, 1.15) both;
-  animation-delay: calc(var(--n, 0) * 190ms);
-}
-
-.pipeline-fade {
-  animation: pipeline-fade 1.2s ease-in-out both;
-  animation-delay: calc(700ms + var(--n, 0) * 45ms);
-}
-
-.pipeline-shrink {
-  width: var(--kept);
-  animation: pipeline-shrink 1.3s cubic-bezier(0.6, 0, 0.2, 1) 1.1s both;
-}
-
-.pipeline-slide {
-  animation: pipeline-slide 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-
-.pipeline-scan {
-  background: linear-gradient(to bottom, transparent, var(--spotlight), transparent);
-  animation: pipeline-scan 2.2s ease-in-out both;
-}
-
-.pipeline-live::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: inherit;
-  animation: pipeline-live 1.8s ease-out infinite;
-}
-
-.pipeline-progress {
-  animation: pipeline-progress linear both;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .rise-word,
   .fade-up,
   .sheen::after,
   .reveal,
-  .animate-marquee,
-  .pipeline-in,
-  .pipeline-drop,
-  .pipeline-shrink,
-  .pipeline-slide,
-  .pipeline-live::after {
+  .animate-marquee {
     animation: none !important;
-  }
-
-  /* Shown as they end, pruned. */
-  .pipeline-fade {
-    animation: none !important;
-    opacity: 0.25;
-    transform: scale(0.6);
-  }
-
-  .pipeline-scan {
-    display: none;
   }
 }

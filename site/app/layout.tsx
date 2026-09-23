@@ -11,7 +11,7 @@ import './globals.css'
 
 const title = 'nextship'
 const description =
-  'Deploy any Next.js app to infrastructure you own. No Dockerfile, no config edits, no Terraform.'
+  'Deploy any Next.js app to your own server over SSH, or to DigitalOcean App Platform. No Dockerfile, no config edits, no Terraform.'
 
 /** The brand's typeface. Fetched once at build time and served with the site. */
 const jakarta = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-jakarta' })
@@ -19,11 +19,11 @@ const jakarta = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-jakart
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   alternates: { canonical: '/' },
-  title: { default: `${title}: deploy Next.js to your own cloud`, template: `%s | ${title}` },
+  title: { default: `${title}: deploy Next.js to your own server`, template: `%s | ${title}` },
   description,
   applicationName: title,
   authors: [{ name: 'Gowtham' }, { name: 'Ragul D' }],
-  keywords: ['next.js', 'deployment', 'digitalocean', 'docker', 'self-hosting', 'adapter'],
+  keywords: ['next.js', 'deployment', 'self-hosting', 'vps', 'ssh', 'digitalocean', 'docker', 'adapter'],
   openGraph: { title, description, type: 'website', siteName: title },
   twitter: { card: 'summary_large_image', title, description },
   robots: { index: true, follow: true },

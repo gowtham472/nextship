@@ -16,7 +16,8 @@ const COLUMNS = [
   {
     title: 'Guides',
     links: [
-      { href: '/docs/deploying', label: 'Deploying' },
+      { href: '/docs/vm', label: 'Your own server' },
+      { href: '/docs/deploying', label: 'App Platform' },
       { href: '/docs/environment-variables', label: 'Environment variables' },
       { href: '/docs/custom-domains', label: 'Custom domains' },
       { href: '/docs/rollbacks-and-logs', label: 'Rollbacks and logs' },
@@ -41,7 +42,7 @@ export function SiteFooter() {
           <div>
             <Wordmark />
             <p className="mt-3 max-w-52 text-sm leading-relaxed text-muted">
-              Your code, your cloud account, your bill, your region.
+              Your code, your server, your bill, your region.
             </p>
           </div>
 

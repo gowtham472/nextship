@@ -155,8 +155,9 @@ fixes, pins with a test, or documents every one, as the changelog records.
 
 ## What the CLI can reach
 
-- **One outbound destination:** your own cloud provider's API. There is no nextship
-  server, no telemetry endpoint, no analytics, no update check and no crash reporting.
+- **One outbound destination per target:** your own cloud provider's API, or your own
+  server over your SSH. There is no nextship server, no telemetry endpoint, no analytics,
+  no update check and no crash reporting.
 - The registry credential is written to a temporary directory at mode `0600` and removed
   afterwards, rather than passed on a command line where any local process could read it.
 - `shell: true` appears nowhere in the codebase.
