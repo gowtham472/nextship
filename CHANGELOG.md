@@ -4,6 +4,12 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Docs
+
+- **The docs point to issue #6 for why a build session can drop.** Issue #5 is closed as
+  fixed in 1.1.2; the design record, the evidence page and the README now name #6 for the
+  open question, and count one failure in three fresh servers rather than two. (Gowtham)
+
 ## [1.1.2] - 2026-09-24
 
 A deploy to a server no longer fails when the build's connection to the server's Docker

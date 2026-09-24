@@ -846,8 +846,10 @@ from server: EOF`. The server's Docker journal shows the build's session health 
 failing 16 seconds after setup reloaded SSH and 33 seconds after it first started Docker,
 then the daemon cancelling the build; there was no OOM kill and no Docker restart. The same
 `deploy` a minute later deployed in 75 seconds, and on the Droplet rebuilt to a fresh
-Ubuntu the whole flow succeeded first time. That is issue #5: one failure in two fresh runs,
-cause not established. The retry described under "Build and delivery" is the mitigation.
+Ubuntu the whole flow succeeded first time. That is issue #5, fixed in 1.1.2 by the retry
+described under "Build and delivery". With the third Droplet below, where the same flow also
+succeeded, it is one failure in three fresh servers; why the session dropped is not
+established, and issue #6 tracks it.
 
 **The retry on a live Droplet (Gowtham, 2026-09-24),** a third fresh `s-1vcpu-2gb`, with the
 fix built from `main`. `server add` then an immediate `deploy` succeeded. The `nextship` user

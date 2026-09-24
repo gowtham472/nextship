@@ -175,8 +175,10 @@ sends nothing.
   Cache Components, in containers on the CI runner. Deploy mode skips most PPR tests,
   leaving 10. None has been exercised on a live App Platform app.
 - **Why a build session can drop right after `server add` is not known.** It happened once
-  in two fresh runs. The retry that answers it has run on a live server, against a
-  connection cut on purpose, not against the natural drop.
+  in three fresh servers, and is tracked in
+  [issue #6](https://github.com/gowtham472/nextship/issues/6). The retry that answers it, in
+  1.1.2, has run on a live server against a connection cut on purpose, not against the
+  natural drop.
 - **The server target has not run on Hetzner, on an arm64 machine, on Debian 12, with a
   certificate for a real domain, or from the GitHub Actions workflow in its guide.** Every
   real run so far was amd64, on DigitalOcean or Proxmox. Those are the next release's

@@ -346,6 +346,8 @@ with this line first:
 It is retried only when the connection itself died or the server's Docker journal shows the
 build session lost; a build that fails for any other reason, such as the app failing to
 compile, is reported at once ([issue #5](https://github.com/gowtham472/nextship/issues/5)).
+Why the connection can drop right after `server add` is not yet known, and is tracked in
+[issue #6](https://github.com/gowtham472/nextship/issues/6).
 Both were checked on a live Droplet: a build with its connection cut mid-way built again and
 deployed, and a page that did not compile failed once, with no retry.
 
