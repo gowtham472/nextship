@@ -19,6 +19,7 @@ import {
   dnsWarnings,
   rebootProgress,
   healthCommand,
+  lostBuildSession,
   memoryLimit,
   parseDockerSize,
   parseFacts,
@@ -175,4 +176,21 @@ test('a move copies before it deploys, and records the new server last', () => {
   assert.match(MOVE_STEPS[2], /stream the live image from the old server/)
   assert.match(MOVE_STEPS[3], /healthy/)
   assert.match(MOVE_STEPS.at(-1) ?? '', /record the new server in nextship.json/)
+})
+
+// Recorded from the Docker journal on a fresh Droplet, where a build's session dropped
+// seconds after `server add` finished, and from a build that failed on the app's code.
+const JOURNAL_LOST_SESSION = String.raw`time="2026-09-24T05:59:46.982818557Z" level=warning msg="healthcheck failed" actualDuration="313.66µs" error="Unavailable: connection error: desc = \"transport: Error while dialing: only one connection allowed\"" timeout=15s
+time="2026-09-24T05:59:51.982819938Z" level=error msg="healthcheck failed fatally" error="session healthcheck failed fatally: Unavailable: connection error: desc = \"transport: Error while dialing: only one connection allowed\""
+time="2026-09-24T06:00:40.263136147Z" level=error msg=/moby.buildkit.v1.Control/Solve error="rpc error: code = Canceled desc = context canceled\"`
+const JOURNAL_APP_FAILED = String.raw`time="2026-09-24T05:59:13.729966962Z" level=warning msg="failed check for fsverity support" error="enable fsverity failed: operation not supported" path=/var/lib/docker/plugins/storage
+time="2026-09-24T06:14:02.101000000Z" level=error msg=/moby.buildkit.v1.Control/Solve error="process \"/bin/sh -c npm run build\" did not complete successfully: exit code: 1\"`
+
+test('a lost build session is recognised from what the daemon logged', () => {
+  assert.equal(lostBuildSession(JOURNAL_LOST_SESSION), true)
+})
+
+test('a build that failed on the app itself is not taken for a lost session', () => {
+  assert.equal(lostBuildSession(JOURNAL_APP_FAILED), false)
+  assert.equal(lostBuildSession(''), false)
 })

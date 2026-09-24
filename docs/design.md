@@ -609,7 +609,12 @@ reached through `ssh -L` forwarding a local socket to `/var/run/docker.sock`. Th
 pinned host key in force, which `DOCKER_HOST=ssh://` would bypass, builds for the server's
 own architecture natively, and sends only the build context rather than a finished image.
 A server under 2 GB of RAM is refused for remote builds with `--build local` as the action.
-`--build local` builds here for the server's platform and streams
+A remote build whose connection to the daemon drops is built once more over a new
+forward, and only then: after a failed build, the builder reads the server's Docker journal
+from the moment the build started, by the server's clock, and retries only if the daemon
+logged the build session as lost (`session healthcheck failed fatally`). Any other failure,
+a compile error above all, is reported straight away. The trigger is issue #5 and the run
+recorded below it. `--build local` builds here for the server's platform and streams
 `docker save | ssh docker load`, checking both exit codes so a sender that died part way
 cannot pass as a successful load. On a shared daemon the Next.js build cache is named by
 the app and server rather than by this machine's path, so a laptop and a CI runner warm
@@ -831,6 +836,18 @@ Measured on the Droplets, all `s-1vcpu-2gb-70gb`, amd64, Ubuntu 24.04:
 | Killed process, restarted by Docker | healthy within 10 s |
 | Hung process, restarted by the watchdog | serving again 4 min 52 s after it hung |
 | `deploy` with 2.4 GB free | refused before building, the app kept serving |
+
+**`server add` then `deploy` on two fresh Droplets (Gowtham, 2026-09-24),** recorded for the
+README with nextship-cli 1.1.1 from npm, `s-1vcpu-2gb`, Ubuntu 24.04.4, Bangalore. On the
+first, `deploy` run two seconds after setup finished failed mid-build with `error reading
+from server: EOF`. The server's Docker journal shows the build's session health check
+failing 16 seconds after setup reloaded SSH and 33 seconds after it first started Docker,
+then the daemon cancelling the build; there was no OOM kill and no Docker restart. The same
+`deploy` a minute later deployed in 75 seconds, and on the Droplet rebuilt to a fresh
+Ubuntu the whole flow succeeded first time. That is issue #5: one failure in two fresh runs,
+cause not established. The retry described under "Build and delivery" is the mitigation. It
+is covered by tests; its live path, the `nextship` user reading the Docker journal on a real
+server, has not been exercised yet.
 
 Not verified yet, and the v1.1.2 checklist in `docs/roadmap.md`:
 

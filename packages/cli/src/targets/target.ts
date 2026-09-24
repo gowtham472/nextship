@@ -189,6 +189,12 @@ export interface ImageBuilder {
   cacheScope: string | null
   /** Something the user must know about how this builder is reached, or null. */
   warning: string | null
+  /**
+   * Whether a build that just failed lost its connection to the daemon rather than
+   * failing on its own merits, asked of the daemon itself. Absent where there is no
+   * other daemon to ask, which is every local build: see `build-attempts.ts`.
+   */
+  lostConnection?(): Promise<boolean>
   close(): Promise<void>
 }
 

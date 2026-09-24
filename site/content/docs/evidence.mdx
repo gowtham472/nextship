@@ -105,7 +105,8 @@ release's code: deploy, a second deploy, rollback with no build or push, `logs` 
 
 The server target, new in 1.1.0, ran on DigitalOcean Droplets between 2026-09-20 and
 2026-09-23 (`s-1vcpu-2gb-70gb`, amd64, Ubuntu 24.04), after a local test server and a
-Proxmox VM. Ragul D ran these.
+Proxmox VM. Ragul D ran these, apart from the last row, which Gowtham ran on 2026-09-24
+while recording the README's demo.
 
 | Checked on a Droplet | Result |
 |---|---|
@@ -119,6 +120,7 @@ Proxmox VM. Ragul D ran these.
 | `deploy` on a nearly full disk | Refused at 2.4 GB free, before building; the app kept serving |
 | `server move` to a fresh Droplet | 1 min 34 s including setup, env file and Server Actions key identical |
 | `conformance/vm/e2e.sh` in full | 8 min 6 s, including an ISR page and an optimized image surviving a restart |
+| `deploy` two seconds after `server add`, two fresh Droplets, 2026-09-24 | One lost its build session mid-build ([issue #5](https://github.com/gowtham472/nextship/issues/5)) and deployed in 75 s when run again; the other deployed first time. A lost session is now built once more |
 
 ## An end-to-end test on macOS
 
@@ -171,6 +173,9 @@ sends nothing.
   the full run, 481 assertions pass in suites named for middleware and 122 in suites for
   Cache Components, in containers on the CI runner. Deploy mode skips most PPR tests,
   leaving 10. None has been exercised on a live App Platform app.
+- **Why a build session can drop right after `server add` is not known.** It happened once
+  in two fresh runs. The retry that answers it is covered by tests but has not yet run on a
+  live server.
 - **The server target has not run on Hetzner, on an arm64 machine, on Debian 12, with a
   certificate for a real domain, or from the GitHub Actions workflow in its guide.** Every
   real run so far was amd64, on DigitalOcean or Proxmox. Those are the next release's

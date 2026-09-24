@@ -258,6 +258,16 @@ export function previousContainers(listing: string, name: string, current: strin
 }
 
 /** Docker's human sizes, as `docker image ls` and `docker system df` print them. */
+/**
+ * Whether the Docker daemon's journal shows a build session lost, which is what it logs
+ * when the connection to a build's client drops mid-build. The message is BuildKit's,
+ * recorded from a failed build on a fresh Droplet: first the session's health checks
+ * fail, then the daemon cancels the build.
+ */
+export function lostBuildSession(journal: string): boolean {
+  return /session healthcheck failed fatally/.test(journal)
+}
+
 export function parseDockerSize(text: string): number {
   const match = /^([\d.]+)\s*(B|kB|KB|MB|GB|TB)$/.exec(text.trim())
   if (!match) return 0
@@ -446,8 +456,8 @@ export class VmTarget implements Target {
    * The one connection every step of a command shares.
    *
    * `protected` so a test can put a recording stand-in behind it. The
-   * orchestration that matters here — what order Caddy, the deployment history
-   * and the containers are touched in — is only visible as a sequence of remote
+   * orchestration that matters here (what order Caddy, the deployment history
+   * and the containers are touched in) is only visible as a sequence of remote
    * commands, and there is no other seam that shows it.
    */
   protected ssh(): Promise<Ssh> {
@@ -619,6 +629,9 @@ export class VmTarget implements Target {
     if (this.build === 'local') return { dockerHost: null, cacheScope: null, warning: null, close: async () => {} }
 
     const ssh = await this.ssh()
+    // The server's clock, not this machine's, so a later look at its journal starts
+    // where this build did however far apart the two clocks are.
+    const since = (await ssh.run('date +%s', 'read the server clock')).trim()
     // Windows' OpenSSH cannot forward to a local Unix socket, so it forwards a
     // loopback port, which any local process could use while the build runs.
     const windows = process.platform === 'win32'
@@ -657,11 +670,25 @@ export class VmTarget implements Target {
       warning: windows
         ? `The server's Docker is reachable on 127.0.0.1:${port} by any process on this machine until the build finishes.`
         : null,
+      lostConnection: () => this.buildSessionLost(since),
       close: async () => {
         child.kill()
         await exited
       },
     }
+  }
+
+  /**
+   * Whether the server's Docker logged a build session as lost since `since`, in seconds
+   * since the epoch by the server's clock. The nextship user reads the journal through
+   * the systemd-journal group setup adds it to. A server whose journal cannot be read
+   * answers no, so the build's failure is reported as it happened rather than retried.
+   */
+  async buildSessionLost(since: string): Promise<boolean> {
+    if (!/^\d+$/.test(since)) throw new NextshipError(`"${since}" is not a server clock reading.`, 'This is a nextship defect. Please report it.')
+    const ssh = await this.ssh()
+    const result = await ssh.exec(`journalctl -u docker --since @${since} --no-pager --quiet --output cat`)
+    return result.code === 0 && lostBuildSession(result.stdout)
   }
 
   async planDelivery(name: string): Promise<string[]> {

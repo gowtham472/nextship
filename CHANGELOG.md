@@ -4,6 +4,22 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A deploy to a server whose build lost its connection to the server's Docker is built
+  once more, instead of failing** ([#5](https://github.com/gowtham472/nextship/issues/5)).
+  On a fresh DigitalOcean Droplet, `deploy` run seconds after `server add` failed
+  mid-build with `error reading from server: EOF`: the server's Docker journal showed the
+  build's session health check failing and the daemon cancelling the build. The same
+  deploy a minute later succeeded, and so did a second fresh server, so it is intermittent
+  and its cause is not established. A failed remote build now asks the server's journal,
+  from the build's start by the server's clock, whether the daemon logged the session as
+  lost; only then does it say so and build once more over a new connection. A build that
+  fails for any other reason, a compile error above all, is reported at once, since
+  building it twice would only double the wait. Covered by tests that fail with the retry
+  removed; the live path, the `nextship` user reading the Docker journal on a real server,
+  has not been exercised yet. (Gowtham)
+
 ### Changed
 
 - **The site leads with your own server.** The landing page's hero, "How it works" and
@@ -44,6 +60,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Docs
 
+- **The README opens with a recording of a real server deploy.** One uncut run of
+  `server add`, then `deploy`, then `curl` on a fresh Droplet, as an animated SVG with a
+  still final frame for readers who ask for reduced motion, and the recording itself in
+  `site/public/media/server-deploy.cast`. The caption says the typing is scripted, that
+  pauses were capped while recording, and that it is the second take after issue #5. The
+  App Platform recording moves below it. The site's server guide shows the same recording,
+  and replaces a test-server figure, 249 requests, with the Droplet's 579 of 579. (Gowtham)
 - **The site's security and evidence pages say where code goes on a server.** Both still
   said your code reaches only your cloud account, which SECURITY.md had already corrected.
   (Gowtham)

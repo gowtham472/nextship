@@ -81,8 +81,11 @@ does not protect any port you publish from another container yourself.
 ## 5. Deploying and running an app
 
 `nextship deploy` builds on the server by default, through an SSH forward of its Docker
-socket, and switches Caddy to the new container only once it is healthy. See the README
-for the plan and the flags. What it keeps on the server:
+socket, and switches Caddy to the new container only once it is healthy. If the build's
+connection to the server's Docker drops mid-build, which has happened right after
+`server add` on a fresh server, `deploy` says so and builds once more; a build that fails
+for any other reason is not retried. See the README for the plan and the flags. What it
+keeps on the server:
 
 | Where | What |
 |---|---|

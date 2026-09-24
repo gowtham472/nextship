@@ -414,3 +414,27 @@ test('destroy releases the default address only when this app holds it', async (
   await new TestVmTarget(CONFIG, theirs).destroyApp('app-uuid')
   assert.equal(theirs.at(/rm -f \/etc\/nextship\/default-app/), -1)
 })
+
+// ------------------------------------------------------- lost build sessions
+
+test('a lost build session is read from the server journal, from the build start on', async () => {
+  const shell = new FakeShell().answer(/journalctl -u docker/, 'level=error msg="healthcheck failed fatally" error="session healthcheck failed fatally"')
+  assert.equal(await new TestVmTarget(CONFIG, shell).buildSessionLost('1790229580'), true)
+  assert.match(shell.commands.at(-1) ?? '', /journalctl -u docker --since @1790229580 /)
+})
+
+test('a journal with no lost session means the build failed on its own', async () => {
+  const shell = new FakeShell().answer(/journalctl -u docker/, 'level=error msg="process did not complete successfully: exit code: 1"')
+  assert.equal(await new TestVmTarget(CONFIG, shell).buildSessionLost('1790229580'), false)
+})
+
+test('a journal that cannot be read is no reason to retry', async () => {
+  const shell = new FakeShell().answer(/journalctl -u docker/, 'session healthcheck failed fatally', 1)
+  assert.equal(await new TestVmTarget(CONFIG, shell).buildSessionLost('1790229580'), false)
+})
+
+test('only a clock reading reaches the remote command', async () => {
+  const shell = new FakeShell()
+  await assert.rejects(new TestVmTarget(CONFIG, shell).buildSessionLost('1790229580; rm -rf /'), NextshipError)
+  assert.equal(shell.commands.length, 0, 'nothing was sent')
+})

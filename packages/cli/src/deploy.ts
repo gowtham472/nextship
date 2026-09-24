@@ -15,8 +15,9 @@
 
 import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
-import { buildProject, storedEncryptionKey, type BuildResult } from './build.js'
-import { packageImage, type ImageRef } from './packaging.js'
+import { buildWithReconnect } from './build-attempts.js'
+import { buildProject, storedEncryptionKey } from './build.js'
+import { packageImage } from './packaging.js'
 import { readConfig, writeConfig, TARGET_IDS, type BuildMode, type ProjectConfig, type TargetId } from './config.js'
 import { CONTAINER_PORT } from './image/dockerfile.js'
 import { client as apiClient } from './owned-app.js'
@@ -162,21 +163,17 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
 
   const serverKey = await client.actionsKey(await storedEncryptionKey(project.root), detail)
 
-  const builder = await client.builder()
-  let build: BuildResult
-  let image: ImageRef
-  try {
-    if (builder.warning) warn(builder.warning)
-    const placement = {
-      platform: await client.buildPlatform(),
-      dockerHost: builder.dockerHost,
-      cacheScope: builder.cacheScope,
-    }
-    build = await buildProject(project, placement, serverKey)
-    image = await packageImage(project, build)
-  } finally {
-    await builder.close()
-  }
+  const platform = await client.buildPlatform()
+  const { build, image } = await buildWithReconnect(
+    () => client.builder(),
+    async (builder) => {
+      if (builder.warning) warn(builder.warning)
+      const placement = { platform, dockerHost: builder.dockerHost, cacheScope: builder.cacheScope }
+      const build = await buildProject(project, placement, serverKey)
+      return { build, image: await packageImage(project, build) }
+    },
+    warn
+  )
   const deploymentId = build.identity.deploymentId
 
   step('Delivering image')

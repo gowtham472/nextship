@@ -17,17 +17,37 @@
 
 nextship takes a Next.js app and puts it on infrastructure you own, with no
 Dockerfile, no `next.config.js` edits, no Terraform and no IAM archaeology. It runs
-on your machine or in CI, uses your cloud credentials, and never sends your code
-anywhere. Every Next.js feature keeps working, because the thing running in the
-container is the Next.js server itself.
+on your machine or in CI, uses your own SSH access or cloud credentials, and never
+sends your code anywhere else. Every Next.js feature keeps working, because the thing
+running in the container is the Next.js server itself.
 
 ```bash
+nextship server add root@your-server --yes
 nextship deploy --yes
 ```
 
-That command builds your app inside Docker, prunes the result to the files Next.js
-says it needs, pushes the image to your registry, releases it, waits for it to go
-live, and prints the URL.
+The first command prepares a fresh Ubuntu or Debian server over SSH. The second builds
+your app inside Docker, prunes the result to the files Next.js says it needs, starts it
+on the server behind Caddy, switches traffic to it once it is healthy, and prints the
+URL. For DigitalOcean App Platform instead, `nextship deploy --yes` on its own does the
+same with your registry and your app.
+
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="site/public/media/server-deploy-final.svg">
+  <img src="site/public/media/server-deploy.svg" alt="A recording of nextship server add, which plans and then prepares a fresh Ubuntu server over SSH, then nextship deploy, which builds the app on the server, starts it behind Caddy, and prints its URL, then curl loading the live page." width="760">
+</picture>
+
+One uncut recording on a fresh DigitalOcean Droplet. Pauses over two seconds were capped
+at two while recording, which leaves 196 seconds, shown here at four times speed in 49.
+The commands are typed by a script so they can be read, and every line of output is what
+nextship printed; [`server-deploy.cast`](./site/public/media/server-deploy.cast) keeps
+all of it. It is the second take: the first, on another fresh server, lost its
+build connection mid-build, which is
+[issue #5](https://github.com/gowtham472/nextship/issues/5) and now retried. The Droplet
+was destroyed afterwards.
+
+<details>
+<summary>The same, deploying to DigitalOcean App Platform</summary>
 
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="site/public/media/deploy-final.svg">
@@ -38,6 +58,8 @@ One uncut recording of a real deployment, 98 seconds shown in 43. Pauses over tw
 are shortened and nothing else is edited;
 [`deploy.cast`](./site/public/media/deploy.cast) keeps the real timings. The app was
 destroyed afterwards, so its URL no longer serves.
+
+</details>
 
 ---
 
@@ -313,6 +335,17 @@ that exist instead of creating something in the wrong place.
 
 For a project recorded by `nextship server add`, `deploy` builds the image and runs it on
 that server behind Caddy.
+
+A remote build whose connection to the server's Docker drops mid-build is built once more,
+with this line first:
+
+```
+! The connection to the server's Docker dropped during the build: its daemon logged the build session as lost, so this is not a fault in the app. Building once more over a new connection.
+```
+
+It is retried only when the server's Docker journal shows the build session lost; a build
+that fails for any other reason, such as the app failing to compile, is reported at once
+([issue #5](https://github.com/gowtham472/nextship/issues/5)).
 
 | Option | Default | Meaning |
 |---|---|---|
