@@ -189,7 +189,7 @@ stays identical.
 
 **The live checklist.** Each result is recorded here and in `design.md` §9.3, and nothing
 is claimed until it has run. The items that had not run when 1.1.0 was released moved to
-v1.1.2 below:
+the live checklist below:
 
 1. A Hetzner arm64 VM and an amd64 VM from another provider, both Ubuntu 24.04
 2. `server add` twice on each (the second changes nothing), and once on Debian 12
@@ -248,10 +248,12 @@ project. The app and the registry created for it were removed afterwards. The sa
 compatibility suite on the merged code passed 1123 of 1123 suites on 16.4.0-canary.22 and
 1108 of 1108 on v16.3.5, as before the merge.
 
-## v1.1.2: the rest of the server target's live checklist (Planned)
+## The server target's live checklist (Planned, not tied to a version)
 
 What had not run on a real provider when 1.1.0 was released. Each is recorded, pass or fail,
-in `design.md` §9.3 when it runs, and a defect it finds ships here as a fix:
+in `design.md` §9.3 when it runs, and a defect it finds ships as a fix in the next
+release. It has no version of its own, so a release never waits on a platform nobody has
+tried yet:
 
 | Item | Why it matters |
 |---|---|

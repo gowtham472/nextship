@@ -31,7 +31,7 @@
 
 import { randomBytes, randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { hostname } from 'node:os'
 import path from 'node:path'
 import { connect as tlsConnect } from 'node:tls'
@@ -637,6 +637,10 @@ export class VmTarget implements Target {
     const windows = process.platform === 'win32'
     const port = windows ? await freePort() : 0
     const local = windows ? `127.0.0.1:${port}` : path.join(ssh.privateDir(), 'docker.sock')
+    // A forward that was killed leaves its socket file behind, and readiness below is the
+    // file existing, so a second forward on the same path looked ready before it had bound
+    // and the build met a dead socket. Found by cutting a forward mid-build on a Droplet.
+    if (!windows) rmSync(local, { force: true })
     const args = [
       '-nNT',
       ...ssh.options({ multiplex: false }),
@@ -670,7 +674,12 @@ export class VmTarget implements Target {
       warning: windows
         ? `The server's Docker is reachable on 127.0.0.1:${port} by any process on this machine until the build finishes.`
         : null,
-      lostConnection: () => this.buildSessionLost(since),
+      // Two kinds of evidence, either enough. The forward ending on its own comes first:
+      // a build fails the moment its forward dies, before the daemon at the far end has
+      // logged anything. When the forward is still up, the daemon's journal says whether
+      // it dropped the build's session itself, as it did on the Droplet in issue #5.
+      lostConnection: async () =>
+        child.exitCode !== null || child.signalCode !== null || (await this.buildSessionLost(since)),
       close: async () => {
         child.kill()
         await exited

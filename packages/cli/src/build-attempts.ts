@@ -10,8 +10,8 @@
  *
  * A build that failed for any other reason, a compile error above all, is not retried:
  * running it twice would only double the wait before the same error. Only the builder
- * can tell the two apart, by asking the daemon, so a builder that cannot ask never
- * retries.
+ * can tell the two apart, from whether its own connection died and from what the daemon
+ * logged, so a builder that can do neither never retries.
  *
  * Author: Gowtham
  */
@@ -20,8 +20,8 @@ import type { ImageBuilder } from './targets/target.js'
 import { CommandError } from './util/exec.js'
 
 export const RECONNECT_NOTICE =
-  "The connection to the server's Docker dropped during the build: its daemon logged the build " +
-  'session as lost, so this is not a fault in the app. Building once more over a new connection.'
+  "The connection to the server's Docker dropped during the build, so this is not a fault in " +
+  'the app. Building once more over a new connection.'
 
 /**
  * Runs `attempt` with a builder from `open`, and once more with a fresh builder if the

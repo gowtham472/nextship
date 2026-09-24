@@ -43,8 +43,8 @@ The commands are typed by a script so they can be read, and every line of output
 nextship printed; [`server-deploy.cast`](./site/public/media/server-deploy.cast) keeps
 all of it. It is the second take: the first, on another fresh server, lost its
 build connection mid-build, which is
-[issue #5](https://github.com/gowtham472/nextship/issues/5) and now retried. The Droplet
-was destroyed afterwards.
+[issue #5](https://github.com/gowtham472/nextship/issues/5), now retried from 1.1.2. The
+Droplet was destroyed afterwards.
 
 <details>
 <summary>The same, deploying to DigitalOcean App Platform</summary>
@@ -65,13 +65,13 @@ destroyed afterwards, so its URL no longer serves.
 
 ## Status
 
-**Version 1.1.1, for Next.js on DigitalOcean App Platform or on any Linux server over SSH.** App Platform is verified against live deployments, including streaming through App Platform itself, re-checked against a live app for 1.1.0, and deployed from both Windows and an Apple Silicon Mac. The server target is new in 1.1.0 and verified on a local test server, a Proxmox VM and DigitalOcean Droplets. Hetzner, arm64, Debian 12 and a certificate for a real domain have not run yet, and are the v1.1.2 checklist.
+**Version 1.1.2, for Next.js on DigitalOcean App Platform or on any Linux server over SSH.** App Platform is verified against live deployments, including streaming through App Platform itself, re-checked against a live app for 1.1.0, and deployed from both Windows and an Apple Silicon Mac. The server target is new in 1.1.0 and verified on a local test server, a Proxmox VM and DigitalOcean Droplets. Hetzner, arm64, Debian 12 and a certificate for a real domain have not run yet, and are on the server target's live checklist.
 
 | Area | State |
 |---|---|
 | Local pipeline: `detect`, `build`, `package`, `run` | Done. Verified on a real production project and a purpose-built feature app |
 | DigitalOcean deployment: `deploy`, `rollback`, `logs` | Done. Verified against a live app, including two rollbacks in opposite directions, and deployed from an Apple Silicon Mac (M3 Max) with 0.4.4 from npm, on the second attempt. Re-checked for 1.1.0 against a live app: deploy, a second deploy, rollback, `logs`, `logs --follow`, `env push`, `domain` and `images` |
-| Any Linux server over SSH | New in 1.1.0. `server add`, deploy, rollback and every day-two command pass end to end against a local Ubuntu 24.04 test server over SSH. On a real DigitalOcean Droplet (2 GB RAM, Ubuntu 24.04.5, amd64), `server add` applied every step including swap for the first time anywhere, a second run changed nothing, and `deploy` served the app directly at 110 ms to first byte. On Droplets, `conformance/vm/e2e.sh` passed in full, `server move` to a fresh one kept the env and Server Actions key, `server reboot` brought every app back in 37 seconds, the watchdog restarted a hung app, and `deploy` refused a nearly full disk. A real certificate, Hetzner, arm64 and Debian 12 have not run yet, and are the v1.1.2 checklist. See [`docs/vm.md`](./docs/vm.md) and [`docs/roadmap.md`](./docs/roadmap.md) |
+| Any Linux server over SSH | New in 1.1.0. `server add`, deploy, rollback and every day-two command pass end to end against a local Ubuntu 24.04 test server over SSH. On a real DigitalOcean Droplet (2 GB RAM, Ubuntu 24.04.5, amd64), `server add` applied every step including swap for the first time anywhere, a second run changed nothing, and `deploy` served the app directly at 110 ms to first byte. On Droplets, `conformance/vm/e2e.sh` passed in full, `server move` to a fresh one kept the env and Server Actions key, `server reboot` brought every app back in 37 seconds, the watchdog restarted a hung app, and `deploy` refused a nearly full disk. A real certificate, Hetzner, arm64 and Debian 12 have not run yet, and are on the server target's live checklist. See [`docs/vm.md`](./docs/vm.md) and [`docs/roadmap.md`](./docs/roadmap.md) |
 | AWS | On demand, after a streaming experiment on Lightsail. EC2 is one of the machines the v1.1 server target is built for, but it has not been run there: see the row above |
 | Official Next.js adapter compatibility suite | Passes in full on 16.4.0-canary.22: 1123 of 1123 suites and 3599 of 3599 assertions, with 9 Vercel-specific tests skipped and each reason published. See the results below |
 
@@ -340,12 +340,14 @@ A remote build whose connection to the server's Docker drops mid-build is built 
 with this line first:
 
 ```
-! The connection to the server's Docker dropped during the build: its daemon logged the build session as lost, so this is not a fault in the app. Building once more over a new connection.
+! The connection to the server's Docker dropped during the build, so this is not a fault in the app. Building once more over a new connection.
 ```
 
-It is retried only when the server's Docker journal shows the build session lost; a build
-that fails for any other reason, such as the app failing to compile, is reported at once
-([issue #5](https://github.com/gowtham472/nextship/issues/5)).
+It is retried only when the connection itself died or the server's Docker journal shows the
+build session lost; a build that fails for any other reason, such as the app failing to
+compile, is reported at once ([issue #5](https://github.com/gowtham472/nextship/issues/5)).
+Both were checked on a live Droplet: a build with its connection cut mid-way built again and
+deployed, and a page that did not compile failed once, with no retry.
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -763,7 +765,7 @@ It takes the same options as `server add`.
 
 ### Planned
 
-1.1.0 added the server target. Next is v1.1.2, which runs the rest of its live checklist:
+1.1.0 added the server target. Next is the rest of its live checklist:
 a Hetzner VM, an arm64 machine, Debian 12, a certificate for a real domain, and the GitHub
 Actions workflow in [`docs/vm.md`](./docs/vm.md).
 See [`docs/roadmap.md`](./docs/roadmap.md), which also records what is
@@ -1197,7 +1199,7 @@ Bun's adapter keeps a list of its own the same way.
 | **v0.4** | Day-two operations: domains and TLS, env, images, destroy, logs | Done, verified live |
 | **v1.0** | Trustworthy for personal use: compatibility suite results, streaming conformance, honest limitations | Done. The suite passes in full (1123 of 1123 suites), the package is on npm under Apache-2.0, and streaming conformance passes in CI and on a live App Platform app |
 | **v1.1** | Any Linux server over SSH | Released in 1.1.0. Verified end to end on a local test server, a Proxmox VM and DigitalOcean Droplets |
-| **v1.1.2** | The rest of the server target's live checklist | Planned: a Hetzner VM, an arm64 machine, Debian 12, a certificate for a real domain, and the GitHub Actions workflow |
+| **Next** | The rest of the server target's live checklist | Planned, not tied to a version: a Hetzner VM, an arm64 machine, Debian 12, a certificate for a real domain, and the GitHub Actions workflow |
 
 Beyond v1.0, each with the trigger that would justify it: correctness at scale (a
 shared cache and distributed tags, needed once there is more than one instance),

@@ -577,7 +577,7 @@ allowed; `sshd -T` reported `passwordauthentication no`; a key swapped into `nex
 was refused with both fingerprints named. The same stand-in cannot exercise swap (a
 container may not `swapon`). On DigitalOcean Droplets with no swap, the step applied and
 added a 2 GB file, and a second run changed nothing (§9.3, the Droplet runs below). Other
-providers, arm64 and Debian 12 are the v1.1.2 checklist in `docs/roadmap.md`.
+providers, arm64 and Debian 12 are on the live checklist in `docs/roadmap.md`.
 
 #### Server layout (Implemented)
 
@@ -610,11 +610,13 @@ pinned host key in force, which `DOCKER_HOST=ssh://` would bypass, builds for th
 own architecture natively, and sends only the build context rather than a finished image.
 A server under 2 GB of RAM is refused for remote builds with `--build local` as the action.
 A remote build whose connection to the daemon drops is built once more over a new
-forward, and only then: after a failed build, the builder reads the server's Docker journal
-from the moment the build started, by the server's clock, and retries only if the daemon
-logged the build session as lost (`session healthcheck failed fatally`). Any other failure,
-a compile error above all, is reported straight away. The trigger is issue #5 and the run
-recorded below it. `--build local` builds here for the server's platform and streams
+forward, and only then. After a failed build the builder has two kinds of evidence: its
+own forward ending on its own, which a build fails on at once, before the daemon has logged
+anything; and the server's Docker journal from the moment the build started, by the
+server's clock, showing the daemon dropped the session itself (`session healthcheck failed
+fatally`). Either is enough, and any other failure, a compile error above all, is reported
+straight away. A new forward first removes the socket file an earlier forward left behind,
+since readiness is that file existing. The trigger is issue #5 and the runs recorded below. `--build local` builds here for the server's platform and streams
 `docker save | ssh docker load`, checking both exit codes so a sender that died part way
 cannot pass as a successful load. On a shared daemon the Next.js build cache is named by
 the app and server rather than by this machine's path, so a laptop and a CI runner warm
@@ -845,11 +847,19 @@ failing 16 seconds after setup reloaded SSH and 33 seconds after it first starte
 then the daemon cancelling the build; there was no OOM kill and no Docker restart. The same
 `deploy` a minute later deployed in 75 seconds, and on the Droplet rebuilt to a fresh
 Ubuntu the whole flow succeeded first time. That is issue #5: one failure in two fresh runs,
-cause not established. The retry described under "Build and delivery" is the mitigation. It
-is covered by tests; its live path, the `nextship` user reading the Docker journal on a real
-server, has not been exercised yet.
+cause not established. The retry described under "Build and delivery" is the mitigation.
 
-Not verified yet, and the v1.1.2 checklist in `docs/roadmap.md`:
+**The retry on a live Droplet (Gowtham, 2026-09-24),** a third fresh `s-1vcpu-2gb`, with the
+fix built from `main`. `server add` then an immediate `deploy` succeeded. The `nextship` user
+read the Docker journal. A deploy whose SSH forward was killed four seconds into its build
+failed with the same `error reading from server: EOF` as issue #5, printed the retry notice,
+and on the first attempt at this the retry itself failed: the killed forward had left its
+socket file, so the new forward looked ready before it had bound and the build met a dead
+socket. With the file removed first, the same test built once more and deployed, and the
+page served the new version. A page that did not compile failed once, in 14 seconds, with no
+retry, and the previous deployment kept serving.
+
+Not verified yet, and the live checklist in `docs/roadmap.md`:
 
 | Not verified | Why |
 |---|---|
