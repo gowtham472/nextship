@@ -6,6 +6,13 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Docs
 
+- **The evidence page compares nextship with Coolify, measured.** The same app deployed
+  with Coolify 4.3.23 and nextship 1.1.2 on identical Droplets: setup, cold and warm
+  deploy times, image size (987 MB against 407 MB), the memory each tool uses beside the
+  app, streaming, and requests during a redeploy, with Coolify's health check both off
+  and on. Asked for by a reader who wanted numbers rather than claims; every caveat that
+  favours Coolify is stated with the table. The README and `docs/design.md` §14 point to
+  it. (Gowtham)
 - **The docs point to issue #6 for why a build session can drop.** Issue #5 is closed as
   fixed in 1.1.2; the design record, the evidence page and the README now name #6 for the
   open question, and count one failure in three fresh servers rather than two. (Gowtham)

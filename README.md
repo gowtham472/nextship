@@ -1090,7 +1090,9 @@ site/                  the marketing site and documentation, exported as static 
 ## How correctness is proven
 
 Every measured result, and what each one was measured on, is collected on one page:
-[Evidence](https://nextship.doodlebytestudio.in/docs/evidence). It ends with what has not been proven.
+[Evidence](https://nextship.doodlebytestudio.in/docs/evidence). It includes a deployment
+of the same app with Coolify and with nextship on identical servers, and ends with what has
+not been proven.
 
 ```bash
 pnpm build                                  # compile both packages

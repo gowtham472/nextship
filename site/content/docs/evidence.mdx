@@ -123,6 +123,46 @@ while recording the README's demo and testing the fix.
 | `deploy` two seconds after `server add`, two fresh Droplets, 2026-09-24 | One lost its build session mid-build ([issue #5](https://github.com/gowtham472/nextship/issues/5)) and deployed in 75 s when run again; the other deployed first time |
 | A build with its connection cut four seconds in, a third Droplet | Same error as issue #5; built once more and deployed. A page that did not compile failed once in 14 s, not retried |
 
+## Compared with Coolify
+
+Coolify is the tool most often suggested for self-hosting Next.js, so we deployed the same
+app with both, on 2026-09-26: two identical Droplets (`s-2vcpu-4gb`, 2 vCPU and 4 GB,
+Ubuntu 24.04, `blr1`), one running Coolify 4.3.23 with its own installer and deploying to
+itself, the other set up by nextship 1.1.2 with `server add`. The app was the streaming
+fixture in `conformance/streaming/app`, Next.js 16.3.4, from the same commit. Gowtham ran
+both. Every Coolify setting stayed at its default unless a row says otherwise.
+
+| | Coolify 4.3.23 | nextship 1.1.2 |
+|---|---|---|
+| Server setup | 117 s, the installer | 41 s, `server add` |
+| First deploy, cold | 170 s | 107 s |
+| A rebuild with a warm cache | 59 s, a forced rebuild | 55 s, after a one-line change |
+| App image, as `docker images` reports it | 987 MB, built by Railpack | 407 MB |
+| Memory used by the app | 74 MB | 48 MB |
+| Memory used by the tool itself | 460 to 520 MB for its dashboard, database, cache, realtime server, proxy and monitor, plus 296 to 341 MB for a build container that stayed running | 10 MB, Caddy |
+| Streaming through the proxy | Passed three runs of three, first byte 167 to 651 ms | Passed three runs of three, first byte 108 to 186 ms |
+| Edge runtime route | Served | Served |
+| Requests during a redeploy, polled every 100 ms | 418 of 420 succeeded; 2 answered 502 | 356 of 356 succeeded |
+| The same with Coolify's health check turned on (`/`, port 3000) | 1007 of 1008 succeeded; 1 got no response | Not applicable: the health check always runs |
+| An app that never starts | Reported the deployment as completed while the container restarted in a loop | Refuses the deployment and keeps the previous one serving (above) |
+
+How to read it:
+
+- **The health check is what separates the redeploy rows.** Coolify leaves it off by
+  default; with it on, one request failed in 1008, in a single run that cannot tell a
+  failure during the container switch from one on the network between us and the
+  Droplet. nextship always waits for the new container to pass before Caddy switches.
+- **The redeploys were not identical.** nextship's rebuilt the app after a change;
+  Coolify's reused its image, because a redeploy of an unchanged commit skips the build.
+- **The app had no `start` script**, since nextship runs Next.js's server itself. Coolify's
+  default build pack needs one, so its first deploy started an empty shell: we set the
+  start command to `npx next start -p 3000` and forced a rebuild. An app made with
+  `create-next-app` has the script and would not hit this.
+- **One small app, one run of each.** Image size and memory will differ for your app;
+  the difference in what each tool runs beside it will not change much.
+- **Coolify does far more:** a dashboard, databases, any kind of app, many servers. This
+  compares one thing, deploying a Next.js app to one server, and nothing else.
+
 ## An end-to-end test on macOS
 
 On 2026-09-11 we installed nextship 0.4.4 from npm on a MacBook Pro with an M3 Max,

@@ -1160,6 +1160,15 @@ That is a deliberate narrowing, made after two pieces of research:
   money only above roughly 1 TB of monthly egress, and that below that line Vercel
   Pro at $20 is hard to beat.
 
+One of those comparisons has since been measured rather than assumed. On 2026-09-26 the
+same app was deployed with Coolify 4.3.23 and with nextship 1.1.2 on identical Droplets:
+nextship's image was 407 MB against 987 MB, it ran beside the app in 10 MB against 460 to
+520 MB, and no request failed across its redeploy, where Coolify's defaults dropped 2 of
+420. The full table and its caveats are on the site's evidence page
+(`site/content/docs/evidence.mdx`, "Compared with Coolify"). It does not change the
+finding above: Coolify does far more, and the comparison covers one Next.js app on one
+server.
+
 Neither finding matters for a single user with a single app, which is precisely why
 v1 can stay small. Both matter enormously if this is ever offered to other people,
 which is why the honest pitch for that future version is different and is recorded
