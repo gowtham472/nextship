@@ -15,6 +15,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   crawlers until the disk filled and the site went down; nothing in Next.js bounds it.
   Setup version 3, so `server status` asks servers set up earlier to run `server add`
   again. (Ragul D)
+- **The compatibility suite runs every night against the newest Next.js canary, and the
+  evidence page shows the result.** The scheduled run publishes its score to the
+  `evidence` branch, and the page reads it when it opens, saying so plainly when there is
+  nothing to read rather than showing a number. A run started by hand is never
+  published. (Ragul D)
 
 ### Changed
 

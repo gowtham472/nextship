@@ -3,6 +3,7 @@ import type { MDXComponents } from 'mdx/types'
 
 import { Callout } from '@/components/docs/callout'
 import { CodeBlock } from '@/components/docs/code-block'
+import { NightlyResult } from '@/components/docs/nightly-result'
 
 /**
  * How MDX elements render.
@@ -94,4 +95,5 @@ export const mdxComponents: MDXComponents = {
   pre: (props) => <pre className="overflow-x-auto" {...props} />,
 
   Callout,
+  NightlyResult,
 }
