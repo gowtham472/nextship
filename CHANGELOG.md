@@ -4,6 +4,31 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Added
+
+- **A server keeps what each app writes at runtime under a limit.** `server add` installs
+  a cache guard, run every ten minutes, that keeps each app's optimized images, fetch
+  cache and runtime-rendered pages under 10% of the disk, never under 1 GiB, deleting
+  the least recently used first and logging it under `nextship-cache-guard`. Only what
+  Next.js wrote at runtime is ever deleted, never a file the build produced. A site
+  that moved off Vercel reported its ISR cache growing about 145 GB a day under
+  crawlers until the disk filled and the site went down; nothing in Next.js bounds it.
+  Setup version 3, so `server status` asks servers set up earlier to run `server add`
+  again. (Ragul D)
+
+### Changed
+
+- **An app on a server runs in a hardened container.** Its root filesystem is read-only
+  apart from the two `.next` volumes and a 64 MB `/tmp` that is emptied on restart and
+  cannot run a binary; every Linux capability is dropped, privileges cannot be gained,
+  and it is limited to 512 processes. The December 2025 break-ins through CVE-2025-55182
+  on self-hosted Next.js rewrote `next.config.js` and lockfiles and ran miners from
+  `/tmp`; none of that can persist now. Measured with the streaming fixture: streaming,
+  on-demand ISR, the Edge route and image optimization all work, and nothing is written
+  outside the volumes, and `conformance/vm/e2e.sh` checks it on every run. An app that
+  writes files outside `.next` now fails with `EROFS`, which the README and `docs/vm.md`
+  §4 state. (Ragul D)
+
 ### Docs
 
 - **The evidence page compares nextship with Coolify, measured.** The same app deployed

@@ -267,6 +267,28 @@ Known from the Droplet runs, to fix or document here: `conformance/vm/e2e.sh` ne
 with no other app on it, and after adding swap `server add` prints `done   swap already on`,
 the post-apply check's wording rather than what it did.
 
+## The server target's next phase (Planned, not tied to a version)
+
+Chosen from what people self-hosting Next.js report as unsolved: open Next.js issues,
+competitors' issue trackers and security advisories, and published break-ins, read in
+September 2026. Built in this order, each shipped and verified on its own, because the ones
+first are the ones a new user meets in their first ten minutes:
+
+| Order | Item | State and what decides it |
+|---|---|---|
+| 1 | **Hardened containers.** Read-only root filesystem, a `noexec` `/tmp`, no capabilities, `no-new-privileges`, a process limit | **Done.** See `design.md` §9.3, Security |
+| 2 | **HTTPS on a bare IP.** A first deployment answers `https://<server>` with a valid certificate, before any domain exists | Let's Encrypt made IP address certificates generally available on 2026-01-15, only as six day certificates. Caddy needs its `shortlived` profile for them, and Caddy issue #7399 reports IP issuance failing with it. Verify on a Droplet before building |
+| 3 | **A cap on the cache volumes, and disk watched while apps run.** Least recently used eviction when an app's runtime writes pass their limit | **Done.** See `design.md` §9.3, Cache guard |
+| 4 | **Skew protection and instant rollback.** The previous deployment's container keeps running for a grace period, Caddy sends each request to the build the page was loaded from, and a rollback within that period only reloads Caddy | Next.js issue #99165, open on 16.3.6, reports open tabs failing after a deployment even with `deploymentId` set, because a Server Action response does not carry the deployment id. A spike first establishes what each kind of request carries. Costs a second container's memory for the grace period |
+| 5 | **The compatibility suite nightly against the newest canary, published on the site** | `conformance.yml` runs it weekly today. The cost is CI time, since it builds Next.js from source |
+| 6 | **A preview deployment per pull request on the same server**, a subdomain per branch through Caddy, removed when the pull request closes | Needs a design first for keeping a preview away from production's env and database, wildcard DNS and its certificate, and the memory of a container per open pull request |
+| 7 | **Deploy time measured stage by stage**, then shortened where nextship owns the time | A warm deployment to a server takes 16.5 s, and most of it is `next build`. No target time is promised until the stages are measured |
+| 8 | **Build once, promote to another environment** with its own `NEXT_PUBLIC_*` values | A spike, not a commitment. The bundler folds a build-time value into the code around it, so a comparison against a placeholder cannot be undone by replacing the placeholder. Only plain string values could be replaced, and a promotion that finds a folded value has to refuse |
+| 9 | **A migration plan from Vercel**: domains, cron jobs, routing rules and the names of env vars | Vercel's API never returns a sensitive env var's value, so the plan asks for those rather than importing blanks, for the reason `env pull` is not built |
+| 10 | **Peak build memory in the build result**, and a warning near the limit | `server add` already adds swap below 4 GB, and remote builds are refused below 2 GB |
+
+Correctness across several servers stays under v2 below, with its trigger.
+
 ## AWS: on demand, after the Lightsail streaming experiment
 
 Previously v1.1. Moved behind the VM target: an EC2 instance is a Linux server over SSH, which
@@ -517,6 +539,7 @@ Recorded so the decision stays visible rather than looking like an oversight.
 | Lambda, or any serverless AWS compute | It would be the cheapest option by far, and that is not the deciding factor. Lambda cannot run `next start`, so the app has to be split into functions and the routing pipeline re-implemented: middleware matching, dynamic segments, the `rsc` and `_rsc` cache-key discipline, PPR resume, ISR through object storage and a queue, image optimization as its own function. That is the work `design.md` §2.1 exists to avoid, and the work that cost other projects years. It also cannot port: DigitalOcean has no Lambda, so a serverless-first design would make the driver interface a fiction |
 | `env pull` | App Platform never returns a stored secret, so a pull could only ever return `NEXT_PUBLIC_*` values and the names of the rest. `nextship env` already lists the names. A command that returns blanks for everything that matters is worse than no command |
 | Log forwarding to an external sink | Needs a destination and credentials that are the user's to choose. There is nothing to verify against, and shipping unverified infrastructure code is how the defects in this project's own history got made |
+| Stripping `x-middleware-subrequest` at the proxy | The header drove CVE-2025-29927, which was fixed in Next.js 15.2.3. nextship refuses anything older than 16.2, so no version it deploys is affected, and a rule for a header no supported version honours would be decoration |
 | A dedicated health endpoint | Would mean replacing Next.js's `startServer` and owning keep-alive, upgrades and error handling on the most critical path in the system, to save one render every few seconds for apps that prerender nothing. The health path is chosen from the build's prerendered routes instead |
 
 ---

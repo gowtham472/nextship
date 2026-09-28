@@ -53,6 +53,7 @@ only what is not already done, which is why a second run changes nothing.
 | `updates` | Installs security updates automatically with unattended-upgrades, using the distribution's default security origins | `--no-auto-updates` |
 | `firewall` | If ufw is installed, allows the SSH port, 80 and 443, then enables it. SSH is allowed before anything is enabled | `--no-firewall` |
 | `watchdog` | A systemd timer that restarts a nextship container unhealthy for three checks in a row, logging why to the journal under `nextship-watchdog` | |
+| `cache-guard` | A systemd timer that, every ten minutes, keeps what each app has written at runtime under 10% of the disk, and never under 1 GiB, by deleting what was used least recently. Logged to the journal under `nextship-cache-guard` | |
 | `ssh-hardening` | Turns off password and keyboard-interactive logins and allows root by key only, in `/etc/ssh/sshd_config.d/10-nextship.conf`. Runs last, only after the `nextship` login worked, and removes its file again if `sshd -t` rejects it | `--no-ssh-hardening` |
 
 Docker publishes Caddy's ports itself, which bypasses ufw for those two ports. That is
@@ -75,6 +76,14 @@ does not protect any port you publish from another container yourself.
   privileged container, so anyone who can log in as `nextship` controls the server. Treat
   its keys as root's. It is a separate user so nextship's files and containers have one
   owner, not to limit what that owner can do.
+- **An app cannot change its own files.** Its container's filesystem is read-only apart
+  from the two volumes Next.js writes to and a 64 MB `/tmp` that is emptied on restart and
+  cannot run a binary. It keeps no Linux capability, cannot gain privileges, and is limited
+  to 512 processes. Code an attacker runs through a flaw in your app can neither rewrite
+  the app nor leave a program behind, and a restart removes whatever it wrote to `/tmp`.
+  The cost: an app that writes files outside `.next`, such as uploads to a local folder,
+  fails with `EROFS`, and a package that unpacks an executable into `/tmp`, such as a
+  headless Chromium, cannot run it.
 - **What is never touched:** containers without nextship's labels, the Docker daemon's
   configuration, and DNS.
 
@@ -108,7 +117,12 @@ again.
 
 **Recovering.** A container that exits is restarted by Docker. A container that stays up
 but stops answering its health check is restarted by the watchdog after three failed
-minutes, and the journal says so under `nextship-watchdog`. A lock left by a deployment
+minutes, and the journal says so under `nextship-watchdog`. What Next.js writes while an
+app runs, optimized images and pages it regenerates or renders for a new dynamic segment,
+is kept under 10% of the disk per app by the cache guard, which deletes the least recently
+used first and logs each run that deleted anything under `nextship-cache-guard`. Only what
+was written at runtime is deleted, never a file the build produced, and Next.js renders a
+deleted page or encodes a deleted image again on its next request. A lock left by a deployment
 that was killed is reported with its owner after 30 minutes and never removed
 automatically: confirm nothing is running, then remove
 `/etc/nextship/apps/<name>/lock` as the `nextship` user.

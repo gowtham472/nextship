@@ -177,6 +177,18 @@ export function healthCommand(healthPath: string | null): string {
  * HEALTHCHECK; the start interval makes Docker check every two seconds while the
  * container starts, where Docker supports it, so a healthy deployment switches in
  * seconds rather than after the first 30 second interval.
+ *
+ * The container is hardened so that code an attacker runs inside it cannot stay.
+ * The self-hosted break-ins through CVE-2025-55182 in December 2025 edited
+ * `next.config.js` and lockfiles and ran miners dropped in `/tmp`. Here the root
+ * filesystem is read-only, so the only writable places are the two volumes
+ * Next.js writes to and a `/tmp` that is emptied on restart and cannot hold an
+ * executable. No capability is kept, because the image runs as its `app` user on
+ * a port above 1024 and needs none, and nothing can gain privileges through a
+ * setuid binary. Measured in a nextship image: under concurrent streaming and
+ * image optimization the app ran 12 processes and threads, so the process limit
+ * stops a fork bomb without coming near a real app, and `docker diff` showed no
+ * write outside the volumes.
  */
 export function runArguments(options: {
   name: string
@@ -197,6 +209,11 @@ export function runArguments(options: {
     '--restart', 'unless-stopped',
     '--env-file', `${ETC}/apps/${name}/env`,
     '--memory', options.memory,
+    '--read-only',
+    '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m',
+    '--cap-drop', 'ALL',
+    '--security-opt', 'no-new-privileges',
+    '--pids-limit', '512',
     '--log-driver', 'journald',
     '--log-opt', `tag=${name}`,
     '--volume', `${volumes.build}:${options.workdir}/.next`,

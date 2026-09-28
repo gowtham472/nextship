@@ -54,6 +54,7 @@ export const SETUP_STEPS = [
   'updates',
   'firewall',
   'watchdog',
+  'cache-guard',
   'ssh-hardening',
 ] as const
 
@@ -198,15 +199,17 @@ function runtimeFile(name: string): string {
   )
 }
 
-/** The setup script with the watchdog it installs, ready to send on stdin. */
+/** The setup script with the watchdog and cache guard it installs, ready to send on stdin. */
 async function setupInput(): Promise<string> {
-  const [script, watchdog] = await Promise.all([
+  const [script, watchdog, cacheGuard] = await Promise.all([
     readFile(runtimeFile('setup.sh'), 'utf8'),
     readFile(runtimeFile('watchdog.sh'), 'utf8'),
+    readFile(runtimeFile('cache-guard.sh'), 'utf8'),
   ])
-  // An assignment ahead of the script rather than an argument, so the command
-  // line stays short. Base64 has no characters a shell treats specially.
-  return `export NEXTSHIP_WATCHDOG_B64=${Buffer.from(watchdog).toString('base64')}\n${script}`
+  // Assignments ahead of the script rather than arguments, so the command line
+  // stays short. Base64 has no characters a shell treats specially.
+  const encode = (text: string) => Buffer.from(text).toString('base64')
+  return `export NEXTSHIP_WATCHDOG_B64=${encode(watchdog)}\nexport NEXTSHIP_CACHE_GUARD_B64=${encode(cacheGuard)}\n${script}`
 }
 
 /** The version setup.sh records on the server, read from the script this CLI ships. */

@@ -27,7 +27,7 @@ const manifest = JSON.parse(readFileSync(path.join(packageRoot, 'package.json'),
  * The adapter is copied into every build, and `server add` sends the two VM
  * scripts to the server; the rest are the README and what Apache-2.0 requires.
  */
-const REQUIRED = ['runtime/adapter.mjs', 'runtime/vm/setup.sh', 'runtime/vm/watchdog.sh', 'README.md', 'LICENSE', 'NOTICE']
+const REQUIRED = ['runtime/adapter.mjs', 'runtime/vm/setup.sh', 'runtime/vm/watchdog.sh', 'runtime/vm/cache-guard.sh', 'README.md', 'LICENSE', 'NOTICE']
 
 const fail = (message) => {
   throw new Error(message)

@@ -82,6 +82,22 @@ test('a deployment publishes no port and carries the labels removal is scoped by
   assert.equal(args.at(-1), 'shop:dpl-1a2b-3c4d')
 })
 
+// The defect this prevents: an attacker's code, run through a flaw in the app,
+// rewriting the app's files or leaving a binary that survives a restart.
+test('a deployment runs read-only with no capabilities, and only the volumes and a non-executable /tmp are writable', () => {
+  const args = run()
+  assert.ok(args.includes('--read-only'))
+  assert.deepEqual(value(args, '--tmpfs'), ['/tmp:rw,noexec,nosuid,nodev,size=64m'])
+  assert.deepEqual(value(args, '--cap-drop'), ['ALL'])
+  assert.deepEqual(value(args, '--security-opt'), ['no-new-privileges'])
+  assert.deepEqual(value(args, '--pids-limit'), ['512'])
+  assert.deepEqual(value(args, '--volume'), [
+    'nextship-shop-build-dpl-1a2b-3c4d:/src/.next',
+    'nextship-shop-cache:/src/.next/cache',
+  ])
+  assert.ok(!args.includes('--cap-add') && !args.includes('--privileged'))
+})
+
 test('the health check matches the image, with a fast start interval only where Docker has one', () => {
   const args = run()
   assert.deepEqual(value(args, '--health-interval'), ['30s'])

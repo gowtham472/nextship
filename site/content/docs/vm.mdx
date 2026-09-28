@@ -33,8 +33,8 @@ The first command changes nothing. It shows the server's host key fingerprint, w
 compare with the one your provider shows, and every setup step with what it would change.
 The second installs Docker if needed, creates a `nextship` user and proves a login as it,
 runs Caddy on ports 80 and 443, limits the journal, enables security updates and ufw,
-installs a watchdog for containers that stay unhealthy, and turns off SSH password logins
-last. From then on the host key is pinned in `nextship.json` and a server presenting any
+installs a watchdog for containers that stay unhealthy and a cache guard that keeps what each
+app writes at runtime under a limit, and turns off SSH password logins last. From then on the host key is pinned in `nextship.json` and a server presenting any
 other key is refused.
 
 `--no-firewall`, `--no-auto-updates`, `--no-swap` and `--no-ssh-hardening` opt out of those
@@ -91,6 +91,11 @@ once it serves.
 Two things on the server exist nowhere else: `/etc/nextship/apps/<name>/env` and
 `/etc/nextship/apps/<name>/secrets`. Keep a copy of both. The `nextship` user is in the docker
 group, which is root-equivalent, so treat its keys as root's.
+
+Each app's container is read-only apart from `.next` and a 64 MB `/tmp` that cannot run a
+binary, with no Linux capabilities and a limit of 512 processes. Code an attacker runs through
+a flaw in your app can neither rewrite it nor leave a program behind. An app that saves
+uploads to a local folder fails with `EROFS`, so keep them in object storage or a database.
 
 The full guide, including GitHub Actions and recovery, is
 [docs/vm.md](https://github.com/gowtham472/nextship/blob/main/docs/vm.md).

@@ -698,7 +698,8 @@ server presenting any other key is refused.
 With `--yes` it installs Docker CE if the server has none, creates a `nextship` user and
 proves a login as that user from your machine, runs Caddy on ports 80 and 443, limits the
 journal, enables security updates and ufw, installs a watchdog for containers that stay
-unhealthy, and turns off SSH password logins last. Every later command connects as
+unhealthy and a cache guard that keeps what each app writes at runtime under a limit, and
+turns off SSH password logins last. Every later command connects as
 `nextship`. Running it again against a server that is set up changes nothing; running it
 from a second project records the same server for that project. Each step is described in
 [`docs/vm.md`](./docs/vm.md).
@@ -908,6 +909,8 @@ On a server, `server add` creates:
   caddy/sites/                          one Caddy site per app
 /usr/local/lib/nextship/watchdog.sh     restarts containers unhealthy for 3 checks in a row
 /etc/systemd/system/nextship-watchdog.* the timer that runs it every minute
+/usr/local/lib/nextship/cache-guard.sh  keeps each app's runtime cache under 10% of the disk
+/etc/systemd/system/nextship-cache-guard.* the timer that runs it every ten minutes
 /etc/systemd/journald.conf.d/nextship.conf   SystemMaxUse=500M, only if no limit was set
 /etc/ssh/sshd_config.d/10-nextship.conf      unless --no-ssh-hardening
 /etc/apt/apt.conf.d/20auto-upgrades          unless --no-auto-updates
@@ -1001,6 +1004,11 @@ deploy:
   back a variable changed since, which App Platform does.
 - **On a server, only the first app deployed answers `http://<server>`.** Every other app
   answers only on the domains attached to it.
+- **On a server, your app cannot write its own files.** The container is read-only apart
+  from `.next` and a 64 MB `/tmp` that cannot run a binary, so an attacker who gets code
+  running through a flaw in your app can neither rewrite it nor leave a program behind. An
+  app that saves uploads to a local folder fails with `EROFS`, and a package that unpacks
+  an executable into `/tmp`, such as a headless Chromium, cannot run it.
 - **A server's env file cannot hold a value with a line break.** Docker reads it one line
   per variable, so `env push` refuses such a value rather than truncating it. Encode it,
   for example as base64.
@@ -1083,7 +1091,7 @@ conformance/           scripts for the official Next.js adapter compatibility su
 packages/
   adapter/             Next.js Adapter API implementation, injected via NEXT_ADAPTER_PATH
   cli/                 every command; runtime/ holds the files copied into a build,
-                       and runtime/vm/ the setup and watchdog scripts sent to a server
+                       and runtime/vm/ the setup, watchdog and cache guard scripts sent to a server
 site/                  the marketing site and documentation, exported as static files
 ```
 

@@ -6,7 +6,7 @@
 # previous one serving, rollback returns to the previous deployment, env push takes effect
 # without downtime, a replaced deployment's logs are still readable, pruning keeps the
 # live image, a regenerated ISR page and an optimized image survive a container restart,
-# a domain gets its own site, and destroying one app leaves another serving.
+# the app's container is read-only and cannot run what it writes, a domain gets its own site, and destroying one app leaves another serving.
 #
 # It ends by destroying both apps it created, so a server it ran against is left with only
 # what `server add` set up.
@@ -277,6 +277,32 @@ AFTER_CACHED="$(cache_state "${IMAGE_URL}")"
 [ "${AFTER_CACHED}" = "HIT" ] ||
   fail "durability" "the optimized image was re-encoded after the restart rather than read from the cache: ${AFTER_CACHED:-no header}"
 check "durability" "the regenerated page and the optimized image both survived a container restart"
+
+# ---------------------------------------------------------------- hardening
+
+# The same container has just regenerated a page and optimized an image, so what
+# follows proves the protections are enforced, not only that the app tolerates them.
+# Each is tried from inside, as code running through a flaw in the app would try it.
+HARDENING="$(on_server "${DOCKER} inspect -f '{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.CapDrop}} {{.HostConfig.SecurityOpt}} {{.HostConfig.PidsLimit}}' ${CONTAINER}")"
+[ "${HARDENING}" = "true [ALL] [no-new-privileges] 512" ] ||
+  fail "hardening" "the container is not run read-only with no capabilities: ${HARDENING}"
+on_server "${DOCKER} exec ${CONTAINER} sh -c 'touch next.config.js' 2> /dev/null" &&
+  fail "hardening" "code inside the container could rewrite the app"
+on_server "${DOCKER} exec ${CONTAINER} sh -c 'cp /bin/true /tmp/dropped && /tmp/dropped' 2> /dev/null" &&
+  fail "hardening" "code inside the container could run a program it wrote to /tmp"
+WRITTEN="$(on_server "${DOCKER} diff ${CONTAINER}")"
+[ -z "${WRITTEN}" ] || fail "hardening" "the container wrote outside its volumes: ${WRITTEN}"
+check "hardening" "the app can rewrite none of its files, cannot run a program from /tmp, and wrote nothing outside its volumes"
+
+# ------------------------------------------------------------- cache guard
+
+# Run now rather than waited for, as the timer runs it. Under its limit it must
+# delete nothing, so the regenerated page is still the one that survived the restart.
+on_server "systemctl is-active --quiet nextship-cache-guard.timer" || fail "cache guard" "its timer is not active"
+on_server "sudo -n systemctl start nextship-cache-guard.service 2> /dev/null || systemctl start nextship-cache-guard.service" ||
+  fail "cache guard" "a run failed: $(on_server 'journalctl -u nextship-cache-guard.service -n 5 --no-pager' 2>&1)"
+[ "$(curl -s "${URL}/isr")" = "${REGENERATED}" ] || fail "cache guard" "a run under the limit changed what the app serves"
+check "cache guard" "its timer is active, and a run under the limit left the app's cache as it was"
 
 # ------------------------------------------------------------------ domains
 
