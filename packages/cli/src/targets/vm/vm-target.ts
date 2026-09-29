@@ -83,7 +83,8 @@ const DEFAULT_APP_FILE = `${ETC}/default-app`
 
 /** How long a new container has to report healthy before the deployment fails. */
 const HEALTH_TIMEOUT_MS = 5 * 60 * 1000
-const HEALTH_POLL_MS = 2000
+/** Matches the start interval in `runArguments`, so the switch follows the first passing check. */
+const HEALTH_POLL_MS = 500
 
 /** Remote builds need room for the Next.js compiler beside what the server already runs. */
 const REMOTE_BUILD_MIN_MIB = 1800
@@ -177,9 +178,12 @@ export function healthCommand(healthPath: string | null): string {
  * `docker run` for one deployment. No port is published: Caddy reaches the
  * container on the nextship network, so nothing on the server's public address
  * bypasses the proxy. The interval, timeout and retries match the image's own
- * HEALTHCHECK; the start interval makes Docker check every two seconds while the
+ * HEALTHCHECK; the start interval makes Docker check every half second while the
  * container starts, where Docker supports it, so a healthy deployment switches in
- * seconds rather than after the first 30 second interval.
+ * about a second rather than after the first 30 second interval. Measured on a warm
+ * deployment: at two seconds, with the deploy polling every two seconds too, a
+ * container that was ready at once was seen as healthy four seconds after it started,
+ * a quarter of the whole deployment.
  *
  * The container is hardened so that code an attacker runs inside it cannot stay.
  * The self-hosted break-ins through CVE-2025-55182 in December 2025 edited
@@ -231,7 +235,7 @@ export function runArguments(options: {
     '--health-start-period', '10s',
     '--health-retries', '3',
     // API 1.44, Docker 25. Setup accepts Docker 23, which would refuse the flag.
-    ...(options.dockerMajor >= 25 ? ['--health-start-interval', '2s'] : []),
+    ...(options.dockerMajor >= 25 ? ['--health-start-interval', '500ms'] : []),
     `${name}:${imageTag}`,
   ]
 }

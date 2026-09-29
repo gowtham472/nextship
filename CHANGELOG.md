@@ -39,6 +39,10 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Changed
 
+- **A deployment to a server switches about three seconds sooner.** A container that was
+  ready at once waited 4.1 s to be seen as healthy, a quarter of a 16.6 s warm deployment,
+  because Docker's first check and the deploy's polling were both two seconds apart. Both
+  are half a second now; three warm deployments took 13.3 to 15.0 s. (Ragul D)
 - **An app on a server runs in a hardened container.** Its root filesystem is read-only
   apart from the two `.next` volumes and a 64 MB `/tmp` that is emptied on restart and
   cannot run a binary; every Linux capability is dropped, privileges cannot be gained,

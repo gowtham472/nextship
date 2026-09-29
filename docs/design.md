@@ -707,6 +707,15 @@ failed its deployment while 123 of 123 requests to the previous one returned 200
 `rollback --yes` moved Caddy to a new container of the previous image. A warm remote
 build and deployment took 16.5 s; `--build local` from an M3 Max took 60 s.
 
+A warm deployment of a one-line change, timed stage by stage on the stand-in (Docker Desktop
+on an M3 Max): planning 0.6 s, `next build` in the builder 7.7 to 9.1 s, packaging the runtime
+image 3.4 s, of which starting the second `docker build` is most and copying the app 0.2 s,
+starting the container 0.4 s, waiting for it to be healthy, and switching Caddy 0.5 s. The wait
+was 4.1 s of a 16.6 s deployment for a container ready at once, because Docker's first check
+came two seconds after start and the deploy polled every two seconds; both are half a second
+now, and three deployments took 15.0, 13.5 and 13.3 s with a 1.1 s wait. What remains is
+mostly `next build`, which nextship does not own, so no deployment time is promised.
+
 #### Runtime writes (Implemented)
 
 Measured with `docker diff` in a deployed container after exercising each feature:

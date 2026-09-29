@@ -102,7 +102,7 @@ test('the health check matches the image, with a fast start interval only where 
   const args = run()
   assert.deepEqual(value(args, '--health-interval'), ['30s'])
   assert.deepEqual(value(args, '--health-retries'), ['3'])
-  assert.deepEqual(value(args, '--health-start-interval'), ['2s'])
+  assert.deepEqual(value(args, '--health-start-interval'), ['500ms'])
   assert.deepEqual(value(run({ dockerMajor: 24 }), '--health-start-interval'), [])
 })
 
