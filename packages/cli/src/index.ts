@@ -301,6 +301,7 @@ function report(finding: Finding): void {
   if (finding.level === 'note') detail(line)
   else warn(line)
   detail(`  ${finding.action}`)
+  for (const line of finding.lines ?? []) detail(`    ${line}`)
 }
 
 /** Reads `--flag value` pairs, so an unknown flag is an error rather than silently ignored. */

@@ -24,6 +24,12 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   Caddy back to its running container, 208 ms in the end-to-end test, keeping its own env,
   and a timer stops the kept container when its hour is over. `env push` and domain changes
   keep nothing extra. (Ragul D)
+- **`doctor` hands over what `vercel.json` did.** A cron job becomes a crontab line that
+  calls its route with `CRON_SECRET` as a bearer token, as Vercel does. Redirects, rewrites
+  and headers that use only fields `next.config` accepts are printed as a `next.config`
+  snippet; any other, or a redirect that does not say whether it is permanent, is named
+  rather than guessed. The part of a migration that needs Vercel's API, domains and env var
+  names, is not built. (Ragul D)
 - **Previews.** `nextship deploy --preview <name>` deploys the current source as a second
   app on the same server, with its own env file and domains, never taking the server's
   address and asking crawlers not to index it. The same flag scopes `rollback`, `logs`,

@@ -287,8 +287,8 @@ is reported as a blocker.
 | Checked | Why it matters |
 |---|---|
 | `@vercel/analytics` and similar packages | They stop reporting and nothing errors |
-| Cron jobs in `vercel.json` | They will simply never run |
-| Routing rules in `vercel.json` | They stop applying |
+| Cron jobs in `vercel.json` | They will simply never run. `doctor` prints a crontab line for each that calls its route as Vercel does, with `CRON_SECRET` as a bearer token |
+| Routing rules in `vercel.json` | They stop applying. `doctor` prints the redirects, rewrites and headers that carry over unchanged as a `next.config` snippet, and names each one that needs a decision, such as a redirect that does not say whether it is permanent |
 | `VERCEL_URL` and `VERCEL_ENV` read in source | They become undefined |
 | Packages in `node_modules` that nothing declares | They exist on your machine and not in the image, so the build fails on an import that resolves locally |
 | A missing lockfile | Installs are no longer reproducible |
