@@ -14,12 +14,21 @@
  * refuses it, which covers the instant between Caddy moving to a new container
  * and that container accepting a connection it has not seen before.
  *
+ * For an hour after a deployment the previous one keeps running, and a request
+ * that names its build goes to it. Next.js names the build on every request an open
+ * tab makes: `x-deployment-id` on client navigations and Server Actions, and
+ * `?dpl=` on every JavaScript and CSS file. Without this, a tab opened before the
+ * deployment asks the new container for files and Server Actions that exist only
+ * in the build it loaded, and fails. A page load names no build, so it gets the
+ * new one. Once the previous container has stopped, its route fails over to the
+ * live container, which is what every request got before this existed.
+ *
  * Author: Ragul D
  * Design: ../../../../../docs/design.md §9.3
  */
 
 import { CONTAINER_PORT } from '../../image/dockerfile.js'
-import { assertAppName, assertDomain } from './ssh.js'
+import { assertAppName, assertDeploymentId, assertDomain } from './ssh.js'
 
 export interface SiteDomain {
   domain: string
@@ -34,21 +43,50 @@ interface SiteOptions {
   domains: SiteDomain[]
   /** The first app deployed on a server answers plain HTTP on its address. */
   isDefault: boolean
+  /** The deployment before the live one, while it still runs for the tabs that loaded it. */
+  previous: { container: string; deploymentId: string } | null
+  /** A preview asks crawlers not to index it: it is a copy of the site under another name. */
+  preview: boolean
 }
 
-const proxy = (container: string): string[] => [
-  `  reverse_proxy ${container}:${CONTAINER_PORT} {`,
+const proxy = (upstreams: string[], extra: string[] = []): string[] => [
+  `  reverse_proxy ${upstreams.map((container) => `${container}:${CONTAINER_PORT}`).join(' ')} {`,
+  ...extra,
   '    flush_interval -1',
   '    lb_try_duration 5s',
   '  }',
 ]
+
+const indent = (lines: string[]): string[] => lines.map((line) => `  ${line}`)
+
+function routes(options: SiteOptions): string[] {
+  const noindex = options.preview ? ['  header X-Robots-Tag "noindex, nofollow"'] : []
+  return [...noindex, ...upstreams(options)]
+}
+
+function upstreams(options: SiteOptions): string[] {
+  if (options.previous === null) return proxy([options.container])
+  const id = assertDeploymentId(options.previous.deploymentId)
+  return [
+    `  @previous expression \`{header.X-Deployment-Id} == "${id}" || {query.dpl} == "${id}"\``,
+    '  handle @previous {',
+    // `first` sends to the previous container while it answers. A failed dial marks
+    // it down for 30 s and the retry goes to the live one, so a request that names a
+    // build no longer running is served as it would be with no route at all.
+    ...indent(proxy([options.previous.container, options.container], ['    lb_policy first', '    fail_duration 30s'])),
+    '  }',
+    '  handle {',
+    ...indent(proxy([options.container])),
+    '  }',
+  ]
+}
 
 export function renderSite(options: SiteOptions): string {
   assertAppName(options.name)
   const lines = [`# Written by nextship for ${options.name}. Regenerated on every deployment; edits are overwritten.`]
 
   if (options.isDefault) {
-    lines.push('http://:80 {', ...proxy(options.container), '}')
+    lines.push('http://:80 {', ...routes(options), '}')
   }
 
   // Caddy applies a block's tls settings to every name in it, so domains are
@@ -59,7 +97,7 @@ export function renderSite(options: SiteOptions): string {
       .sort((a, b) => Number(b.primary) - Number(a.primary))
       .map((entry) => assertDomain(entry.domain))
     if (names.length === 0) continue
-    lines.push(`${names.join(', ')} {`, '  tls {', `    protocols tls${minimum}`, '  }', ...proxy(options.container), '}')
+    lines.push(`${names.join(', ')} {`, '  tls {', `    protocols tls${minimum}`, '  }', ...routes(options), '}')
   }
 
   return `${lines.join('\n')}\n`

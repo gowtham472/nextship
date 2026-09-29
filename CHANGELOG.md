@@ -15,6 +15,22 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   crawlers until the disk filled and the site went down; nothing in Next.js bounds it.
   Setup version 3, so `server status` asks servers set up earlier to run `server add`
   again. (Ragul D)
+- **A tab opened before a deployment keeps working after it, and a rollback within the
+  hour is instant.** On a server, the deployment a new build replaces keeps running for an
+  hour, and Caddy sends it every request that names its build, as Next.js does on each
+  client navigation, Server Action and script an open tab loads; a page load gets the new
+  build. Without it such a tab asks the new build for files and Server Actions it lacks,
+  the failure Next.js issue #99165 still reports. `rollback` to that deployment switches
+  Caddy back to its running container, 208 ms in the end-to-end test, keeping its own env,
+  and a timer stops the kept container when its hour is over. `env push` and domain changes
+  keep nothing extra. (Ragul D)
+- **Previews.** `nextship deploy --preview <name>` deploys the current source as a second
+  app on the same server, with its own env file and domains, never taking the server's
+  address and asking crawlers not to index it. The same flag scopes `rollback`, `logs`,
+  `env`, `domain`, `images` and `destroy`. A preview is found again from the app it
+  previews, recorded on the server, so a CI run holding only the committed `nextship.json`
+  can update or remove it; `docs/vm.md` §6 has a workflow for one per pull request, not yet
+  run in GitHub Actions. (Ragul D)
 - **The compatibility suite runs every night against the newest Next.js canary, and the
   evidence page shows the result.** The scheduled run publishes its score to the
   `evidence` branch, and the page reads it when it opens, saying so plainly when there is

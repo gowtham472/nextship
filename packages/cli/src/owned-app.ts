@@ -23,6 +23,7 @@ import { DigitalOceanTarget } from './targets/digitalocean-target.js'
 import type { Target } from './targets/target.js'
 import { VmTarget } from './targets/vm/vm-target.js'
 import { docsUrl } from './links.js'
+import { previewAppName, selectedPreview } from './preview.js'
 
 export interface OwnedApp {
   target: Target
@@ -100,7 +101,12 @@ export async function closeTargets(): Promise<void> {
   await Promise.all(opened.splice(0).map((driver) => driver.close()))
 }
 
-/** The app recorded for this project, refusing to guess when there is none. */
+/**
+ * The app recorded for this project, refusing to guess when there is none. With
+ * `--preview`, the preview of it: found by name on the project's server and accepted
+ * only when its record names this project's app, so a preview is never adopted by
+ * name alone either.
+ */
 export async function ownedApp(project: ProjectInfo): Promise<OwnedApp> {
   const config = await readConfig(project.root)
   if (!config?.appId) {
@@ -109,5 +115,33 @@ export async function ownedApp(project: ProjectInfo): Promise<OwnedApp> {
       'Run `nextship deploy` first. nextship only acts on apps listed in nextship.json.'
     )
   }
-  return { target: client(config), appId: config.appId, name: config.name, config }
+  const preview = selectedPreview()
+  if (preview === null) return { target: client(config), appId: config.appId, name: config.name, config }
+
+  const scoped = previewConfig(config, preview)
+  const target = client(scoped)
+  const app = (await target.listApps()).find((entry) => entry.name === scoped.name)
+  if (!app || app.previewOf !== config.appId) {
+    throw new NextshipError(
+      app ? `An app named "${scoped.name}" exists on the server, and it is not a preview of this project.` : `This project has no preview named "${preview}".`,
+      app ? 'nextship will not act on an app it does not own. Choose another preview name.' : `Create it with \`nextship deploy --preview ${preview}\`.`
+    )
+  }
+  return { target, appId: app.id, name: scoped.name, config: scoped }
+}
+
+/**
+ * The project's settings as they apply to one of its previews: the same server and
+ * build mode under the preview's own app name, with no app id, since the preview's
+ * id lives on the server and never in `nextship.json`.
+ */
+export function previewConfig(config: ProjectConfig, preview: string): ProjectConfig {
+  if (config.target !== 'vm') {
+    throw new NextshipError(
+      'Previews run on a server, and this project deploys to DigitalOcean App Platform.',
+      'Drop --preview. A preview is a second app on the same server, which App Platform has no equivalent of here.'
+    )
+  }
+  const { appId: _appId, ...rest } = config
+  return { ...rest, name: previewAppName(config.name, preview) }
 }

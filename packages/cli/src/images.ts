@@ -31,7 +31,7 @@ import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
 import { readConfig } from './config.js'
 import { ownedApp } from './owned-app.js'
-import type { ImageRecord } from './targets/target.js'
+import type { DeploymentRecord, ImageRecord } from './targets/target.js'
 import { detail, ok, step, warn } from './util/log.js'
 
 /**
@@ -107,12 +107,13 @@ export function orderForDeletion(remove: ImageRecord[]): ImageRecord[] {
 /**
  * Decides what goes.
  *
- * The live tag is retained whatever `keep` says. Pruning the image a running
- * deployment was created from leaves an app that runs until something
+ * Tags in use are retained whatever `keep` says: the live one, and on a server the
+ * one still running for tabs opened before the last deployment. Pruning the image a
+ * running deployment was created from leaves an app that runs until something
  * reschedules it and then cannot start, a failure that appears hours later and
- * looks nothing like its cause.
+ * looks nothing like its cause, and on a server Docker refuses to remove it at all.
  */
-export function planPrune(manifests: ImageRecord[], live: string | null, keep: number): PrunePlan {
+export function planPrune(manifests: ImageRecord[], inUse: string[], keep: number): PrunePlan {
   if (!Number.isInteger(keep) || keep < 1) {
     throw new NextshipError(
       `--keep must be a whole number of at least 1, not "${keep}".`,
@@ -125,8 +126,8 @@ export function planPrune(manifests: ImageRecord[], live: string | null, keep: n
   const dropped: ImageRecord[] = []
 
   for (const manifest of tagged) {
-    const isLive = live !== null && manifest.tags.includes(live)
-    if (isLive || roots.length < keep) roots.push(manifest)
+    const used = manifest.tags.some((tag) => inUse.includes(tag))
+    if (used || roots.length < keep) roots.push(manifest)
     else dropped.push(manifest)
   }
 
@@ -178,16 +179,24 @@ async function repository(project: ProjectInfo): Promise<string> {
  * The tag the app is deployed from, read from the deployment the target reports
  * as live rather than from any one platform's spec.
  */
-async function liveTag(app: { target: { deployments: (id: string) => Promise<Array<{ live: boolean; imageTag: string | null }>> }; appId: string }): Promise<string | null> {
+/** The live deployment's tag, and the tag still running for older tabs, if any. */
+async function tagsInUse(app: { target: { deployments: (id: string) => Promise<DeploymentRecord[]> }; appId: string }): Promise<{ live: string | null; kept: string | null }> {
   const deployments = await app.target.deployments(app.appId)
-  return deployments.find((entry) => entry.live)?.imageTag ?? null
+  const now = Date.now()
+  return {
+    live: deployments.find((entry) => entry.live)?.imageTag ?? null,
+    kept: deployments.find((entry) => !entry.live && entry.keptUntil && Date.parse(entry.keptUntil) > now)?.imageTag ?? null,
+  }
 }
+
+const inUseList = (tags: { live: string | null; kept: string | null }): string[] =>
+  [tags.live, tags.kept].filter((tag): tag is string => tag !== null)
 
 /** Lists the images in this project's repository and what each one is for. */
 export async function listImages(project: ProjectInfo): Promise<void> {
   const app = await ownedApp(project)
   const repo = await repository(project)
-  const live = await liveTag(app)
+  const inUse = await tagsInUse(app)
   const manifests = await app.target.images(repo)
   const tagged = manifests.filter((manifest) => manifest.tags.length > 0)
 
@@ -195,14 +204,19 @@ export async function listImages(project: ProjectInfo): Promise<void> {
   if (tagged.length === 0) detail('No tagged images. Run `nextship deploy` to push one.')
 
   for (const manifest of tagged) {
-    const role = live !== null && manifest.tags.includes(live) ? 'deployed now' : 'kept for rollback'
+    const role =
+      inUse.live !== null && manifest.tags.includes(inUse.live)
+        ? 'deployed now'
+        : inUse.kept !== null && manifest.tags.includes(inUse.kept)
+          ? 'kept running for tabs opened before the last deployment'
+          : 'kept for rollback'
     detail(`${manifest.tags.join(', ')}  ${manifest.updatedAt}  ${role}`)
   }
 
   // Untagged manifests are normal: they are the platform images a tagged index
   // points at. Only those no tag can reach are waste, so they are counted rather
   // than listed, and identifying them is what `prune` does.
-  const orphans = planPrune(manifests, live, Number.MAX_SAFE_INTEGER).remove
+  const orphans = planPrune(manifests, inUseList(inUse), Number.MAX_SAFE_INTEGER).remove
   if (orphans.length > 0) {
     detail(`orphaned   ${orphans.length} image(s) no tag points to, up to ${megabytes(totalBytes(orphans))}`)
   }
@@ -216,9 +230,9 @@ export async function listImages(project: ProjectInfo): Promise<void> {
 export async function pruneImages(project: ProjectInfo, options: PruneOptions): Promise<void> {
   const app = await ownedApp(project)
   const repo = await repository(project)
-  const live = await liveTag(app)
+  const inUse = await tagsInUse(app)
   const manifests = await app.target.images(repo)
-  const plan = planPrune(manifests, live, options.keep)
+  const plan = planPrune(manifests, inUseList(inUse), options.keep)
 
   step('Plan')
   detail(`repository ${repo}`)
@@ -235,7 +249,8 @@ export async function pruneImages(project: ProjectInfo, options: PruneOptions): 
   } else {
     if (plan.removeTags.length > 0) detail(`remove     ${plan.removeTags.join(', ')}`)
     detail(`remove     ${plan.remove.length} image(s), up to ${megabytes(plan.reclaimableBytes)}`)
-    detail(`deployed   ${live ?? 'unknown'}, never removed`)
+    detail(`deployed   ${inUse.live ?? 'unknown'}, never removed`)
+    if (inUse.kept) detail(`kept       ${inUse.kept}, running for tabs opened before the last deployment, never removed`)
     // Only when a tagged deployment is going. Removing orphans costs nothing
     // that could be rolled back to, and warning about it either way trains
     // people to ignore the warning that matters.

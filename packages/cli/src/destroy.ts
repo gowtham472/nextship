@@ -24,6 +24,7 @@ import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
 import { readConfig, writeConfig } from './config.js'
 import { ownedApp } from './owned-app.js'
+import { selectedPreview } from './preview.js'
 import { orderForDeletion } from './images.js'
 import { detail, ok, step, warn } from './util/log.js'
 
@@ -79,7 +80,8 @@ export async function destroy(project: ProjectInfo, options: DestroyOptions): Pr
 
   if (!options.confirmed) {
     ok('This was a plan only. Nothing was destroyed.')
-    detail(`Run \`nextship destroy ${app.name} --yes\` to execute it.`)
+    const preview = selectedPreview()
+    detail(`Run \`nextship destroy ${app.name}${preview === null ? '' : ` --preview ${preview}`} --yes\` to execute it.`)
     return
   }
 
@@ -89,8 +91,9 @@ export async function destroy(project: ProjectInfo, options: DestroyOptions): Pr
 
   // Written before anything else can fail, so a later error cannot leave the
   // project pointing at an app that is already gone, which every command would
-  // then refuse to act on.
-  if (config) {
+  // then refuse to act on. A preview is not in nextship.json, and the app it
+  // previews still exists.
+  if (config && selectedPreview() === null) {
     await writeConfig(project.root, { ...config, appId: undefined })
     detail('nextship.json no longer records an app, so `nextship deploy` will create a new one')
   }

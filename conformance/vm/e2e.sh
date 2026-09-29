@@ -6,7 +6,10 @@
 # previous one serving, rollback returns to the previous deployment, env push takes effect
 # without downtime, a replaced deployment's logs are still readable, pruning keeps the
 # live image, a regenerated ISR page and an optimized image survive a container restart,
-# the app's container is read-only and cannot run what it writes, a domain gets its own site, and destroying one app leaves another serving.
+# the app's container is read-only and cannot run what it writes, a tab from before a
+# deployment reaches its own build, a rollback within the hour is instant, a preview
+# serves beside the app and leaves it alone when destroyed, a domain gets its own site,
+# and destroying one app leaves another serving.
 #
 # It ends by destroying both apps it created, so a server it ran against is left with only
 # what `server add` set up.
@@ -106,6 +109,18 @@ check "idempotence" "a second server add changes nothing"
 
 # ---------------------------------------------------------------------- deploy
 
+# A route that answers with a stamp written into its source, so a response says
+# which build served it. Each build below rewrites the stamp.
+stamp() {
+  mkdir -p app/api/build
+  printf 'export const dynamic = "force-dynamic"\nexport function GET() { return Response.json({ build: "%s" }) }\n' "$1" > app/api/build/route.js
+}
+# The deployment id a build names on every request an open tab makes, read from
+# the ?dpl= Next.js puts on the page's scripts.
+page_dpl() { curl -s "${URL}/" | grep -o 'dpl=dpl-[A-Za-z0-9_.-]*' | head -1 | cut -d= -f2; }
+build_of() { curl -s "$@" | sed -n 's/.*"build":"\([a-z]*\)".*/\1/p'; }
+
+stamp first
 commit "record the server"
 nextship deploy --yes
 curl -sf -o /dev/null "${URL}/" || fail "deploy" "${URL}/ does not answer after deploying"
@@ -118,7 +133,11 @@ check "edge" "/edge ran in the Edge runtime, through Caddy"
 
 # ------------------------------------------------------------- zero downtime
 
+FIRST_DPL="$(page_dpl)"
+FIRST_SCRIPT="$(curl -s "${URL}/" | grep -o '/_next/static/[^"]*?dpl=dpl-[A-Za-z0-9_.-]*' | head -1)"
+[ -n "${FIRST_DPL}" ] && [ -n "${FIRST_SCRIPT}" ] || fail "skew" "the first build's page named no deployment id on its scripts"
 echo "// second build $(date +%s)" >> app/layout.jsx
+stamp second
 commit "second build"
 poll / "${WORK}/codes"   & LOOP_PIDS+=($!)
 poll /stream "${WORK}/streams" & LOOP_PIDS+=($!)
@@ -130,6 +149,20 @@ wait "${LOOP_PIDS[@]}"
 LOOP_PIDS=()
 all_ok "${WORK}/codes" "zero downtime"
 all_ok "${WORK}/streams" "streams across the switch"
+
+# ------------------------------------------------------------ skew protection
+
+# A tab that loaded the first build keeps naming it: x-deployment-id on navigations
+# and Server Actions, ?dpl= on scripts. Those requests must reach the first build's
+# container, kept running, while a request naming nothing gets the new build.
+SECOND_DPL="$(page_dpl)"
+[ -n "${SECOND_DPL}" ] && [ "${SECOND_DPL}" != "${FIRST_DPL}" ] || fail "skew" "the second build names the same deployment id as the first"
+[ "$(build_of "${URL}/api/build")" = second ] || fail "skew" "a request naming no build did not get the new one"
+[ "$(build_of -H "X-Deployment-Id: ${FIRST_DPL}" "${URL}/api/build")" = first ] ||
+  fail "skew" "a request with the first build's x-deployment-id did not reach it"
+[ "$(build_of "${URL}/api/build?dpl=${FIRST_DPL}")" = first ] || fail "skew" "a request with ?dpl= for the first build did not reach it"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "${URL}${FIRST_SCRIPT}")" = 200 ] || fail "skew" "the first build's script ${FIRST_SCRIPT} is gone"
+check "skew" "requests naming the first build reach it after the second went live, and the rest get the second"
 SECOND="$(nextship rollback | sed -n 's/^  current *\([^ ]*\).*/\1/p')"
 
 # ------------------------------------------------------------ failed startup
@@ -155,10 +188,34 @@ commit "remove the failing startup"
 
 TARGET="$(nextship rollback | sed -n 's/^  roll back *\([^ ]*\).*/\1/p')"
 [ -n "${TARGET}" ] || fail "rollback" "the plan named nothing to roll back to"
-nextship rollback --yes
+# The first build was kept running when the second replaced it, so going back to it
+# is a switch of the proxy, not a new container.
+ROLLED="$(nextship rollback --yes)"
+echo "${ROLLED}"
 [ "$(nextship rollback | sed -n 's/^  current *\([^ ]*\).*/\1/p')" = "${TARGET}" ] || fail "rollback" "the live deployment is not ${TARGET}"
 curl -sf -o /dev/null "${URL}/" || fail "rollback" "${URL}/ does not answer after rolling back"
 check "rollback" "${TARGET} serves again"
+SWITCH_MS="$(sed -n 's/.*which was still running, in \([0-9]*\) ms.*/\1/p' <<< "${ROLLED}")"
+[ -n "${SWITCH_MS}" ] || fail "instant rollback" "the rollback started a new container instead of switching to the one still running"
+[ "$(build_of "${URL}/api/build")" = first ] || fail "instant rollback" "the first build does not serve after rolling back to it"
+[ "$(build_of -H "X-Deployment-Id: ${SECOND_DPL}" "${URL}/api/build")" = second ] ||
+  fail "instant rollback" "the build rolled back from was not kept for the tabs that loaded it"
+check "instant rollback" "switched back to the first build's running container in ${SWITCH_MS} ms, keeping the second for its tabs"
+
+# ------------------------------------------------------------------- retire
+
+# Not waited out: the kept container's stop time is moved to the past and the timer's
+# service run, as the timer would an hour after the rollback.
+SUDO=""
+on_server "sudo -n true" 2> /dev/null && SUDO="sudo -n"
+KEPT="$(on_server "${SUDO} cut -d' ' -f1 /etc/nextship/apps/nextship-streaming-fixture/previous")"
+[ -n "${KEPT}" ] || fail "retire" "no kept container is recorded"
+on_server "printf '%s 1\n' ${KEPT} | ${SUDO} tee /etc/nextship/apps/nextship-streaming-fixture/previous > /dev/null && ${SUDO} systemctl start nextship-retire.service"
+[ "$(on_server "${SUDO} docker inspect -f '{{.State.Running}}' ${KEPT}")" = false ] || fail "retire" "${KEPT} still runs after its time ran out"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -H "X-Deployment-Id: ${SECOND_DPL}" "${URL}/api/build")" = 200 ] ||
+  fail "retire" "a request naming the stopped build was not served by the live one"
+[ "$(build_of -H "X-Deployment-Id: ${SECOND_DPL}" "${URL}/api/build")" = first ] || fail "retire" "a request naming the stopped build got something other than the live build"
+check "retire" "the kept container stopped when its time ran out, and requests naming it fell back to the live build"
 
 # ---------------------------------------------------------------------- env
 
@@ -196,11 +253,14 @@ nextship images prune --keep 1 --yes
 # Output is captured before it is searched: grep -q exits at its first match, and the
 # closed pipe would fail the command under pipefail.
 IMAGES="$(nextship images)"
-KEPT="$(grep -c '^  dpl-' <<< "${IMAGES}" || true)"
-[ "${KEPT}" -eq 1 ] || fail "images prune" "${KEPT} images remain after keeping 1"
+REMAINING="$(grep -c '^  dpl-' <<< "${IMAGES}" || true)"
+# The build the env route deployment replaced is still kept running for its tabs,
+# and Docker cannot remove an image a running container uses, so it stays too.
+[ "${REMAINING}" -eq 2 ] || fail "images prune" "${REMAINING} images remain after keeping 1, where the live and the kept one were expected"
 grep -q 'deployed now' <<< "${IMAGES}" || fail "images prune" "the live image was removed"
+grep -q 'kept running for tabs' <<< "${IMAGES}" || fail "images prune" "the kept deployment's image was removed"
 curl -sf -o /dev/null "${URL}/" || fail "images prune" "the app stopped serving"
-check "images prune" "one image kept, the live one, and the app still serves"
+check "images prune" "the live image and the one still running for older tabs kept, nothing else, and the app still serves"
 
 # --------------------------------------------------------------- durability
 
@@ -257,8 +317,12 @@ check "durability" "an ISR page was regenerated and an image was optimized and c
 
 # A restart, not a redeploy: a redeploy builds a new image and so a new build
 # volume, which would prove nothing about what is kept.
-CONTAINER="$(on_server "${DOCKER} ps --filter label=sh.nextship.app=nextship-streaming-fixture --filter status=running --format '{{.Names}}'" | head -1)"
-[ -n "${CONTAINER}" ] || fail "durability" "no running container found for the app"
+# The live one by its build: the deployment it replaced, a different build, is kept
+# running beside it, and an older container of the live build is stopped.
+LIVE_TAG="$(nextship rollback | sed -n 's/^  current *\([^ ]*\).*/\1/p')"
+CONTAINER="$(on_server "${DOCKER} ps --filter label=sh.nextship.app=nextship-streaming-fixture --filter label=sh.nextship.image=${LIVE_TAG} --filter status=running --format '{{.Names}}'")"
+[ "$(wc -l <<< "${CONTAINER}" | tr -d ' ')" = 1 ] && [ -n "${CONTAINER}" ] ||
+  fail "durability" "expected one running container of the live build ${LIVE_TAG}, found: ${CONTAINER:-none}"
 
 # The restart and the wait are one connection: sixty round trips to poll a
 # health status is slower than the restart itself.
@@ -310,6 +374,33 @@ nextship domain add e2e.nextship.test --yes
 [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: e2e.nextship.test' "${URL}/")" = 308 ] ||
   fail "domain add" "the domain did not get its own HTTPS site"
 check "domain add" "the domain redirects to HTTPS through its own site"
+
+# ------------------------------------------------------------------ preview
+
+# A preview of this app on the same server, from a build the app never ran. It must
+# serve that build, leave the app's own address and build alone, keep out of
+# nextship.json, ask crawlers not to index it, and go away without touching the app.
+MAIN_BUILD="$(build_of "${URL}/api/build")"
+RECORDED="$(cat nextship.json)"
+stamp preview
+commit "a preview build"
+nextship deploy --preview e2e --yes
+[ "$(cat nextship.json)" = "${RECORDED}" ] || fail "preview" "deploying a preview changed nextship.json"
+[ "$(build_of "${URL}/api/build")" = "${MAIN_BUILD}" ] || fail "preview" "the app's own address stopped serving its build"
+PREVIEW_CONTAINER="$(on_server "${DOCKER} ps --filter label=sh.nextship.app=nextship-streaming-fixture-e2e --filter status=running --format '{{.Names}}'")"
+[ -n "${PREVIEW_CONTAINER}" ] || fail "preview" "no running container for the preview"
+PREVIEW_BUILD="$(on_server "${DOCKER} exec ${PREVIEW_CONTAINER} node -e \"fetch('http://127.0.0.1:3000/api/build').then(r => r.json()).then(b => console.log(b.build))\"")"
+[ "${PREVIEW_BUILD}" = preview ] || fail "preview" "the preview serves ${PREVIEW_BUILD:-nothing}, not its own build"
+nextship domain add e2e-preview.nextship.test --preview e2e --yes
+[ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: e2e-preview.nextship.test' "${URL}/")" = 308 ] ||
+  fail "preview" "the preview's domain did not get its own HTTPS site"
+on_server "${SUDO} grep -q 'X-Robots-Tag \"noindex, nofollow\"' /etc/nextship/caddy/sites/nextship-streaming-fixture-e2e.caddy" ||
+  fail "preview" "the preview's site does not ask crawlers not to index it"
+if nextship logs --preview not-a-preview > /dev/null 2>&1; then fail "preview" "a preview that does not exist was not refused"; fi
+nextship destroy nextship-streaming-fixture-e2e --preview e2e --images --yes
+[ "$(cat nextship.json)" = "${RECORDED}" ] || fail "preview" "destroying the preview changed nextship.json"
+[ "$(build_of "${URL}/api/build")" = "${MAIN_BUILD}" ] || fail "preview" "the app stopped serving when its preview was destroyed"
+check "preview" "served its own build beside the app, kept out of nextship.json, asked crawlers not to index it, and was destroyed leaving the app serving"
 
 # -------------------------------------------------- a second app, then destroy
 

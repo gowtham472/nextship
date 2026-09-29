@@ -640,11 +640,51 @@ both sides are refused; with none anywhere, one is generated and stored only on 
    record the deployment as not served, and leave the previous container serving.
 5. Render the Caddy site pointing at the new container, validate it, move it into place
    and reload Caddy. A failed validation or reload restores the previous file.
-6. Stop the previous container (kept, not removed, until images are pruned) and update
-   `deployments.json`.
+6. Update `deployments.json`, and stop the previous containers (stopped, not removed, until
+   images are pruned), except the one this deployment replaced when it is a different
+   build: that keeps running for an hour, and `retire.sh` stops it then.
 
-Rollback runs steps 3 to 6 with an earlier deployment's image. **It uses the current env
-file**, which differs from App Platform, where a rollback restores the old spec. `env push`,
+**Skew protection.** A tab loaded before a deployment keeps naming its build on every
+request: `x-deployment-id` on client navigations and Server Actions and `?dpl=` on scripts
+and styles, measured in a browser against Next.js 16.3.4 with `deploymentId` set. A page
+load names none. So the Caddy site routes a request naming the replaced build to its
+container, with the live container second under `lb_policy first` and `fail_duration 30s`,
+and everything else to the live one. Once the replaced container stops, a request naming it
+fails over to the live one, which is what every request got before. Next.js issue #99165
+reports stale tabs failing even with `deploymentId` set because a Server Action response
+does not carry the deployment id; routing the request to the build that owns the action
+means the response is that build's own. The replaced build is kept only when it is a
+different image: `env push` and a domain change start the same image, and routing by a
+deployment id both containers share would send every tab, new ones included, to the one
+being replaced. `deployments.json` records the kept one with `keptUntil`, and beside it
+`previous` holds `<container> <epoch seconds>` for `retire.sh`, run every minute by a timer
+`server add` installs, since the server has no JSON parser. `images prune` and the prune
+after a deployment keep the kept deployment's image, which Docker would refuse to remove.
+
+**Previews.** `--preview <name>` (`preview.ts`) scopes a command to the app
+`<app>-<name>` on the project's server. Its `app.json` records `previewOf`, the id of the
+app it previews, and `ownedApp` accepts a preview only when that id is the one in
+`nextship.json`, so a preview is found again by a CI run holding only the committed file and
+is never adopted by name alone. `deploy --preview` creates the record and never writes
+`nextship.json`; `destroy --preview` leaves it alone. A preview's Caddy site never claims the
+server's address and sends `X-Robots-Tag: noindex, nofollow` on every name. Its env file
+starts empty.
+
+Verified by `conformance/vm/e2e.sh` on a local Ubuntu 24.04 stand-in, 25 checks of 25:
+after a second build went live, a request naming the first build by `x-deployment-id` or by
+`?dpl=` was served by it, and the first build's script still loaded, while a request naming
+nothing got the second; rolling back to the first switched to its running container in 208 ms
+and kept the second for its tabs; with the kept container's stop time moved to the past, the
+retire service stopped it and a request naming it was served by the live build; a preview
+deployed from a build the app never ran served that build beside the app, left `nextship.json`
+and the app's address unchanged, sent `X-Robots-Tag` on its domain's site, and was destroyed
+leaving the app serving. Every earlier check passed unchanged beside them.
+
+Rollback to the kept deployment is a Caddy switch to its container, which is still running,
+and the deployment being left is kept in its place. The container keeps the env it started
+with. A rollback to anything older runs steps 3 to 6 with that deployment's image, and **it
+uses the current env file**, which differs from App Platform, where a rollback restores the
+old spec. `env push`,
 `env rm` and a domain change run the same sequence with the live image. After a deployment
 goes live, images beyond the newest five served deployments are removed with their
 stopped containers, which is safe on a server where removing an image frees its space at
@@ -915,7 +955,8 @@ Not verified yet, and the live checklist in `docs/roadmap.md`:
 | **One server.** | No failover: if the server is down, the app is down. Backups and recovery are the owner's |
 | **No CDN.** | Static assets and media are served by the container through Caddy |
 | **The owner owns the OS.** | `server add` enables security updates, but kernel reboots, disk and provider incidents are the owner's to watch |
-| **Rollback uses the current env file.** | Rolling back code does not roll back a variable changed since |
+| **A rollback older than an hour uses the current env file.** | Rolling back code does not roll back a variable changed since. A rollback to the deployment replaced within the hour keeps its own |
+| **The replaced deployment runs for an hour.** | Its container holds memory beside the live one for that hour, within the same memory limit per container. A tab open longer than that loads the new build on its next navigation |
 | **The app's files are read-only.** | An app that writes outside `.next`, such as uploads to a local folder, fails with `EROFS`, and `/tmp` holds 64 MB and cannot run a binary, which breaks packages that unpack an executable there, such as a headless Chromium. Keep uploads in object storage or a database |
 
 ## 10. Deploy lifecycle

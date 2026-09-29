@@ -54,6 +54,7 @@ only what is not already done, which is why a second run changes nothing.
 | `firewall` | If ufw is installed, allows the SSH port, 80 and 443, then enables it. SSH is allowed before anything is enabled | `--no-firewall` |
 | `watchdog` | A systemd timer that restarts a nextship container unhealthy for three checks in a row, logging why to the journal under `nextship-watchdog` | |
 | `cache-guard` | A systemd timer that, every ten minutes, keeps what each app has written at runtime under 10% of the disk, and never under 1 GiB, by deleting what was used least recently. Logged to the journal under `nextship-cache-guard` | |
+| `retire` | A systemd timer that, every minute, stops the deployment a newer one replaced once its hour for open tabs is over, logged under `nextship-retire` | |
 | `ssh-hardening` | Turns off password and keyboard-interactive logins and allows root by key only, in `/etc/ssh/sshd_config.d/10-nextship.conf`. Runs last, only after the `nextship` login worked, and removes its file again if `sshd -t` rejects it | `--no-ssh-hardening` |
 
 Docker publishes Caddy's ports itself, which bypasses ufw for those two ports. That is
@@ -100,6 +101,7 @@ keeps on the server:
 |---|---|
 | `/etc/nextship/apps/<name>/app.json` | The app's id and its domains. The id is what `nextship.json` records; a directory with another id is refused |
 | `/etc/nextship/apps/<name>/deployments.json` | The deployment history rollback chooses from |
+| `/etc/nextship/apps/<name>/previous` | The replaced deployment kept running for open tabs, and when `retire.sh` stops it |
 | `/etc/nextship/apps/<name>/env` | Runtime variables, mode 0600, in Docker's env file format |
 | `/etc/nextship/apps/<name>/secrets` | The Server Actions key, mode 0600 |
 | `/etc/nextship/caddy/sites/<name>.caddy` | The app's Caddy site, regenerated on every change |
@@ -191,6 +193,71 @@ refuse the second anyway, but the refusal would fail that workflow run.
 
 Not yet run in GitHub Actions: this workflow is written from what nextship does locally,
 and running it is on the v1.1 checklist.
+
+### A preview per pull request
+
+`--preview <name>` scopes a command to a preview: a second app on the same server named
+`<app>-<name>`, with its own containers, env file and domains. `deploy --preview <name>`
+creates it the first time and updates it after that. Its record on the server names the app
+it previews, which is how a later run with only the committed `nextship.json` finds it again,
+and `nextship.json` is never written for it. A preview never takes the server's own address,
+answers only on the domains attached to it, and every response asks crawlers not to index
+it. It starts with an empty env file: push values meant for a preview with
+`nextship env push --preview <name>`, and never production's database.
+
+Point a wildcard record, `*.preview.example.com`, at the server once. Each preview's domain
+then gets its own certificate from Caddy when it is added. Then add a second workflow:
+
+```yaml
+name: preview
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+concurrency: preview-${{ github.event.number }}
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    env:
+      PREVIEW: pr-${{ github.event.number }}
+      HOST: pr-${{ github.event.number }}.preview.example.com
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - name: Load the deploy key
+        run: |
+          eval "$(ssh-agent -s)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+          ssh-add - <<< "${{ secrets.NEXTSHIP_SSH_KEY }}"
+      - name: Deploy the preview
+        if: github.event.action != 'closed'
+        run: |
+          npx --yes nextship-cli deploy --preview "$PREVIEW" --yes --build local
+          npx --yes nextship-cli domain --preview "$PREVIEW" | grep -q "$HOST" ||
+            npx --yes nextship-cli domain add "$HOST" --preview "$PREVIEW" --yes
+          gh pr comment ${{ github.event.number }} --body "Preview: https://$HOST"
+      - name: Remove the preview
+        if: github.event.action == 'closed'
+        run: npx --yes nextship-cli destroy "$(node -p "require('./nextship.json').name")-$PREVIEW" --preview "$PREVIEW" --images --yes
+```
+
+Each preview is a whole container, with the same memory limit as any app on the server, so
+the server's memory decides how many pull requests can have one at once.
+
+**A preview runs the pull request's code with the deploy key.** GitHub gives no secrets to a
+pull request from a fork, so only branches in the repository get a preview, but anyone who
+can push a branch can run code on the runner that holds a key to the server. Use this where
+everyone with push access would be trusted with the server anyway.
+
+Not yet run in GitHub Actions. What it runs is verified: `conformance/vm/e2e.sh` deploys a
+preview, attaches a domain, and destroys it (`design.md` §9.3).
 
 ## 7. Backups and recovery
 

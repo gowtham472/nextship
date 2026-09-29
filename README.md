@@ -371,7 +371,7 @@ deployed, and a page that did not compile failed once, with no retry.
 ```
 
 A deployment starts a new container with no published port, waits for Docker to report it
-healthy, then points Caddy at it and stops the previous one. Nothing a visitor sees
+healthy, then points Caddy at it. Nothing a visitor sees
 changes until the new container is healthy, so a deployment that fails leaves the previous
 one serving, and a deployment that succeeds drops no request. Its last log lines are
 printed when it fails. The first app deployed on a server answers `http://<server>`;
@@ -382,8 +382,27 @@ so every machine that deploys, including CI, builds with the same key. A key alr
 your local file is copied to the server on the first deploy. If the server and your local
 file hold different keys, `deploy` refuses rather than choosing one.
 
-`rollback` on a server starts the earlier deployment's image again the same way. It uses
-the current env file, not the one that deployment first ran with, and the plan says so.
+**A tab opened before a deployment keeps working after it.** The deployment a new build
+replaces keeps running for an hour, and Caddy sends it every request that names its build,
+which Next.js does on each client navigation, Server Action and script an open tab loads.
+Without this, such a tab asks the new build for files and Server Actions it does not have.
+A page load names no build and gets the new one. After the hour, the old container stops
+and a tab still open from before loads the new build on its next navigation. The cost is a
+second container's memory for that hour. A change that starts the same build again, such
+as `env push`, keeps nothing extra.
+
+`rollback` on a server to the deployment replaced within the last hour is instant: that
+container is still running, so Caddy is pointed back at it and nothing is built or
+started, and it keeps the env it ran with. A rollback further back starts that
+deployment's image again with the current env file, and the plan says which is which.
+
+**Previews.** `nextship deploy --preview pr-42` deploys the current source as a second app on
+the same server, `<app>-pr-42`, with its own env file and domains, and never writes
+`nextship.json`. The same flag scopes `rollback`, `logs`, `env`, `domain`, `images` and
+`destroy` to it, and the preview is found again from the app it previews, so a CI run with
+only the committed `nextship.json` can update or remove it. A preview answers only on the
+domains attached to it and asks crawlers not to index it. A workflow that deploys one per
+pull request is in [`docs/vm.md`](./docs/vm.md) §6.
 
 ### `nextship rollback`
 
@@ -698,8 +717,9 @@ server presenting any other key is refused.
 With `--yes` it installs Docker CE if the server has none, creates a `nextship` user and
 proves a login as that user from your machine, runs Caddy on ports 80 and 443, limits the
 journal, enables security updates and ufw, installs a watchdog for containers that stay
-unhealthy and a cache guard that keeps what each app writes at runtime under a limit, and
-turns off SSH password logins last. Every later command connects as
+unhealthy, a cache guard that keeps what each app writes at runtime under a limit and a
+timer that stops a replaced deployment after its hour, and turns off SSH password logins
+last. Every later command connects as
 `nextship`. Running it again against a server that is set up changes nothing; running it
 from a second project records the same server for that project. Each step is described in
 [`docs/vm.md`](./docs/vm.md).
@@ -911,6 +931,8 @@ On a server, `server add` creates:
 /etc/systemd/system/nextship-watchdog.* the timer that runs it every minute
 /usr/local/lib/nextship/cache-guard.sh  keeps each app's runtime cache under 10% of the disk
 /etc/systemd/system/nextship-cache-guard.* the timer that runs it every ten minutes
+/usr/local/lib/nextship/retire.sh       stops a replaced deployment once its hour for open tabs is over
+/etc/systemd/system/nextship-retire.*   the timer that runs it every minute
 /etc/systemd/journald.conf.d/nextship.conf   SystemMaxUse=500M, only if no limit was set
 /etc/ssh/sshd_config.d/10-nextship.conf      unless --no-ssh-hardening
 /etc/apt/apt.conf.d/20auto-upgrades          unless --no-auto-updates
@@ -1000,8 +1022,9 @@ deploy:
   is no CDN in front unless you add one, the operating system is yours to keep patched
   and rebooted, and backups are yours. The `nextship` user is root-equivalent. See
   [`docs/vm.md`](./docs/vm.md).
-- **On a server, rollback uses the current env file.** Rolling back code does not roll
-  back a variable changed since, which App Platform does.
+- **On a server, a rollback further back than the last hour uses the current env file.**
+  Rolling back code does not roll back a variable changed since, which App Platform does.
+  A rollback to the deployment replaced within the hour keeps its own env.
 - **On a server, only the first app deployed answers `http://<server>`.** Every other app
   answers only on the domains attached to it.
 - **On a server, your app cannot write its own files.** The container is read-only apart
@@ -1091,7 +1114,7 @@ conformance/           scripts for the official Next.js adapter compatibility su
 packages/
   adapter/             Next.js Adapter API implementation, injected via NEXT_ADAPTER_PATH
   cli/                 every command; runtime/ holds the files copied into a build,
-                       and runtime/vm/ the setup, watchdog and cache guard scripts sent to a server
+                       and runtime/vm/ the setup and timer scripts sent to a server
 site/                  the marketing site and documentation, exported as static files
 ```
 

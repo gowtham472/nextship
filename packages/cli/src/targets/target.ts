@@ -29,6 +29,8 @@
 export interface AppRef {
   id: string
   name: string
+  /** On a server, for a preview: the id of the app it previews, which is what makes it that project's. */
+  previewOf?: string
 }
 
 /**
@@ -51,6 +53,11 @@ export interface DeploymentRecord {
   createdAt: string
   /** The image it runs, which is the nextship deployment id. */
   imageTag: string | null
+  /**
+   * On a server, while the deployment a newer one replaced keeps running for the
+   * tabs that loaded it: until when. Absent on targets that keep nothing running.
+   */
+  keptUntil?: string | null
 }
 
 /** How far along a domain is, normalised because every platform names these differently. */
@@ -115,6 +122,8 @@ export interface ReleaseRequest {
   memory: string | null
   /** A prerendered route the health check can poll without rendering. */
   healthPath?: string | null
+  /** A server only: set when this release creates a preview, to the id of the app it previews. */
+  previewOf?: string
 }
 
 /** Progress reporting, so a driver can narrate a wait without importing the logger. */

@@ -66,6 +66,7 @@ import {
   imagesToKeep,
   newReleaseId,
   parseDeployments,
+  previousServing,
   recordFailed,
   recordLive,
   recordStarted,
@@ -99,6 +100,8 @@ interface AppRecord {
   name: string
   createdAt: string
   domains: SiteDomain[]
+  /** Set on a preview: the id of the app it previews (`preview.ts`). */
+  previewOf?: string
 }
 
 /** What a server reports in one round trip, for plans and guards. */
@@ -464,7 +467,8 @@ export class VmTarget implements Target {
   ]
 
   readonly rollbackNotes = [
-    'the current env file is used, not the one that deployment ran with: variables changed since then keep their new values',
+    'the deployment replaced within the last hour is still running: going back to it is one Caddy switch, and it keeps the env it ran with',
+    'an older deployment is started again with the current env file, not the one it ran with: variables changed since then keep their new values',
   ]
 
   // ------------------------------------------------------------ connection
@@ -525,7 +529,7 @@ export class VmTarget implements Target {
       .filter((line) => line.trim() !== '')
       .map((line) => {
         const record = JSON.parse(line) as AppRecord
-        return { id: record.id, name: record.name }
+        return { id: record.id, name: record.name, ...(record.previewOf ? { previewOf: record.previewOf } : {}) }
       })
   }
 
@@ -758,6 +762,7 @@ export class VmTarget implements Target {
       cause: 'deploy',
       memory: request.memory,
       healthPath: request.healthPath ?? null,
+      previewOf: request.previewOf,
     })
     return { appId: started.appId, deploymentId: started.releaseId }
   }
@@ -827,12 +832,27 @@ export class VmTarget implements Target {
     return result.code === 0 ? parseDeployments(result.stdout) : []
   }
 
+  /**
+   * Writes the history, and beside it `previous`: the kept container and when it
+   * stops, as `<container> <epoch seconds>`, empty when none is kept. The retire
+   * timer on the server reads that line, since the server has no JSON parser, and
+   * both are written here so the one can never disagree with the other.
+   */
   private async writeDeployments(deployments: VmDeployment[]): Promise<void> {
+    const kept = previousServing(deployments, new Date())
+    const previous = kept?.keptUntil ? `${this.name}-${kept.id} ${Math.floor(Date.parse(kept.keptUntil) / 1000)}\n` : ''
     await this.run(
       `install -m 600 /dev/stdin ${q(`${this.appDir()}/deployments.json`)}`,
       'write the deployment history',
       serializeDeployments(deployments)
     )
+    await this.run(`install -m 600 /dev/stdin ${q(`${this.appDir()}/previous`)}`, 'record when the previous deployment stops', previous)
+  }
+
+  /** The Caddy route for the kept deployment, from a history. */
+  private previousRoute(deployments: VmDeployment[], now: Date): { container: string; deploymentId: string } | null {
+    const kept = previousServing(deployments, now)
+    return kept?.imageTag ? { container: `${this.name}-${kept.id}`, deploymentId: kept.imageTag } : null
   }
 
   /**
@@ -842,7 +862,14 @@ export class VmTarget implements Target {
    */
   private async startRelease(
     appId: string | null,
-    options: { imageTag: string; cause: string; memory: string | null; healthPath: string | null; before?: () => Promise<void> }
+    options: {
+      imageTag: string
+      cause: string
+      memory: string | null
+      healthPath: string | null
+      before?: () => Promise<void>
+      previewOf?: string
+    }
   ): Promise<{ appId: string; releaseId: string }> {
     await this.lock()
     try {
@@ -857,7 +884,13 @@ export class VmTarget implements Target {
             'nextship will not modify an app it does not own. Rename this project, or set a different name in nextship.json.'
           )
         }
-        record = { id: randomUUID(), name: this.name, createdAt: new Date().toISOString(), domains: [] }
+        record = {
+          id: randomUUID(),
+          name: this.name,
+          createdAt: new Date().toISOString(),
+          domains: [],
+          ...(options.previewOf ? { previewOf: options.previewOf } : {}),
+        }
         await this.writeAppRecord(record)
       }
       await this.run(`touch ${q(`${this.appDir()}/env`)} && chmod 600 ${q(`${this.appDir()}/env`)}`, 'prepare the env file')
@@ -929,8 +962,10 @@ export class VmTarget implements Target {
     }
 
     const record = await this.appRecord(appId)
+    const now = new Date()
+    const history = recordLive(await this.readDeployments(), releaseId, now)
     try {
-      await this.switchSite(record, container)
+      await this.switchSite(record, container, this.previousRoute(history, now))
     } catch (error) {
       await this.discard(container, releaseId, 'was refused by Caddy', onPhase)
       throw new NextshipError(
@@ -945,7 +980,6 @@ export class VmTarget implements Target {
     // time: a CLI that dies in between would otherwise leave deployments.json
     // naming a stopped container as live, which `domain add` would then rebuild
     // the site from and point the proxy back at something that is not running.
-    const history = recordLive(await this.readDeployments(), releaseId)
     await this.writeDeployments(history)
 
     // A previous container that is restarting or paused is not serving, but it
@@ -955,7 +989,11 @@ export class VmTarget implements Target {
       `docker ps --filter label=sh.nextship.managed=true --filter ${q(`label=sh.nextship.app=${this.name}`)} --filter status=running --filter status=restarting --filter status=paused --format '{{.Names}}'`,
       'list the running containers'
     )
-    const previous = previousContainers(running, this.name, container)
+    // The deployment this one replaced keeps running for the tabs that loaded it, if
+    // it is a different build; `retire.sh` stops it when its time runs out.
+    const kept = previousServing(history, now)
+    const previous = previousContainers(running, this.name, container).filter((name) => name !== `${this.name}-${kept?.id}`)
+    if (kept) onPhase(`kept ${this.name}-${kept.id} running until ${kept.keptUntil} for tabs that loaded it`)
     if (previous.length > 0) {
       // 30 s matches the time a request is allowed to finish: Next.js exits on
       // SIGTERM once in-flight responses and after() callbacks complete.
@@ -1033,12 +1071,19 @@ export class VmTarget implements Target {
    * the previous file is put back and Caddy reloaded again, so a bad site never
    * takes the proxy down for every app on the server.
    */
-  private async switchSite(record: AppRecord, container: string): Promise<void> {
+  private async switchSite(
+    record: AppRecord,
+    container: string,
+    previous: { container: string; deploymentId: string } | null
+  ): Promise<void> {
     const site = renderSite({
       name: this.name,
       container,
       domains: record.domains,
-      isDefault: (await this.claimDefaultApp()) === this.name,
+      // A preview never takes the server's own address, which belongs to a real app.
+      isDefault: record.previewOf === undefined && (await this.claimDefaultApp()) === this.name,
+      previous,
+      preview: record.previewOf !== undefined,
     })
     await this.applySite(site)
   }
@@ -1184,6 +1229,7 @@ export class VmTarget implements Target {
         'It was pruned. Check out that commit and run `nextship deploy` to build it again. Nothing was changed.'
       )
     }
+    if (await this.rollbackInstantly(appId, target, onPhase)) return
     const live = (await this.readDeployments()).some((entry) => entry.live)
     const started = await this.startRelease(appId, {
       imageTag: target.imageTag,
@@ -1196,6 +1242,38 @@ export class VmTarget implements Target {
     } finally {
       await this.unlock()
     }
+  }
+
+  /**
+   * Returns to the kept deployment by pointing Caddy back at its container, which
+   * never stopped, so nothing is built or started and the switch is one reload.
+   * The deployment being left is kept in its place, so a mistaken rollback can be
+   * undone the same way. Returns false, changing nothing, when the target is not
+   * the kept deployment or its container is not running and healthy; the caller
+   * then starts the target's image again as it always did.
+   *
+   * The container runs with the env it started with, which is the env of that
+   * deployment, where a rollback that starts a new container reads the current one.
+   */
+  private async rollbackInstantly(appId: string, target: VmDeployment, onPhase: PhaseReporter): Promise<boolean> {
+    const began = Date.now()
+    const container = `${this.name}-${target.id}`
+    if (previousServing(await this.readDeployments(), new Date())?.id !== target.id) return false
+    const state = await this.exec(`docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' ${q(container)}`)
+    if (state.code !== 0 || state.stdout.trim() !== 'running healthy') return false
+
+    await this.lock()
+    try {
+      const now = new Date()
+      const history = recordLive(await this.readDeployments(), target.id, now)
+      await this.switchSite(await this.appRecord(appId), container, this.previousRoute(history, now))
+      await this.writeDeployments(history)
+      onPhase(`Caddy now sends traffic to ${container}, which was still running, in ${Date.now() - began} ms`)
+      onPhase('it runs with the env it was deployed with, not the current env file')
+    } finally {
+      await this.unlock()
+    }
+    return true
   }
 
   /** Starts the live image again, for a change that needs a new container but no new build. */
@@ -1309,7 +1387,8 @@ export class VmTarget implements Target {
     try {
       const record = await this.appRecord(appId)
       const updated = { ...record, domains: change(record.domains) }
-      const live = (await this.readDeployments()).find((entry) => entry.live)
+      const history = await this.readDeployments()
+      const live = history.find((entry) => entry.live)
       if (live) {
         const facts = await this.facts()
         const site = renderSite({
@@ -1317,6 +1396,8 @@ export class VmTarget implements Target {
           container: `${this.name}-${live.id}`,
           domains: updated.domains,
           isDefault: facts.defaultApp === this.name,
+          previous: this.previousRoute(history, new Date()),
+          preview: record.previewOf !== undefined,
         })
         // The site is validated and live before the record says so, so a domain
         // Caddy refused is never recorded as attached.
