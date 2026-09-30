@@ -36,7 +36,7 @@ import { hostname } from 'node:os'
 import path from 'node:path'
 import { connect as tlsConnect } from 'node:tls'
 import { lookup, resolve4 } from 'node:dns/promises'
-import { connect as netConnect, createServer } from 'node:net'
+import { connect as netConnect, createServer, isIP, isIPv4 } from 'node:net'
 import { NextshipError } from '../../errors.js'
 import { docsUrl } from '../../links.js'
 import type { ProjectConfig, ServerRecord } from '../../config.js'
@@ -576,8 +576,9 @@ export class VmTarget implements Target {
     const isDefault = facts.defaultApp === this.name || (facts.defaultApp === null && others.length === 0)
     const domains = context.appId ? (await this.appRecord(context.appId)).domains : []
 
+    const ip = publicIpv4(this.server.host)
     const address = isDefault
-      ? `address       http://${this.server.host}${domains.length > 0 ? `, and ${domains.map((entry) => entry.domain).join(', ')}` : ''}`
+      ? `address       http://${this.server.host}${ip ? `, and https://${ip} once Let's Encrypt issues its six-day certificate for the address` : ''}${domains.length > 0 ? `, and ${domains.map((entry) => entry.domain).join(', ')}` : ''}`
       : domains.length > 0
         ? `address       ${domains.map((entry) => entry.domain).join(', ')}`
         : `address       none until \`nextship domain add\`: ${facts.defaultApp ?? 'another app'} answers http://${this.server.host}`
@@ -1080,14 +1081,16 @@ export class VmTarget implements Target {
     container: string,
     previous: { container: string; deploymentId: string } | null
   ): Promise<void> {
+    // A preview never takes the server's own address, which belongs to a real app.
+    const isDefault = record.previewOf === undefined && (await this.claimDefaultApp()) === this.name
     const site = renderSite({
       name: this.name,
       container,
       domains: record.domains,
-      // A preview never takes the server's own address, which belongs to a real app.
-      isDefault: record.previewOf === undefined && (await this.claimDefaultApp()) === this.name,
+      isDefault,
       previous,
       preview: record.previewOf !== undefined,
+      ipCertificate: isDefault ? publicIpv4(this.server.host) : null,
     })
     await this.applySite(site)
   }
@@ -1204,9 +1207,13 @@ export class VmTarget implements Target {
         }
       })
     )
+    // HTTPS only once it really answers with a valid certificate, which can take a
+    // minute after the first deployment, or never on a server Let's Encrypt cannot reach.
+    const ip = isDefault ? publicIpv4(this.server.host) : null
+    const secure = ip !== null && (await certificateState(ip, ip)).live
     return {
       platformHost: isDefault ? this.server.host : null,
-      platformUrl: isDefault ? `http://${this.server.host}` : null,
+      platformUrl: isDefault ? `${secure ? 'https' : 'http'}://${this.server.host}` : null,
       domains,
     }
   }
@@ -1402,6 +1409,7 @@ export class VmTarget implements Target {
           isDefault: facts.defaultApp === this.name,
           previous: this.previousRoute(history, new Date()),
           preview: record.previewOf !== undefined,
+          ipCertificate: facts.defaultApp === this.name ? publicIpv4(this.server.host) : null,
         })
         // The site is validated and live before the record says so, so a domain
         // Caddy refused is never recorded as attached.
@@ -1847,7 +1855,9 @@ async function serverAddress(host: string): Promise<string> {
  */
 async function certificateState(host: string, domain: string): Promise<{ live: boolean; detail: string }> {
   return new Promise((resolve) => {
-    const socket = tlsConnect({ host, port: 443, servername: domain, rejectUnauthorized: true, timeout: 5000 })
+    // No server name for an address: TLS forbids one, and Node then checks the
+    // certificate against the address itself.
+    const socket = tlsConnect({ host, port: 443, ...(isIP(domain) ? {} : { servername: domain }), rejectUnauthorized: true, timeout: 5000 })
     socket.once('secureConnect', () => {
       socket.destroy()
       resolve({ live: true, detail: 'certificate issued' })
@@ -1860,4 +1870,26 @@ async function certificateState(host: string, domain: string): Promise<{ live: b
       resolve({ live: false, detail: error.code === 'ECONNREFUSED' ? 'port 443 refused the connection' : 'no valid certificate yet, which Caddy requests once DNS points here' })
     })
   })
+}
+
+/**
+ * The server's address when Let's Encrypt can issue a certificate for it: a literal
+ * IPv4 address outside the private, shared, loopback, link-local, documentation and
+ * multicast ranges, which no public CA may certify. A server added by hostname has a
+ * name to get a certificate for already, through `domain add`.
+ */
+export function publicIpv4(host: string): string | null {
+  if (!isIPv4(host)) return null
+  const [a, b, c] = host.split('.').map(Number)
+  const reserved =
+    a === 0 || a === 10 || a === 127 || a >= 224 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 192 && b === 0 && (c === 0 || c === 2)) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    (a === 198 && b === 51 && c === 100) ||
+    (a === 203 && b === 0 && c === 113)
+  return reserved ? null : host
 }

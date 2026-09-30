@@ -277,7 +277,7 @@ first are the ones a new user meets in their first ten minutes:
 | Order | Item | State and what decides it |
 |---|---|---|
 | 1 | **Hardened containers.** Read-only root filesystem, a `noexec` `/tmp`, no capabilities, `no-new-privileges`, a process limit | **Done.** See `design.md` §9.3, Security |
-| 2 | **HTTPS on a bare IP.** A first deployment answers `https://<server>` with a valid certificate, before any domain exists | Let's Encrypt made IP address certificates generally available on 2026-01-15, only as six day certificates. Caddy needs its `shortlived` profile for them, and Caddy issue #7399 reports IP issuance failing with it. Verify on a Droplet before building |
+| 2 | **HTTPS on a bare IP.** A first deployment answers `https://<server>` with a valid certificate, before any domain exists | **Built, verified against Pebble.** See `design.md` §9.3, Release sequence. Still to run: one deployment to a server on a public IPv4 address, against Let's Encrypt itself |
 | 3 | **A cap on the cache volumes, and disk watched while apps run.** Least recently used eviction when an app's runtime writes pass their limit | **Done.** See `design.md` §9.3, Cache guard |
 | 4 | **Skew protection and instant rollback.** The previous deployment's container keeps running for an hour, Caddy sends each request to the build the page was loaded from, and a rollback within that hour only reloads Caddy | **Done.** See `design.md` §9.3, Release sequence |
 | 5 | **The compatibility suite nightly against the newest canary, published on the site** | **Built, not yet run.** `conformance.yml` runs nightly and publishes to the `evidence` branch, which the evidence page reads. Verified once the first scheduled run publishes, which needs this merged to `main` |

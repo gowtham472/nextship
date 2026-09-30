@@ -58,7 +58,10 @@ reports it healthy, then the previous container stops. A deployment that fails l
 previous one serving; one that succeeds drops no request. Measured on a DigitalOcean
 Droplet: 579 of 579 requests and 51 of 51 streamed responses succeeded across a deployment.
 
-The first app deployed answers `http://<server>`. Attach a domain and Caddy obtains its
+The first app deployed answers `http://<server>`, and when the server was added by a public
+IPv4 address, `https://<address>` too, with a six-day certificate Let's Encrypt issues for the
+address itself and Caddy renews. That was verified against Let's Encrypt's test server, Pebble,
+and not yet on a real server. Attach a domain and Caddy obtains its
 certificate:
 
 ```bash

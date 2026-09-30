@@ -30,6 +30,11 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   snippet; any other, or a redirect that does not say whether it is permanent, is named
   rather than guessed. The part of a migration that needs Vercel's API, domains and env var
   names, is not built. (Ragul D)
+- **HTTPS before there is a domain.** On a server added by a public IPv4 address, the first
+  app also answers `https://<address>`, with a six-day certificate Let's Encrypt issues for
+  the address itself under its `shortlived` profile, renewed by Caddy. `deploy` reports the
+  `https://` address only once it verifies. Verified end to end against Pebble, Let's
+  Encrypt's test server; not yet against Let's Encrypt on a real server. (Ragul D)
 - **Previews.** `nextship deploy --preview <name>` deploys the current source as a second
   app on the same server, with its own env file and domains, never taking the server's
   address and asking crawlers not to index it. The same flag scopes `rollback`, `logs`,

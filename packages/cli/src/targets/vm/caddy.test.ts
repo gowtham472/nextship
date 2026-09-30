@@ -12,7 +12,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { renderSite } from './caddy.js'
 
-const base = { name: 'demo', container: 'demo-r20260915-100000-abcdef', domains: [], isDefault: false, previous: null, preview: false }
+const base = { name: 'demo', container: 'demo-r20260915-100000-abcdef', domains: [], isDefault: false, previous: null, preview: false, ipCertificate: null }
 
 test('the default app with no domain answers plain HTTP on port 80, streaming unbuffered', () => {
   assert.equal(
@@ -97,4 +97,14 @@ test('a preview tells crawlers not to index it, on every name it answers', () =>
   })
   assert.equal(site.match(/  header X-Robots-Tag "noindex, nofollow"/g)?.length, 2)
   assert.doesNotMatch(renderSite({ ...base, domains: [{ domain: 'app.example.com', primary: true, minimumTls: '1.2' }] }), /X-Robots-Tag/)
+})
+
+// Let's Encrypt certifies an IP address only with its six-day profile, and a first
+// deployment should be reachable over HTTPS before any domain exists.
+test('a default app on a public IPv4 address also answers HTTPS on it, with a short-lived certificate', () => {
+  const site = renderSite({ ...base, isDefault: true, ipCertificate: '46.101.1.2' })
+  assert.match(site, /^http:\/\/:80 \{/m, 'plain HTTP keeps working')
+  assert.match(site, /^https:\/\/46\.101\.1\.2 \{\n  tls \{\n    issuer acme \{\n      profile shortlived\n    \}\n  \}\n  reverse_proxy demo-r20260915-100000-abcdef:3000 \{/m)
+  assert.doesNotMatch(renderSite({ ...base, isDefault: false, ipCertificate: '46.101.1.2' }), /46\.101/, 'only the default app answers on the address')
+  assert.throws(() => renderSite({ ...base, isDefault: true, ipCertificate: '46.101.1.2 {' }), /not an IPv4 address/)
 })

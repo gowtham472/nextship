@@ -23,10 +23,20 @@
  * new one. Once the previous container has stopped, its route fails over to the
  * live container, which is what every request got before this existed.
  *
+ * The server's default app also answers `https://<address>` when the server was added
+ * by a public IPv4 address, with a certificate Let's Encrypt issues for the address
+ * itself, so a first deployment is reachable over HTTPS before any domain exists. Let's
+ * Encrypt issues IP address certificates only with its `shortlived` profile, valid for
+ * about six days, which Caddy renews on its own. Caddy answers the ACME challenge before
+ * any site route, so the plain HTTP site in front of the app does not intercept it.
+ * IPv4 only: IPv6 issuance was fixed after the Caddy release setup installs.
+ *
  * Author: Ragul D
  * Design: ../../../../../docs/design.md §9.3
  */
 
+import { isIPv4 } from 'node:net'
+import { NextshipError } from '../../errors.js'
 import { CONTAINER_PORT } from '../../image/dockerfile.js'
 import { assertAppName, assertDeploymentId, assertDomain } from './ssh.js'
 
@@ -47,6 +57,8 @@ interface SiteOptions {
   previous: { container: string; deploymentId: string } | null
   /** A preview asks crawlers not to index it: it is a copy of the site under another name. */
   preview: boolean
+  /** The public IPv4 address the default app also answers over HTTPS, or null. */
+  ipCertificate: string | null
 }
 
 const proxy = (upstreams: string[], extra: string[] = []): string[] => [
@@ -87,6 +99,19 @@ export function renderSite(options: SiteOptions): string {
 
   if (options.isDefault) {
     lines.push('http://:80 {', ...routes(options), '}')
+    if (options.ipCertificate !== null) {
+      if (!isIPv4(options.ipCertificate)) throw new NextshipError(`"${options.ipCertificate}" is not an IPv4 address.`, 'This is a nextship defect. Please report it.')
+      lines.push(
+        `https://${options.ipCertificate} {`,
+        '  tls {',
+        '    issuer acme {',
+        '      profile shortlived',
+        '    }',
+        '  }',
+        ...routes(options),
+        '}'
+      )
+    }
   }
 
   // Caddy applies a block's tls settings to every name in it, so domains are

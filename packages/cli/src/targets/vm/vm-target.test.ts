@@ -27,6 +27,7 @@ import {
   runArguments,
   withDomain,
   withoutDomain,
+  publicIpv4,
 } from './vm-target.js'
 
 const facts = (overrides = {}) => ({ memMib: 3900, diskFreeMib: 20000, dockerVersion: '27.3.1', defaultApp: null, ipv6: false, ...overrides })
@@ -209,4 +210,17 @@ test('a lost build session is recognised from what the daemon logged', () => {
 test('a build that failed on the app itself is not taken for a lost session', () => {
   assert.equal(lostBuildSession(JOURNAL_APP_FAILED), false)
   assert.equal(lostBuildSession(''), false)
+})
+
+// No public CA may certify these, so asking Let's Encrypt for one would only fail,
+// forever and every few minutes, in Caddy's log.
+test('only a literal public IPv4 address gets a certificate of its own', () => {
+  for (const address of ['46.101.1.2', '159.89.10.20', '8.8.8.8']) assert.equal(publicIpv4(address), address)
+  for (const host of [
+    'example.com', '2a03:b0c0::1', '10.0.0.5', '172.16.4.1', '172.31.255.255', '192.168.1.10', '127.0.0.1',
+    '100.64.0.1', '169.254.1.1', '203.0.113.10', '198.51.100.7', '192.0.2.1', '224.0.0.1', '0.0.0.0',
+  ]) {
+    assert.equal(publicIpv4(host), null, host)
+  }
+  assert.equal(publicIpv4('172.32.0.1'), '172.32.0.1', 'just outside 172.16.0.0/12 is public')
 })

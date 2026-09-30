@@ -377,6 +377,15 @@ one serving, and a deployment that succeeds drops no request. Its last log lines
 printed when it fails. The first app deployed on a server answers `http://<server>`;
 later apps answer nothing until `nextship domain add`.
 
+**HTTPS before you have a domain.** When you added the server by a public IPv4 address, the
+first app also answers `https://<address>`, with a certificate Let's Encrypt issues for the
+address itself. Let's Encrypt certifies an address only for about six days at a time, and
+Caddy renews it on its own. `deploy` prints the `https://` address once it really answers
+with a valid certificate, and the `http://` one until then. A server added by hostname, by an
+IPv6 address, or by a private address gets no certificate of its own: attach a domain
+instead. This has been verified end to end against Pebble, Let's Encrypt's own test
+server, and not yet against Let's Encrypt on a real server.
+
 The Server Actions key is kept on the server rather than in `.nextship/secrets.local.json`,
 so every machine that deploys, including CI, builds with the same key. A key already in
 your local file is copied to the server on the first deploy. If the server and your local

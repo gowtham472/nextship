@@ -592,7 +592,7 @@ Everything nextship keeps on the server lives in a few places:
 | `/etc/nextship/apps/<name>/deployments.json` | Deployment history, newest first: `{ id, imageTag, createdAt, cause, served, live }` |
 | `/etc/nextship/apps/<name>/env`, `secrets` | Runtime variables and the Server Actions key, mode 0600, written from SSH stdin |
 | `/etc/nextship/apps/<name>/lock` | A directory created with `mkdir`, so two deployments cannot interleave, holding an owner file |
-| `/etc/nextship/default-app` | The app that answers `http://<server>`: the first one to deploy |
+| `/etc/nextship/default-app` | The app that answers `http://<server>`: the first one to deploy. On a server added by a public IPv4 address it also answers `https://<address>` (Release sequence, below) |
 | Volumes `nextship-<name>-build-<image>`, `nextship-<name>-cache` | What Next.js writes at runtime, kept across restarts (below) |
 | `/etc/nextship/caddy/sites/<name>.caddy` | The Caddy site for the app |
 | Docker network `nextship` | Caddy and every app container; no app publishes a port |
@@ -660,6 +660,23 @@ being replaced. `deployments.json` records the kept one with `keptUntil`, and be
 `previous` holds `<container> <epoch seconds>` for `retire.sh`, run every minute by a timer
 `server add` installs, since the server has no JSON parser. `images prune` and the prune
 after a deployment keep the kept deployment's image, which Docker would refuse to remove.
+
+**HTTPS on the server's address.** When the server was added by a literal public IPv4
+address (`publicIpv4`: not private, shared, loopback, link-local, documentation or
+multicast), the default app's site also has a block for `https://<address>` whose ACME
+issuer asks for Let's Encrypt's `shortlived` profile, the only one under which Let's Encrypt
+issues IP address certificates since they became generally available on 2026-01-15. Caddy
+answers the HTTP-01 challenge before any site route, so the catch-all HTTP site does not
+intercept it. IPv4 only: IPv6 issuance was fixed in Caddy after 2.10.2, the release
+`caddy:2.10` installs (caddyserver/caddy#7399). `address` reports `https://` only once a TLS
+connection to the address verifies. The certificate check sends no server name for an
+address, which TLS forbids. Verified against Pebble 2026, Let's Encrypt's test server, with
+a `shortlived` profile of six days: on a private network, Caddy 2.10.2 running the site file
+`renderSite` produced for `10.77.0.10` obtained a certificate through HTTP-01 on port 80,
+naming `IP Address:10.77.0.10` and valid from 2026-09-30 08:05 to 2026-10-06 08:05, and a
+client trusting only Pebble's root fetched the app over `https://10.77.0.10` while one
+trusting nothing was refused. Not yet run against Let's Encrypt itself, which needs a server
+on a public address.
 
 **Previews.** `--preview <name>` (`preview.ts`) scopes a command to the app
 `<app>-<name>` on the project's server. Its `app.json` records `previewOf`, the id of the

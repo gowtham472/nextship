@@ -105,7 +105,7 @@ keeps on the server:
 | `/etc/nextship/apps/<name>/env` | Runtime variables, mode 0600, in Docker's env file format |
 | `/etc/nextship/apps/<name>/secrets` | The Server Actions key, mode 0600 |
 | `/etc/nextship/caddy/sites/<name>.caddy` | The app's Caddy site, regenerated on every change |
-| `/etc/nextship/default-app` | The app that answers `http://<server>` |
+| `/etc/nextship/default-app` | The app that answers `http://<server>`, and `https://<address>` when the server was added by a public IPv4 address |
 | Containers `<name>-r<time>-<random>` | One per deployment. The live one runs; the previous one is kept stopped |
 | Volumes `nextship-<name>-build-<image>`, `nextship-<name>-cache` | Regenerated ISR pages per image, optimized images and the fetch cache per app |
 
