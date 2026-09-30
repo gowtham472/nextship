@@ -8,7 +8,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { access, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { access, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -16,7 +16,11 @@ import { fileURLToPath } from 'node:url'
 const PRUNE = fileURLToPath(new URL('../runtime/prune.cjs', import.meta.url))
 
 async function fixture(layout: Record<string, string>): Promise<string> {
-  const root = await mkdtemp(path.join(tmpdir(), 'nextship-prune-'))
+  // The real path, because prune resolves the paths it follows through links and
+  // compares them with the root it was given. On macOS the temporary directory is
+  // under /var, a link to /private/var, so a root named through the link made every
+  // resolved path look outside it. In the image the root is /src, which is not a link.
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'nextship-prune-')))
   for (const [relative, content] of Object.entries(layout)) {
     const file = path.join(root, relative)
     await mkdir(path.dirname(file), { recursive: true })

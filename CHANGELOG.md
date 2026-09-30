@@ -60,6 +60,14 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   writes files outside `.next` now fails with `EROFS`, which the README and `docs/vm.md`
   §4 state. (Ragul D)
 
+### Fixed
+
+- **The unit tests pass on macOS.** Five prune tests created their fixtures under the
+  temporary directory as named, which on macOS is a link to `/private/var`, so every path
+  prune resolved looked outside the build root. CI ran only Linux and Windows and never saw
+  it; it runs macOS too now. The image was never affected: prune runs under `/src` there.
+  (Ragul D)
+
 ### Docs
 
 - **The evidence page compares nextship with Coolify, measured.** The same app deployed
