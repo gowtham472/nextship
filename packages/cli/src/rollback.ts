@@ -20,6 +20,7 @@ import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
 import { ownedApp } from './owned-app.js'
 import type { DeploymentRecord } from './targets/target.js'
+import { untilStopped } from './interrupt.js'
 import { detail, ok, step } from './util/log.js'
 
 export interface RollbackOptions {
@@ -73,16 +74,9 @@ export async function rollback(project: ProjectInfo, options: RollbackOptions): 
 
   step('Rolling back')
   // A rollback starts a container and waits for it exactly as a deploy does, so
-  // Ctrl+C here is handled rather than left to kill the process holding the
-  // server's deploy lock.
-  const stopping = new AbortController()
-  const interrupt = (): void => stopping.abort()
-  process.on('SIGINT', interrupt)
-  try {
-    await app.target.rollback(app.appId, target.id, detail, stopping.signal)
-  } finally {
-    process.off('SIGINT', interrupt)
-  }
+  // Ctrl+C, a closed terminal and `kill` are handled rather than left to end the
+  // process holding the server's deploy lock.
+  await untilStopped((signal) => app.target.rollback(app.appId, target.id, detail, signal))
 
   const address = await app.target.address(app.appId)
   ok(

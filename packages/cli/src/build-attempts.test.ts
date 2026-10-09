@@ -25,7 +25,6 @@ function builders(answers: Array<boolean | undefined>) {
     const builder: ImageBuilder & { closed: number } = {
       dockerHost: `unix:///tmp/forward-${opened.length}.sock`,
       cacheScope: null,
-      warning: null,
       closed: 0,
       close: async () => {
         builder.closed++

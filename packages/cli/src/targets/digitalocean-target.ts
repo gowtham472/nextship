@@ -152,7 +152,7 @@ export class DigitalOceanTarget implements Target {
   }
 
   async builder(): Promise<ImageBuilder> {
-    return { dockerHost: null, cacheScope: null, warning: null, close: async () => {} }
+    return { dockerHost: null, cacheScope: null, close: async () => {} }
   }
 
   /**

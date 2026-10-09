@@ -353,7 +353,7 @@ deployed, and a page that did not compile failed once, with no retry.
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--build <mode>` | `remote` | `remote` builds on the server's own Docker, reached through an SSH forward of its socket, so nothing but the build context leaves your machine and the image is built natively for the server. `local` builds here for the server's architecture and streams the image with `docker save \| ssh docker load`. Recorded in `nextship.json`. A server under 2 GB of RAM is refused for remote builds |
+| `--build <mode>` | `remote` | `remote` builds on the server's own Docker, reached over SSH through a private socket, or a named pipe on Windows, so nothing but the build context leaves your machine, no port is opened, and the image is built natively for the server. `local` builds here for the server's architecture and streams the image with `docker save \| ssh docker load`. Recorded in `nextship.json`. A server under 2 GB of RAM is refused for remote builds |
 | `--memory <size>` | an even share of 80% of RAM across the server's apps | The container's memory limit, such as `512m` |
 
 ```

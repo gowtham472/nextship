@@ -4,12 +4,33 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Closing the terminal part way through a deployment no longer leaves the app locked.**
+  `deploy` and `rollback` handled Ctrl+C by giving the release back: the new container
+  removed and the server's deploy lock released. A closed terminal (SIGHUP), `kill` and a
+  cancelled CI job (SIGTERM) ended the process where it stood instead, and the lock stayed
+  until someone removed it by hand. All of them are handled the way Ctrl+C is now, with
+  Ctrl+Break on Windows, and from before the release starts, so a stop that arrives while
+  the lock is being taken is not lost. Verified on Linux by sending a process holding a
+  stand-in lock each signal for real. Not yet run by closing a real terminal during a
+  deployment to a server. (Gowtham)
+- **A remote build from Windows no longer opens the server's Docker on a local port.**
+  Windows' OpenSSH cannot forward to a Unix socket, so the build reached the server's
+  Docker through `127.0.0.1:<port>` with nothing authenticating it. For the length of a
+  build any process on the machine could use it, and so could a web page in a browser, by
+  rebinding a name to 127.0.0.1; Docker on the server is root on the server. The build now
+  goes through a named pipe with a random name, which a browser cannot open and only your
+  account, SYSTEM and Administrators can write to, and each connection is carried by its
+  own `ssh ... docker system dial-stdio` under the pinned host key. The warning the old
+  forward printed is gone with it. Verified on Windows 11: the Docker client built an image
+  with a BuildKit secret through the bridge, against a local daemon. Not yet run from
+  Windows against a real server. (Gowtham)
+
 ### Docs
 
 - **The roadmap says where the CLI goes next.** A new section lists what is planned and
-  not built: two defects to fix first (an app left locked when a terminal closes
-  mid-deployment, and the unauthenticated Docker forward during a remote build from
-  Windows), machine-readable output, and more than one instance of an app, named as the
+  not built: machine-readable output, and more than one instance of an app, named as the
   largest piece of work ahead with its design under "v2: correctness at scale". The fourth
   sequencing principle now names the user the server target brought: anyone deploying
   Next.js to a server they own. (Gowtham)

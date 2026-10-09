@@ -261,7 +261,8 @@ tried yet:
 | `server add` on Debian 12 (item 2) | Debian 12 is a supported distribution that has only run on the stand-in |
 | `domain add` with a real domain: the certificate is issued, and streaming works over HTTPS (item 4) | No server used so far had a domain pointed at it |
 | A deployment from the GitHub Actions workflow in `vm.md` with `--build local` (item 11) | The documented CI path has never run |
-| `--build remote` from Windows over the loopback forward | No Windows machine has built on a server |
+| `--build remote` from Windows through the named pipe | No Windows machine has built on a server. The pipe has carried a real build to a local daemon (`design.md` §9.3) |
+| Closing the terminal part way through a deployment | The lock is released in a test with real signals; nobody has closed a real terminal mid-deployment to a server |
 
 Known from the Droplet runs, to fix or document here: `conformance/vm/e2e.sh` needs a server
 with no other app on it, and after adding swap `server add` prints `done   swap already on`,
@@ -429,10 +430,8 @@ real server and documented on its own, and none has a date.
 
 | Order | Item | State and what decides it |
 |---|---|---|
-| 1 | **A closed terminal never leaves an app locked.** `deploy` and `rollback` release the app's lock when the terminal or console closes, the way they do on Ctrl+C | Planned. A defect today: recovery is removing the lock by hand |
-| 2 | **An authenticated Docker forward for remote builds from Windows.** The build reaches the server's Docker through a loopback TCP port, which nothing authenticates for the length of the build | Planned. A defect today, and the CLI already warns about it when it happens |
-| 3 | **Machine-readable output.** `--json` on the commands that report state or act, so CI and scripts read a result rather than scrape text | Planned |
-| 4 | **More than one instance of an app.** A shared cache, tag invalidation that reaches every instance, and deployments that roll across them with no failed request | Planned, and the largest piece of work ahead. Its design is "v2: correctness at scale" below |
+| 1 | **Machine-readable output.** `--json` on the commands that report state or act, so CI and scripts read a result rather than scrape text | Planned |
+| 2 | **More than one instance of an app.** A shared cache, tag invalidation that reaches every instance, and deployments that roll across them with no failed request | Planned, and the largest piece of work ahead. Its design is "v2: correctness at scale" below |
 
 ## Beyond v1.0
 

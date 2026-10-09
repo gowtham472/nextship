@@ -187,8 +187,6 @@ export interface ImageBuilder {
    * machine deploying the app reuses one cache there. Null keeps the local rule.
    */
   cacheScope: string | null
-  /** Something the user must know about how this builder is reached, or null. */
-  warning: string | null
   /**
    * Whether a build that just failed lost its connection to the daemon rather than
    * failing on its own merits, asked of the daemon itself. Absent where there is no
