@@ -17,7 +17,8 @@ Author: Ragul D
   your `ssh`.
 - Nothing listening on ports 80 or 443. Caddy takes both.
 - An OpenSSH client on the machine you run nextship from. macOS, Linux and Windows 10 and
-  later include one.
+  later include one. On Windows nothing else is needed: `server add` and a remote build
+  have run from Windows 11's own OpenSSH, with no WSL.
 
 ## 2. Setting a server up
 

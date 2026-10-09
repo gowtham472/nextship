@@ -261,8 +261,7 @@ tried yet:
 | `server add` on Debian 12 (item 2) | Debian 12 is a supported distribution that has only run on the stand-in |
 | `domain add` with a real domain: the certificate is issued, and streaming works over HTTPS (item 4) | No server used so far had a domain pointed at it |
 | A deployment from the GitHub Actions workflow in `vm.md` with `--build local` (item 11) | The documented CI path has never run |
-| `--build remote` from Windows through the named pipe | No Windows machine has built on a server. The pipe has carried a real build to a local daemon (`design.md` §9.3) |
-| Closing the terminal part way through a deployment | The lock is released in a test with real signals; nobody has closed a real terminal mid-deployment to a server |
+| Closing a console window on Windows part way through a deployment | A closed terminal on Linux gives the lock back, on a real server. Windows ends the process a few seconds after the window closes, and that has not been run |
 
 Known from the Droplet runs, to fix or document here: `conformance/vm/e2e.sh` needs a server
 with no other app on it, and after adding swap `server add` prints `done   swap already on`,
