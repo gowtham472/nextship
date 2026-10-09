@@ -134,6 +134,44 @@ jobs:
 
       - run: bash conformance/vm/e2e.sh "$USER@localhost" --no-firewall --no-ssh-hardening --no-swap --no-auto-updates
 
+  # nextship-loadtest for real: k6 has to accept the script the package writes and
+  # return a summary its report can read, which no unit test can show. Both ways of
+  # finding k6 are run, Docker first, while no k6 is installed to be preferred to it.
+  loadtest:
+    name: Load test command
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Run it with k6 in Docker
+        working-directory: packages/loadtest
+        run: node scripts/e2e.mjs docker
+
+      # The release K6_IMAGE in packages/loadtest/src/engine.ts names, checked against
+      # the checksums published with it.
+      - name: Install k6
+        run: |
+          curl -fsSLO https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-linux-amd64.tar.gz
+          curl -fsSLO https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-checksums.txt
+          grep 'k6-v2.3.0-linux-amd64.tar.gz$' k6-v2.3.0-checksums.txt | sha256sum -c -
+          tar -xzf k6-v2.3.0-linux-amd64.tar.gz
+          echo "$PWD/k6-v2.3.0-linux-amd64" >> "$GITHUB_PATH"
+
+      - name: Run it with k6 on PATH
+        working-directory: packages/loadtest
+        run: node scripts/e2e.mjs local
+
   site:
     name: Site
     runs-on: ubuntu-latest

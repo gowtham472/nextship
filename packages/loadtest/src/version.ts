@@ -1,0 +1,13 @@
+/**
+ * nextship-loadtest: the installed version
+ *
+ * Read once from the package manifest, and reported by `--version`.
+ *
+ * Author: Gowtham
+ */
+
+import { createRequire } from 'node:module'
+
+export const VERSION: string = (
+  createRequire(import.meta.url)('../package.json') as { version: string }
+).version

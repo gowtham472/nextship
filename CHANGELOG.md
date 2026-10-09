@@ -4,6 +4,20 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Added
+
+- **`nextship-loadtest`, a separate command that reports how many users at once a site
+  holds.** Give it an address and it runs k6 for you, the one on PATH or the official
+  Docker image, in up to five rising steps, then says which step the site stopped coping
+  at: a step is held when at most 1% of its requests fail and 95% finish within a second.
+  It works on any site, needs no nextship project, prints its plan and sends nothing
+  until `--yes`, and reports a target that never answers as an error rather than a result.
+  Asked for by a reader who wanted to know what an app can take before deploying it. In
+  `packages/loadtest`, with 39 unit tests and an end-to-end script that CI runs with Docker
+  and with k6 on PATH, and that passed on Windows with k6 on PATH and with Docker Desktop.
+  Not published to npm yet, and not run with Docker Desktop on macOS; both are in
+  `docs/roadmap.md`. (Gowtham)
+
 ### Docs
 
 - **The evidence page compares nextship with Coolify, measured.** The same app deployed

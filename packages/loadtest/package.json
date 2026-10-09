@@ -1,0 +1,41 @@
+{
+  "name": "nextship-loadtest",
+  "private": true,
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Gowtham <gowtham9112006@gmail.com>",
+  "contributors": [
+    "Ragul D <raguld2105@gmail.com>"
+  ],
+  "description": "Find how many users at once a site holds, with one command. Runs k6 for you. Not published yet.",
+  "keywords": [
+    "load-testing",
+    "k6",
+    "performance",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "type": "module",
+  "bin": {
+    "nextship-loadtest": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test \"dist/**/*.test.js\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gowtham472/nextship.git"
+  },
+  "homepage": "https://nextship.doodlebytestudio.in",
+  "bugs": {
+    "url": "https://github.com/gowtham472/nextship/issues"
+  }
+}
