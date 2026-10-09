@@ -6,6 +6,14 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ### Docs
 
+- **The roadmap says where the CLI goes next.** A new section lists what is planned and
+  not built: two defects to fix first (an app left locked when a terminal closes
+  mid-deployment, and the unauthenticated Docker forward during a remote build from
+  Windows), machine-readable output, and more than one instance of an app, named as the
+  largest piece of work ahead with its design under "v2: correctness at scale". The fourth
+  sequencing principle now names the user the server target brought: anyone deploying
+  Next.js to a server they own. (Gowtham)
+
 - **The evidence page compares nextship with Coolify, measured.** The same app deployed
   with Coolify 4.3.23 and nextship 1.1.2 on identical Droplets: setup, cold and warm
   deploy times, image size (987 MB against 407 MB), the memory each tool uses beside the

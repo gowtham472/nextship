@@ -1205,7 +1205,9 @@ Bun's adapter keeps a list of its own the same way.
 | **v1.1** | Any Linux server over SSH | Released in 1.1.0. Verified end to end on a local test server, a Proxmox VM and DigitalOcean Droplets |
 | **Next** | The rest of the server target's live checklist | Planned, not tied to a version: a Hetzner VM, an arm64 machine, Debian 12, a certificate for a real domain, and the GitHub Actions workflow |
 
-Beyond v1.0, each with the trigger that would justify it: correctness at scale (a
+Planned for the CLI, none of it built: two defects to fix, machine-readable output, and
+more than one instance of an app, which is the largest piece of work ahead. Beyond v1.0,
+each with the trigger that would justify it: correctness at scale (a
 shared cache and distributed tags, needed once there is more than one instance),
 git-driven previews, a hosted control plane, edge performance (which is where serving
 static assets from a CDN now lives), and other frameworks. The roadmap also records

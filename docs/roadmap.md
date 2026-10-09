@@ -421,6 +421,19 @@ driver.
 
 ---
 
+## Where the CLI goes next (Planned, not tied to a version)
+
+The CLI's job is deploying Next.js to infrastructure you own, and what is planned is
+doing that job more completely. None of this exists yet. Each row is built, verified on a
+real server and documented on its own, and none has a date.
+
+| Order | Item | State and what decides it |
+|---|---|---|
+| 1 | **A closed terminal never leaves an app locked.** `deploy` and `rollback` release the app's lock when the terminal or console closes, the way they do on Ctrl+C | Planned. A defect today: recovery is removing the lock by hand |
+| 2 | **An authenticated Docker forward for remote builds from Windows.** The build reaches the server's Docker through a loopback TCP port, which nothing authenticates for the length of the build | Planned. A defect today, and the CLI already warns about it when it happens |
+| 3 | **Machine-readable output.** `--json` on the commands that report state or act, so CI and scripts read a result rather than scrape text | Planned |
+| 4 | **More than one instance of an app.** A shared cache, tag invalidation that reaches every instance, and deployments that roll across them with no failed request | Planned, and the largest piece of work ahead. Its design is "v2: correctness at scale" below |
+
 ## Beyond v1.0
 
 Not scheduled. Recorded so that the decision to skip them stays deliberate. Each
@@ -529,5 +542,6 @@ Recorded so the decision stays visible rather than looking like an oversight.
 3. **Seams, not stubs.** Where a later version will swap an implementation, the
    interface appears in the change that first consumes it, never before
    ([`../AGENTS.md`](../AGENTS.md) §3.1).
-4. **Build for the current user.** Right now that user is one person with one app.
-   Features justified only by imagined future users wait until those users exist.
+4. **Build for the current user.** Through 1.0 that user was one person with one app.
+   Since the server target it is anyone deploying Next.js to a server they own. Features
+   justified only by imagined future users still wait until those users exist.
