@@ -11,7 +11,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fingerprint, hostKeyAlgorithms, knownHostsLine, parseKeyLine, parseKeyscan, preferredKey } from './host-key.js'
+import { fingerprint, hostKeyAlgorithms, knownHostsLine, parseKeyLine, parseKeyscan, preferredKey, recordArguments } from './host-key.js'
 
 const ED25519 = 'AAAAC3NzaC1lZDI1NTE5AAAAIBAzLBUdetTLzoVHIVLcV5jAUBaPHnXQVkBwGe8ZAFq1'
 const RSA =
@@ -57,4 +57,27 @@ test('the negotiated algorithm is the pinned key type, with SHA-2 signatures for
 
 test('the known_hosts line names the alias, not the host', () => {
   assert.equal(knownHostsLine('nextship-server', { type: 'ssh-ed25519', key: ED25519 }), `nextship-server ssh-ed25519 ${ED25519}\n`)
+})
+
+test('recording a key through ssh offers no credentials and trusts nothing it keeps', () => {
+  const args = recordArguments('203.0.113.10', 2222, '/tmp/x/known_hosts', 'ssh-ed25519')
+  const option = (name: string): string | undefined => args.find((entry) => entry.startsWith(`${name}=`))
+  assert.equal(option('PreferredAuthentications'), 'PreferredAuthentications=none')
+  assert.equal(option('BatchMode'), 'BatchMode=yes')
+  assert.equal(option('UserKnownHostsFile'), 'UserKnownHostsFile=/tmp/x/known_hosts')
+  assert.equal(option('GlobalKnownHostsFile'), 'GlobalKnownHostsFile=none')
+  assert.equal(option('HostKeyAlgorithms'), 'HostKeyAlgorithms=ssh-ed25519')
+  assert.deepEqual(args.slice(-4), ['-p', '2222', '--', 'nextship-host-key@203.0.113.10'])
+})
+
+test('an RSA key is asked for through its SHA-2 signature algorithms', () => {
+  assert.ok(recordArguments('example.com', 22, 'k', 'ssh-rsa').includes('HostKeyAlgorithms=rsa-sha2-512,rsa-sha2-256'))
+})
+
+test('the line ssh records, with or without a port in the host, is read like a scanned one', () => {
+  const key = 'AAAAC3NzaC1lZDI1NTE5AAAAIDoUZlBI2DUVz7mhIViV2kTXdcpny/Fl/PixLiXQCabc'
+  assert.deepEqual(parseKeyscan(`203.0.113.10 ssh-ed25519 ${key}
+`), [{ type: 'ssh-ed25519', key }])
+  assert.deepEqual(parseKeyscan(`[203.0.113.10]:2222 ssh-ed25519 ${key}
+`), [{ type: 'ssh-ed25519', key }])
 })

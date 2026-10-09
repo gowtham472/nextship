@@ -23,6 +23,7 @@ import { CONTAINER_PORT } from './image/dockerfile.js'
 import { client as apiClient } from './owned-app.js'
 import { DEFAULT_REGION } from './targets/digitalocean-target.js'
 import type { EnvRecord, Target } from './targets/target.js'
+import { untilStopped } from './interrupt.js'
 import { detail, ok, step, warn } from './util/log.js'
 
 export interface DeployOptions {
@@ -167,7 +168,6 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
   const { build, image } = await buildWithReconnect(
     () => client.builder(),
     async (builder) => {
-      if (builder.warning) warn(builder.warning)
       const placement = { platform, dockerHost: builder.dockerHost, cacheScope: builder.cacheScope }
       const build = await buildProject(project, placement, serverKey)
       return { build, image: await packageImage(project, build) }
@@ -197,58 +197,55 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
   const serving = owned ? (await client.deployments(owned.id)).some((deployment) => deployment.live) : false
 
   step(owned ? `Updating app "${name}"` : `Creating app "${name}"`)
-  const released = await client.release(owned?.id ?? null, {
-    name,
-    repository: name,
-    tag: deploymentId,
-    port: CONTAINER_PORT,
-    instanceSize: options.instanceSize ?? null,
-    memory: options.memory ?? null,
-    healthPath: build.manifest.healthPath,
+  // Ctrl+C, a closed terminal and `kill` all arrive from outside while a driver may
+  // be holding something for this release: on a server it is the app's deploy lock,
+  // which nothing breaks automatically. They are listened for from before the
+  // release starts, so one that arrives while the lock is being taken is acted on
+  // as soon as the release can be given back, rather than ending the process there.
+  const appId = await untilStopped(async (signal) => {
+    const released = await client.release(owned?.id ?? null, {
+      name,
+      repository: name,
+      tag: deploymentId,
+      port: CONTAINER_PORT,
+      instanceSize: options.instanceSize ?? null,
+      memory: options.memory ?? null,
+      healthPath: build.manifest.healthPath,
+    })
+
+    // From here to the end of the release, every path out has to reach either
+    // awaitRelease or abandonRelease, or an early return or a thrown error leaves a
+    // lock a person has to go and remove by hand, with the new container still
+    // running beside it.
+    let handedOff = false
+    try {
+      // Written before waiting, so a timeout still leaves the app recorded as ours
+      // rather than orphaned and unadoptable on the next run.
+      const config: ProjectConfig = {
+        ...settings,
+        ...(delivered.store ? { registry: delivered.store } : {}),
+        appId: released.appId,
+      }
+      await writeConfig(project.root, config)
+      detail('recorded in nextship.json')
+
+      if (!released.deploymentId) {
+        warn(`${client.displayName} reported no deployment to follow. Check its control panel.`)
+        return null
+      }
+
+      step('Waiting for the deployment to go live')
+      handedOff = true
+      await client.awaitRelease(released.appId, released.deploymentId, detail, serving, signal)
+      return released.appId
+    } finally {
+      // awaitRelease ends the release itself, whether it succeeded or threw, so
+      // this only covers the paths that never reached it.
+      if (!handedOff) await client.abandonRelease(released.appId, released.deploymentId)
+    }
   })
-  const appId = released.appId
 
-  // From here to the end of the release, every path out has to reach either
-  // awaitRelease or abandonRelease. A driver may be holding something for this
-  // release: on a server it is the app's deploy lock, which nothing breaks
-  // automatically, so an early return or a thrown error here used to leave a
-  // lock a person had to go and remove by hand, with the new container still
-  // running beside it.
-  //
-  // Ctrl+C is the same problem arriving from outside. Handled rather than left
-  // to kill the process mid-wait, so the release is given back the same way.
-  const stopping = new AbortController()
-  const interrupt = (): void => stopping.abort()
-  process.on('SIGINT', interrupt)
-
-  let handedOff = false
-  try {
-    // Written before waiting, so a timeout still leaves the app recorded as ours
-    // rather than orphaned and unadoptable on the next run.
-    const config: ProjectConfig = {
-      ...settings,
-      ...(delivered.store ? { registry: delivered.store } : {}),
-      appId,
-    }
-    await writeConfig(project.root, config)
-    detail('recorded in nextship.json')
-
-    if (!released.deploymentId) {
-      warn(`${client.displayName} reported no deployment to follow. Check its control panel.`)
-      return
-    }
-
-    step('Waiting for the deployment to go live')
-    handedOff = true
-    await client.awaitRelease(appId, released.deploymentId, detail, serving, stopping.signal)
-  } finally {
-    process.off('SIGINT', interrupt)
-    // awaitRelease ends the release itself, whether it succeeded or threw, so
-    // this only covers the paths that never reached it.
-    if (!handedOff) await client.abandonRelease(appId, released.deploymentId)
-  }
-
-  await reportUrls(client, appId)
+  if (appId !== null) await reportUrls(client, appId)
 }
 
 /**

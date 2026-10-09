@@ -602,12 +602,79 @@ The server runs a `nextship` user in the `docker` group. **Membership of the `do
 group is root-equivalent**, and the docs say so rather than implying the user is
 unprivileged.
 
+#### Stopping a release from outside (Implemented)
+
+A release holds the app's deploy lock from the moment its container starts until traffic
+has switched or the release has been given up, and nothing breaks that lock automatically.
+A release that is stopped is therefore told, through one abort signal `deploy` and
+`rollback` both watch, so it removes its new container and lets the lock go. Ctrl+C was
+handled that way from the start. A closed terminal, which arrives as SIGHUP, and `kill` or
+a cancelled CI job, which arrive as SIGTERM, were not: each ended the process where it
+stood and left the app locked until someone removed the lock by hand. All of them abort
+the same signal now, and on Windows so does Ctrl+Break. The listeners are attached before
+the release starts, so a stop that arrives while the lock is being taken is acted on as
+soon as the release can be given back. After a stop, a failed write to a terminal that is
+gone is ignored rather than allowed to end the process before the lock is released.
+
+Verified on Linux with real signals: a process holding a stand-in lock was sent SIGHUP,
+SIGTERM and SIGINT in turn, and each time released it and exited by itself.
+
+Then against a real server. Gowtham ran these on 2026-10-09, on a DigitalOcean Droplet (`s-2vcpu-4gb`, Ubuntu 24.04, `blr1`), from Ubuntu 24.04 under WSL. An app
+made to take three minutes to start was deployed inside a terminal of its own, and that
+terminal was closed once the lock was held and the deployment was waiting on the health
+check. With 1.1.2 from npm the process died, and 25 s later the lock was still on the
+server, naming a process that no longer existed, with the new container still running
+beside the old one. With this fix, 25 s later the lock was gone, the new container had
+been removed, the previous one was still healthy and answering 200, and no nextship
+process was left. A normal deployment afterwards went live with nothing removed by hand.
+
+**Not yet run:** closing a console window on Windows part way through a deployment.
+Windows delivers that as SIGHUP and ends the process a few seconds later whatever it is
+doing, and giving a release back takes two or three SSH logins, each a new connection
+there. One attempt closed its window during the build, before any lock was taken, and
+showed nothing either way.
+
 #### Build and delivery (Implemented)
 
 The default build mode is **remote**: the image is built by the server's own Docker daemon,
 reached through `ssh -L` forwarding a local socket to `/var/run/docker.sock`. That keeps the
 pinned host key in force, which `DOCKER_HOST=ssh://` would bypass, builds for the server's
 own architecture natively, and sends only the build context rather than a finished image.
+The socket is in a directory only the user running nextship can enter.
+
+**From Windows the daemon is reached through a named pipe, not a port.** Windows' OpenSSH
+cannot forward to a Unix socket, and the first answer was a loopback TCP port, which
+nothing authenticates: for as long as a build ran, any process on the machine could drive
+the server's Docker, which is root on the server, and so could a web page open in a
+browser, by rebinding a name to 127.0.0.1. Now nextship listens on a named pipe with a
+random name and gives each connection the Docker client opens its own
+`ssh ... docker system dial-stdio`, the command Docker itself uses to carry a connection
+over SSH, started with nextship's own options so the pinned key still applies. A browser
+cannot open a named pipe, and no port is opened on either machine. A pipe Node creates
+takes Windows' default permissions for one, read from such a pipe on Windows 11: full
+control for the user who made it, SYSTEM and Administrators, and read only for everyone
+else, who therefore cannot send the daemon a request. Verified on Windows 11 with Docker
+29.7.2: through the bridge module the Docker client reported the daemon's version and
+built an image with a BuildKit secret, over 14 connections with none lost, the dialled
+command running against the local daemon.
+
+Then against a real server, from Windows 11 with its own OpenSSH (9.5p2) and no WSL
+involved. Gowtham ran these on 2026-10-09, on a DigitalOcean Droplet (`s-2vcpu-4gb`, Ubuntu 24.04, `blr1`). `server add --yes` took 61 s. The first `deploy --yes` took
+127 s and a second, after a one-line change, 73 s. The image existed on the server
+(411 MB) and not on the Windows machine, the output carried no warning about a port,
+streaming passed three runs of three with a first byte at 113 to 209 ms, and the Edge
+route answered. This is the first time `--build remote` has run from Windows.
+
+That run also found that `server add` could not start from Windows at all. The
+`ssh-keyscan` Windows ships cannot scan a current server: it offers a key exchange it was
+not built with, and ends with `choose_kex: unsupported KEX method
+sntrup761x25519-sha512@openssh.com` against Ubuntu 24.04's OpenSSH 9.6. `ssh` on the same
+machine negotiates correctly, so when the scan fails the key is now read by letting `ssh`
+record it: one connection that offers no way to authenticate, sends nothing, and ends at
+"permission denied" after the key exchange has written the server's key to a file that is
+thrown away. The key then goes through the same printed fingerprint and `--yes` as a
+scanned one, and the fingerprint it printed matched the server's own
+`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`.
 A server under 2 GB of RAM is refused for remote builds with `--build local` as the action.
 A remote build whose connection to the daemon drops is built once more over a new
 forward, and only then. After a failed build the builder has two kinds of evidence: its
@@ -868,7 +935,7 @@ Not verified yet, and the live checklist in `docs/roadmap.md`:
 | A hosting provider: a Hetzner VM, and arm64 on any real machine | An amd64 Proxmox VM and an amd64 DigitalOcean Droplet have passed (above). arm64 has run only against the container stand-in, and Hetzner has not been used |
 | A certificate issued for a real domain, and streaming over HTTPS | Needs public DNS pointing at a reachable server; neither the Proxmox VM nor the Droplet used so far has had a domain pointed at it |
 | The GitHub Actions workflow in `vm.md` | Not yet run; the `vm` CI job itself now passes on every push to `main` (`ssh localhost` stands in for a server) |
-| `--build remote` from Windows over a loopback forward | No Windows machine was used |
+| Closing a console window on Windows part way through a deployment | A closed terminal on Linux gives the lock back (Stopping a release, above); Windows has not been run |
 
 #### Limitations
 

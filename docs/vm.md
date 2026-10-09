@@ -17,7 +17,8 @@ Author: Ragul D
   your `ssh`.
 - Nothing listening on ports 80 or 443. Caddy takes both.
 - An OpenSSH client on the machine you run nextship from. macOS, Linux and Windows 10 and
-  later include one.
+  later include one. On Windows nothing else is needed: `server add` and a remote build
+  have run from Windows 11's own OpenSSH, with no WSL.
 
 ## 2. Setting a server up
 
@@ -71,6 +72,10 @@ does not protect any port you publish from another container yourself.
 - **Nothing is interpreted by a shell on your machine.** `ssh` is started with an argument
   list. On the server, every value placed in a command is validated against a strict
   pattern or single-quoted.
+- **A remote build opens no port.** The server's Docker is reached through a socket in a
+  directory only you can enter, and from Windows through a named pipe only your account
+  can write to. Docker on the server is root on the server, so nothing else on your
+  machine, a web page in your browser included, is given a way to it.
 - **`nextship` is root-equivalent.** Membership of the `docker` group lets a user start a
   privileged container, so anyone who can log in as `nextship` controls the server. Treat
   its keys as root's. It is a separate user so nextship's files and containers have one
@@ -108,9 +113,11 @@ again.
 
 **Recovering.** A container that exits is restarted by Docker. A container that stays up
 but stops answering its health check is restarted by the watchdog after three failed
-minutes, and the journal says so under `nextship-watchdog`. A lock left by a deployment
-that was killed is reported with its owner after 30 minutes and never removed
-automatically: confirm nothing is running, then remove
+minutes, and the journal says so under `nextship-watchdog`. A deployment or rollback
+stopped with Ctrl+C, by closing its terminal, or by `kill` gives its lock back before it
+exits. One that was ended some other way, a lost power supply or `kill -9`, can still
+leave its lock: that is reported with its owner after 30 minutes and never removed
+automatically. Confirm nothing is running, then remove
 `/etc/nextship/apps/<name>/lock` as the `nextship` user.
 
 **Reboots.** Every app container runs with `--restart unless-stopped`, Docker is enabled at
