@@ -274,7 +274,7 @@ left before anyone can install it:
 
 | Item | State |
 |---|---|
-| Run it with Docker Desktop on macOS and on Windows, against a target on the same machine | Not run. Needs a machine with Docker Desktop running |
+| Run it with Docker Desktop on macOS, against a target on the same machine | Not run. Windows passed on 2026-10-09; macOS needs a Mac with Docker Desktop running |
 | Choose the npm name and publish it | `nextship-loadtest` is free on npm and is the working name. Publishing needs its own trusted publisher on npm and a job in `release.yml`, which today publishes `packages/cli` only |
 | A page for it on the site | After it is published, so the site never documents a command nobody can install |
 

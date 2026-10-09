@@ -90,8 +90,10 @@ container shares the host's network, and on macOS and Windows the address is req
 
 - With k6 2.3.0 on PATH, on Windows: `scripts/e2e.mjs local` passes.
 - With Docker on Linux: `scripts/e2e.mjs docker` runs in this repository's CI.
-- With Docker Desktop on macOS or Windows: **not run yet.** The rewrite to
-  `host.docker.internal` is covered by unit tests only.
+- With Docker Desktop on Windows (Docker 29.7.2): `scripts/e2e.mjs docker` passes, with
+  the test server on the same machine requested as `host.docker.internal`.
+- With Docker Desktop on macOS: **not run yet.** It takes the same path as Windows, which
+  unit tests cover, but nobody has run it there.
 
 ## Running it from the repository
 

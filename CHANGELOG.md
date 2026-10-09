@@ -14,8 +14,9 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
   until `--yes`, and reports a target that never answers as an error rather than a result.
   Asked for by a reader who wanted to know what an app can take before deploying it. In
   `packages/loadtest`, with 39 unit tests and an end-to-end script that CI runs with Docker
-  and with k6 on PATH. Not published to npm yet, and not run with Docker Desktop on macOS
-  or Windows; both are in `docs/roadmap.md`. (Gowtham)
+  and with k6 on PATH, and that passed on Windows with k6 on PATH and with Docker Desktop.
+  Not published to npm yet, and not run with Docker Desktop on macOS; both are in
+  `docs/roadmap.md`. (Gowtham)
 
 ### Docs
 

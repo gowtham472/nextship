@@ -1220,13 +1220,15 @@ printed.
 
 Verified by `packages/loadtest/scripts/e2e.mjs`, which runs the built command against a
 server that answers one request at a time, and fails unless the run holds an early step,
-fails a later one on response time and refuses a closed port. It passes with k6 2.3.0 on
-PATH on Windows. CI runs it on Linux with Docker and with k6 on PATH.
+fails a later one on response time and refuses a closed port. On Windows it passes with
+k6 2.3.0 on PATH, and with Docker Desktop (Docker 29.7.2), where the server on the same
+machine was reached as `host.docker.internal`. CI runs it on Linux with Docker and with k6
+on PATH.
 
 Known limitations:
 
-- **Not run with Docker Desktop on macOS or Windows.** The `host.docker.internal` rewrite
-  is covered by unit tests only.
+- **Not run with Docker Desktop on macOS.** It takes the path that passed on Windows, and
+  nobody has run it there.
 - **One address, GET only.** No logins or journeys; those need a hand-written k6 script.
 - **The test runs from the user's machine**, so the times include their network.
 - **Not published.** The npm name and the release path are in `docs/roadmap.md`.
