@@ -4,6 +4,15 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-10-10
+
+Three fixes to deploying to your own server, all found or proven on a live Droplet. A
+deployment whose terminal is closed, or that is killed, gives the server's deploy lock back
+instead of leaving it for someone to remove. A remote build from Windows no longer opens
+the server's Docker on a local port: it goes through a named pipe. And `server add` works
+from Windows, where it could not read a current server's host key. The evidence page gains
+a measured comparison with Coolify, and the roadmap says where the CLI goes next.
+
 ### Fixed
 
 - **Closing the terminal part way through a deployment no longer leaves the app locked.**

@@ -65,7 +65,7 @@ destroyed afterwards, so its URL no longer serves.
 
 ## Status
 
-**Version 1.1.2, for Next.js on DigitalOcean App Platform or on any Linux server over SSH.** App Platform is verified against live deployments, including streaming through App Platform itself, re-checked against a live app for 1.1.0, and deployed from both Windows and an Apple Silicon Mac. The server target is new in 1.1.0 and verified on a local test server, a Proxmox VM and DigitalOcean Droplets. Hetzner, arm64, Debian 12 and a certificate for a real domain have not run yet, and are on the server target's live checklist.
+**Version 1.1.3, for Next.js on DigitalOcean App Platform or on any Linux server over SSH.** App Platform is verified against live deployments, including streaming through App Platform itself, re-checked against a live app for 1.1.0, and deployed from both Windows and an Apple Silicon Mac. The server target is new in 1.1.0 and verified on a local test server, a Proxmox VM and DigitalOcean Droplets, and since 1.1.3 from Windows 11 with its own OpenSSH. Hetzner, arm64, Debian 12 and a certificate for a real domain have not run yet, and are on the server target's live checklist.
 
 | Area | State |
 |---|---|
