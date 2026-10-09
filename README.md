@@ -964,6 +964,17 @@ egress is $0.02 per GiB against Vercel's $0.15 and up, and App Platform needs no
 balancer, which was the line item that made the AWS path cost more than Vercel at
 small scale.
 
+## Load testing
+
+`packages/loadtest` is a separate command, `nextship-loadtest`, that reports how many users
+at once a site holds: give it an address and it runs [k6](https://k6.io) for you, in rising
+steps, and says which step the site stopped coping at. It works on any site and does not
+need nextship. It prints its plan and sends nothing until `--yes`, because a load test is
+real traffic.
+
+It is in this repository and **not published to npm yet**. How to run it, what the numbers
+mean and what has been run are in [`packages/loadtest/README.md`](./packages/loadtest/README.md).
+
 ## Known limitations
 
 The full table with consequences and status is
@@ -1084,6 +1095,8 @@ packages/
   adapter/             Next.js Adapter API implementation, injected via NEXT_ADAPTER_PATH
   cli/                 every command; runtime/ holds the files copied into a build,
                        and runtime/vm/ the setup and watchdog scripts sent to a server
+  loadtest/            nextship-loadtest, a separate command that load tests any site
+                       with k6; not published yet
 site/                  the marketing site and documentation, exported as static files
 ```
 

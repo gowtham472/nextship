@@ -267,6 +267,20 @@ Known from the Droplet runs, to fix or document here: `conformance/vm/e2e.sh` ne
 with no other app on it, and after adding swap `server add` prints `done   swap already on`,
 the post-apply check's wording rather than what it did.
 
+## Load testing (Built, not published)
+
+`nextship-loadtest` is in `packages/loadtest` and described in `design.md` §15. What is
+left before anyone can install it:
+
+| Item | State |
+|---|---|
+| Run it with Docker Desktop on macOS and on Windows, against a target on the same machine | Not run. Needs a machine with Docker Desktop running |
+| Choose the npm name and publish it | `nextship-loadtest` is free on npm and is the working name. Publishing needs its own trusted publisher on npm and a job in `release.yml`, which today publishes `packages/cli` only |
+| A page for it on the site | After it is published, so the site never documents a command nobody can install |
+
+Not planned until someone asks: a step in `nextship deploy` that load tests the new
+deployment before it takes traffic.
+
 ## AWS: on demand, after the Lightsail streaming experiment
 
 Previously v1.1. Moved behind the VM target: an EC2 instance is a Linux server over SSH, which

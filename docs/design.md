@@ -1180,3 +1180,53 @@ here rather than lost:
 That claim depends entirely on the v2 correctness work (shared cache, distributed tag
 coordination, atomic HTML and RSC invalidation), because that is the one part of this
 problem no existing tool solves. Convenience is not a wedge. Correctness is.
+
+## 15. Load testing (Implemented, not published)
+
+`packages/loadtest` is a second command, `nextship-loadtest`, in its own package with no
+dependency on the CLI in either direction. It answers one question, how many users at once
+a site holds, for any site. It was asked for by a reader who wanted to know what an app can
+take before deploying it.
+
+**k6 does the work.** Load generation and timing are k6's, the tool people already trust
+for them; the package writes the script, runs k6 and reads the result. k6 is found on PATH,
+and failing that run from the official image, pinned as `grafana/k6:2.3.0`, the release the
+script and the report were written against. k6 is AGPL-3.0 and is only ever run as a
+separate process, never bundled.
+
+**A staircase, not a flat load.** The users asked for are reached in up to five equal
+steps, because the question is where a site stops coping and only a rising load shows the
+step where it did. Each step is its own k6 scenario with thresholds that cannot fail: k6
+reports figures per scenario only for a scenario a threshold names.
+
+**The rule is stated with the result.** A step is held when at most 1% of its requests
+fail and 95% finish within 1000 ms. The headline is the last step held before the first
+that was not. Requests per second are counted from the length of each step, since k6's own
+per-scenario rate divides by the whole run.
+
+**Plan first.** Like every nextship command it prints the plan and sends nothing until
+`--yes`. Users are capped at 1000 and the run at 600 s. An address carrying credentials is
+refused, because the plan would print them. The address reaches k6 through its
+environment and the numbers come from a validated plan, so nothing typed is interpolated
+into the script.
+
+**A target on the same machine.** A container has its own loopback address. On Linux the
+container is given the host's network; Docker Desktop has none to give, so there the
+address is requested as `host.docker.internal`, and the plan says so.
+
+**A target that never answers is an error.** Every request failing from the first step
+says the address is wrong or the site is down, not how much load it takes, so no result is
+printed.
+
+Verified by `packages/loadtest/scripts/e2e.mjs`, which runs the built command against a
+server that answers one request at a time, and fails unless the run holds an early step,
+fails a later one on response time and refuses a closed port. It passes with k6 2.3.0 on
+PATH on Windows. CI runs it on Linux with Docker and with k6 on PATH.
+
+Known limitations:
+
+- **Not run with Docker Desktop on macOS or Windows.** The `host.docker.internal` rewrite
+  is covered by unit tests only.
+- **One address, GET only.** No logins or journeys; those need a hand-written k6 script.
+- **The test runs from the user's machine**, so the times include their network.
+- **Not published.** The npm name and the release path are in `docs/roadmap.md`.
