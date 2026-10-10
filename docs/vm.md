@@ -87,9 +87,11 @@ does not protect any port you publish from another container yourself.
   cannot run a binary. It keeps no Linux capability, cannot gain privileges, and is limited
   to 512 processes. Code an attacker runs through a flaw in your app can neither rewrite
   the app nor leave a program behind, and a restart removes whatever it wrote to `/tmp`.
-  The cost: an app that writes files outside `.next`, such as uploads to a local folder,
-  fails with `EROFS`, and a package that unpacks an executable into `/tmp`, such as a
-  headless Chromium, cannot run it.
+  An app that keeps files beside its code, a SQLite database or uploads, lists those
+  folders as `writable` in `nextship.json`, such as `"writable": ["data"]`: each becomes a
+  volume it can write to, kept across deployments, deleted by `destroy` and not copied by
+  `server move`. A write anywhere else fails with `EROFS` when it happens, and a package
+  that unpacks an executable into `/tmp`, such as a headless Chromium, cannot run it.
 - **What is never touched:** containers without nextship's labels, the Docker daemon's
   configuration, and DNS.
 
@@ -110,7 +112,7 @@ keeps on the server:
 | `/etc/nextship/apps/<name>/env` | Runtime variables, mode 0600, in Docker's env file format |
 | `/etc/nextship/apps/<name>/secrets` | The Server Actions key, mode 0600 |
 | `/etc/nextship/caddy/sites/<name>.caddy` | The app's Caddy site, regenerated on every change |
-| `/etc/nextship/default-app` | The app that answers `http://<server>`, and `https://<address>` when the server was added by a public IPv4 address |
+| `/etc/nextship/default-app` | The app that answers `http://<server>` |
 | Containers `<name>-r<time>-<random>` | One per deployment. The live one runs; the previous one is kept stopped |
 | Volumes `nextship-<name>-build-<image>`, `nextship-<name>-cache` | Regenerated ISR pages per image, optimized images and the fetch cache per app |
 
@@ -118,7 +120,9 @@ keeps on the server:
 attention.
 
 **Memory.** Each container is limited to an even share of 80% of the server's RAM across
-the apps on it at the time it starts, at least 256 MiB. `--memory` overrides it. Adding an
+the containers its apps can run at once when it starts, at least 256 MiB. That is two per
+app, the live one and the one kept for an hour after a deployment, so one app on a 2 GB
+server gets 800m, and a preview counts as an app. `--memory` overrides it. Adding an
 app does not shrink the limits of containers already running until they are deployed
 again.
 

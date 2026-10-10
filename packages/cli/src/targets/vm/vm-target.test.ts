@@ -28,13 +28,16 @@ import {
   withDomain,
   withoutDomain,
   publicIpv4,
+  writableVolumes,
 } from './vm-target.js'
 
-const facts = (overrides = {}) => ({ memMib: 3900, diskFreeMib: 20000, dockerVersion: '27.3.1', defaultApp: null, ipv6: false, ...overrides })
+const facts = (overrides = {}) => ({ memMib: 3900, diskFreeMib: 20000, dockerVersion: '27.3.1', defaultApp: null, ipv6: false, setupVersion: 3, ...overrides })
 const value = (args: string[], flag: string): string[] => args.flatMap((arg, index) => (args[index - 1] === flag ? [arg] : []))
 
 test('the facts a server reports in one round trip are read, and a partial answer is refused', () => {
-  assert.deepEqual(parseFacts('3900\n20480\n27.3.1\nshop\nyes\n'), { memMib: 3900, diskFreeMib: 20480, dockerVersion: '27.3.1', defaultApp: 'shop', ipv6: true })
+  assert.deepEqual(parseFacts('3900\n20480\n27.3.1\nshop\nyes\n3\n'), { memMib: 3900, diskFreeMib: 20480, dockerVersion: '27.3.1', defaultApp: 'shop', ipv6: true, setupVersion: 3 })
+  // A server with no server.json prints nothing for the setup version.
+  assert.equal(parseFacts('3900\n20480\n27.3.1\nshop\nyes\n\n').setupVersion, null)
   assert.equal(parseFacts('3900\n20480\n27.3.1\n\nno\n').defaultApp, null)
   assert.throws(() => parseFacts('3900\n'), /did not report/)
 })
@@ -53,16 +56,27 @@ test('a remote build on a server under 2 GB of RAM is refused, pointing at --bui
 })
 
 test('memory is an even share of 80% of RAM across apps, floored, and --memory overrides it', () => {
-  assert.equal(memoryLimit(4000, 1, null), '3200m')
-  assert.equal(memoryLimit(4000, 4, null), '800m')
-  assert.equal(memoryLimit(4000, 0, null), '3200m')
-  assert.equal(memoryLimit(961, 10, null), '256m')
-  assert.equal(memoryLimit(4000, 2, '1G'), '1g')
-  assert.throws(() => memoryLimit(4000, 1, '1.5gb'), /is not a size/)
+  assert.equal(memoryLimit(4000, 1, null, false), '3200m')
+  assert.equal(memoryLimit(4000, 4, null, false), '800m')
+  assert.equal(memoryLimit(4000, 0, null, false), '3200m')
+  assert.equal(memoryLimit(961, 10, null, false), '256m')
+  assert.equal(memoryLimit(4000, 2, '1G', true), '1g')
+  assert.throws(() => memoryLimit(4000, 1, '1.5gb', false), /is not a size/)
+})
+
+// The defect: one app on a 2 GB server was allowed 1600m, and for the hour after a
+// deployment two of its containers were each allowed that.
+test('where the replaced deployment is kept running, each app counts as two containers', () => {
+  assert.equal(memoryLimit(2000, 1, null, true), '800m')
+  assert.equal(memoryLimit(4000, 2, null, true), '800m')
+  // The live and the kept container together never pass the 80% the server gives away.
+  for (const [mem, apps] of [[2000, 1], [4000, 3], [8000, 5]]) {
+    assert.ok(Number.parseInt(memoryLimit(mem, apps, null, true), 10) * apps * 2 <= mem * 0.8)
+  }
 })
 
 const run = (overrides = {}) =>
-  runArguments({ name: 'shop', releaseId: 'r20260915-100000-abcdef', imageTag: 'dpl-1a2b-3c4d', memory: '800m', healthPath: '/about', dockerMajor: 27, workdir: '/src', ...overrides })
+  runArguments({ name: 'shop', releaseId: 'r20260915-100000-abcdef', imageTag: 'dpl-1a2b-3c4d', memory: '800m', healthPath: '/about', dockerMajor: 27, workdir: '/src', writable: [], ...overrides })
 
 // The one property every other safety claim leans on: nothing reaches a
 // container except through Caddy.
@@ -223,4 +237,20 @@ test('only a literal public IPv4 address gets a certificate of its own', () => {
     assert.equal(publicIpv4(host), null, host)
   }
   assert.equal(publicIpv4('172.32.0.1'), '172.32.0.1', 'just outside 172.16.0.0/12 is public')
+})
+
+// The container's root is read-only, so an app that keeps a database file or
+// uploads beside its code needs a place it has named, and that place has to
+// outlive the container.
+test('each writable folder is a volume of its own, per app, mounted where the app expects it', () => {
+  const writable = writableVolumes('shop', ['data', 'public/uploads'])
+  assert.deepEqual(writable, [
+    { folder: 'data', volume: 'nextship-shop-data-data' },
+    { folder: 'public/uploads', volume: 'nextship-shop-data-public__uploads' },
+  ])
+  const args = run({ writable })
+  assert.deepEqual(value(args, '--volume').slice(2), ['nextship-shop-data-data:/src/data', 'nextship-shop-data-public__uploads:/src/public/uploads'])
+  assert.ok(args.includes('--read-only'), 'the rest stays read-only')
+  // Named by the app, not the image: a new build mounts the same data.
+  assert.deepEqual(value(run({ writable, imageTag: 'dpl-9z9z-8y8y' }), '--volume').slice(2), value(args, '--volume').slice(2))
 })

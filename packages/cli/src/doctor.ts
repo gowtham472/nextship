@@ -323,6 +323,23 @@ function runtimeFindings(project: ProjectInfo, target: TargetId): Finding[] {
  * What changes when the app runs on one server instead of a platform. Warned on
  * every vm project, because nothing in the source can show these are handled.
  */
+/**
+ * What in a source file suggests the app writes to its own disk: the file system
+ * calls that create or change a file, and the SQLite drivers, which keep their
+ * database in one. A sign, not proof: the path may be /tmp, which is writable.
+ */
+const LOCAL_WRITE_SIGNS = [
+  'writeFile(',
+  'writeFileSync(',
+  'appendFile(',
+  'appendFileSync(',
+  'createWriteStream(',
+  "'better-sqlite3'",
+  '"better-sqlite3"',
+  "'node:sqlite'",
+  '"node:sqlite"',
+]
+
 async function serverFindings(root: string): Promise<Finding[]> {
   const findings: Finding[] = [
     {
@@ -333,6 +350,27 @@ async function serverFindings(root: string): Promise<Finding[]> {
       action: `See ${docsUrl('vm.md', '7-backups-and-recovery')} for what to back up and how to recover on a new server.`,
     },
   ]
+
+  // Read as plain JSON, not through readConfig: doctor still reports what it can
+  // when nextship.json is damaged, and says so separately.
+  const declared = (await readJson(path.join(root, 'nextship.json')))?.writable
+  const writes = new Set<string>()
+  if (!Array.isArray(declared) || declared.length === 0) {
+    for await (const file of sourceFiles(root)) {
+      const contents = await readFile(file, 'utf8').catch(() => '')
+      for (const sign of LOCAL_WRITE_SIGNS) if (contents.includes(sign)) writes.add(sign.replace(/[('"]/g, ''))
+    }
+  }
+  if (writes.size > 0) {
+    findings.push({
+      level: 'warning',
+      title: `The source may write files beside the app: ${[...writes].sort().join(', ')}`,
+      consequence:
+        "On a server the app's container is read-only apart from .next and /tmp. A write anywhere else fails with EROFS at the moment it happens, not at deploy: the app deploys and passes its health check first.",
+      action:
+        'If the app writes under its own directory, list the folders in nextship.json, for example "writable": ["data"]. Each becomes a volume the app can write to, kept across deployments. Writes to /tmp, object storage or a database need nothing.',
+    })
+  }
 
   for await (const file of sourceFiles(root)) {
     const contents = await readFile(file, 'utf8').catch(() => '')

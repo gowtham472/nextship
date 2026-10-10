@@ -58,10 +58,7 @@ reports it healthy, then the previous container stops. A deployment that fails l
 previous one serving; one that succeeds drops no request. Measured on a DigitalOcean
 Droplet: 579 of 579 requests and 51 of 51 streamed responses succeeded across a deployment.
 
-The first app deployed answers `http://<server>`, and when the server was added by a public
-IPv4 address, `https://<address>` too, with a six-day certificate Let's Encrypt issues for the
-address itself and Caddy renews. That was verified against Let's Encrypt's test server, Pebble,
-and not yet on a real server. Attach a domain and Caddy obtains its
+The first app deployed answers `http://<server>`. Attach a domain and Caddy obtains its
 certificate:
 
 ```bash
@@ -108,8 +105,9 @@ pull request is in the
 
 Each app's container is read-only apart from `.next` and a 64 MB `/tmp` that cannot run a
 binary, with no Linux capabilities and a limit of 512 processes. Code an attacker runs through
-a flaw in your app can neither rewrite it nor leave a program behind. An app that saves
-uploads to a local folder fails with `EROFS`, so keep them in object storage or a database.
+a flaw in your app can neither rewrite it nor leave a program behind. An app that keeps a
+SQLite file or uploads beside its code lists the folders in `nextship.json`, as
+`"writable": ["data"]`: each becomes a volume it can write to, kept across deployments.
 
 The full guide, including GitHub Actions and recovery, is
 [docs/vm.md](https://github.com/gowtham472/nextship/blob/main/docs/vm.md).

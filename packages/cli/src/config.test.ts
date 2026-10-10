@@ -14,7 +14,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { readConfig, writeConfig, type ServerRecord } from './config.js'
+import { readConfig, writableProblem, writeConfig, type ServerRecord } from './config.js'
 import { NextshipError } from './errors.js'
 
 async function withConfig(contents: string): Promise<string> {
@@ -155,4 +155,34 @@ test('a digitalocean config is written as version 1, a vm config as version 2', 
 
   await writeConfig(root, { version: 1, target: 'vm', name: 'demo', server: server as ServerRecord })
   assert.equal(JSON.parse(await readFile(path.join(root, 'nextship.json'), 'utf8')).version, 2)
+})
+
+const vmWith = (writable: unknown): string =>
+  JSON.stringify({
+    version: 2,
+    target: 'vm',
+    name: 'shop',
+    server: { host: '46.101.1.2', port: 22, user: 'nextship', hostKey: 'ssh-ed25519 AAAA', arch: 'amd64' },
+    writable,
+  })
+
+// A writable folder becomes a mount inside the app's container, so a path that
+// climbs out of the app, or lands on what Next.js or the image owns, is refused.
+test('a writable folder is a plain relative folder, never one that escapes the app or shadows what it runs from', () => {
+  for (const good of ['data', 'uploads', 'public/uploads', 'var/db.d']) assert.equal(writableProblem(good), null, good)
+  for (const bad of ['', '/data', '../data', 'data/..', '.next', '.next/cache', 'data/', 'a//b', 'a b', 'node_modules/x', 'a__b', 7, null]) {
+    assert.notEqual(writableProblem(bad), null, String(bad))
+  }
+})
+
+test('writable folders are read from nextship.json, and a list that would hide or repeat one is refused', async () => {
+  assert.deepEqual((await readConfig(await withConfig(vmWith(['data', 'public/uploads']))))?.writable, ['data', 'public/uploads'])
+  await assert.rejects(readConfig(await withConfig(vmWith(['data', 'data']))), /same writable folder twice/)
+  await assert.rejects(readConfig(await withConfig(vmWith(['data', 'data/cache']))), /inside another/)
+  await assert.rejects(readConfig(await withConfig(vmWith(['../etc']))), /writable folder "\.\.\/etc"/)
+  await assert.rejects(readConfig(await withConfig(vmWith('data'))), /not a list of folders/)
+  await assert.rejects(
+    readConfig(await withConfig(JSON.stringify({ version: 1, target: 'digitalocean', name: 'shop', region: 'blr', registry: 'r', writable: ['data'] }))),
+    (error: unknown) => error instanceof NextshipError && /only the vm target uses/.test(error.message)
+  )
 })

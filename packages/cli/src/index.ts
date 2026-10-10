@@ -89,7 +89,8 @@ Deploy options, vm target
   --build <mode>      remote builds on the server (default), local builds here and
                       streams the image over SSH. Recorded in nextship.json
   --memory <size>     Container memory limit, such as 512m (default: an even share
-                      of 80% of the server's RAM across its apps)
+                      of 80% of the server's RAM across two containers per app,
+                      the live one and the one kept an hour after a deployment)
 
 Rollback options
   --yes               Execute the plan. Without it, rollback only prints the plan

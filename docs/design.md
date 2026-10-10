@@ -592,7 +592,7 @@ Everything nextship keeps on the server lives in a few places:
 | `/etc/nextship/apps/<name>/deployments.json` | Deployment history, newest first: `{ id, imageTag, createdAt, cause, served, live }` |
 | `/etc/nextship/apps/<name>/env`, `secrets` | Runtime variables and the Server Actions key, mode 0600, written from SSH stdin |
 | `/etc/nextship/apps/<name>/lock` | A directory created with `mkdir`, so two deployments cannot interleave, holding an owner file |
-| `/etc/nextship/default-app` | The app that answers `http://<server>`: the first one to deploy. On a server added by a public IPv4 address it also answers `https://<address>` (Release sequence, below) |
+| `/etc/nextship/default-app` | The app that answers `http://<server>`: the first one to deploy. On a server added by a public IPv4 address it also answers its site asks for a certificate for the address, not yet run against Let's Encrypt (Release sequence, below) |
 | Volumes `nextship-<name>-build-<image>`, `nextship-<name>-cache` | What Next.js writes at runtime, kept across restarts (below) |
 | `/etc/nextship/caddy/sites/<name>.caddy` | The Caddy site for the app |
 | Docker network `nextship` | Caddy and every app container; no app publishes a port |
@@ -728,29 +728,70 @@ being replaced. `deployments.json` records the kept one with `keptUntil`, and be
 `server add` installs, since the server has no JSON parser. `images prune` and the prune
 after a deployment keep the kept deployment's image, which Docker would refuse to remove.
 
-**HTTPS on the server's address.** When the server was added by a literal public IPv4
-address (`publicIpv4`: not private, shared, loopback, link-local, documentation or
-multicast), the default app's site also has a block for `https://<address>` whose ACME
-issuer asks for Let's Encrypt's `shortlived` profile, the only one under which Let's Encrypt
-issues IP address certificates since they became generally available on 2026-01-15. Caddy
-answers the HTTP-01 challenge before any site route, so the catch-all HTTP site does not
-intercept it. IPv4 only: IPv6 issuance was fixed in Caddy after 2.10.2, the release
-`caddy:2.10` installs (caddyserver/caddy#7399). `address` reports `https://` only once a TLS
-connection to the address verifies. The certificate check sends no server name for an
-address, which TLS forbids. Verified against Pebble 2026, Let's Encrypt's test server, with
-a `shortlived` profile of six days: on a private network, Caddy 2.10.2 running the site file
-`renderSite` produced for `10.77.0.10` obtained a certificate through HTTP-01 on port 80,
-naming `IP Address:10.77.0.10` and valid from 2026-09-30 08:05 to 2026-10-06 08:05, and a
-client trusting only Pebble's root fetched the app over `https://10.77.0.10` while one
-trusting nothing was refused. Not yet run against Let's Encrypt itself, which needs a server
-on a public address.
+Three things keep the kept container from doing harm, each found in review of the first
+version. **A server with no retire timer keeps nothing.** The timer came with setup
+version 3, so a deployment reads the server's version, and on an older one stops the
+replaced container as 1.1.x did, writes no `@previous` route, and says to run `server add`
+again; kept there, the container would have run with its memory limit until the next
+deployment. **The timer cannot stop the live container.** `previous` is emptied before
+Caddy is pointed anywhere and written again, with the history, in one remote command after
+it, each to a temporary file moved into place; and `retire.sh` stops nothing the app's
+Caddy site names on its `# live <container>` line, or when that line is missing. Before
+this, a rollback to the kept container, or a CLI that died between the switch and the
+second write, left `previous` naming the container Caddy served, and Docker's restart
+policy does not bring back a container that was stopped. **The memory limit counts both
+containers.** Where the server keeps a replaced deployment, each app counts twice in the
+share of 80% of RAM, so one app on a 2 GB server is limited to 800m in each of its two
+containers, not 1600m in each.
+
+**HTTPS on the server's address (Built, not yet run against Let's Encrypt).** When the
+server was added by a literal public IPv4 address (`publicIpv4`: not private, shared,
+loopback, link-local, documentation or multicast), the default app's site also has a block
+for the address whose ACME issuer asks for Let's Encrypt's `shortlived` profile, the only one
+under which Let's Encrypt issues IP address certificates since they became generally
+available on 2026-01-15. The block names both `http://<address>` and `https://<address>`.
+Named for HTTPS alone, Caddy's automatic HTTPS redirected plain HTTP for that host from the
+moment it started, and that host-specific redirect won over the catch-all `http://:80`
+site: measured with a CA that could not be reached, `http://<address>` answered 308 to an
+address with no certificate, which is the one address a first deployment prints. Caddy
+answers the HTTP-01 challenge before any site route. IPv4 only: IPv6 issuance was fixed in
+Caddy after 2.10.2, the release `caddy:2.10` installs (caddyserver/caddy#7399). `address`
+reports `https://` only once a TLS connection to the address verifies, and the certificate
+check sends no server name for an address, which TLS forbids.
+
+Verified against Pebble, Let's Encrypt's test server, with a `shortlived` profile of six
+days, on a private network with Caddy 2.10.2 running the site file `renderSite` produced for
+`10.77.0.10`. With Pebble down, Caddy logged the failed issuance and `http://10.77.0.10`
+answered 200 from the app with no redirect. With Pebble then started, Caddy's retry obtained
+a certificate within 60 s through HTTP-01 on port 80, naming `IP Address:10.77.0.10` and
+valid from 2026-10-10 18:30 to 2026-10-16 18:30; HTTP still answered 200, and a client
+trusting only Pebble's root fetched the app over `https://10.77.0.10`. Pebble issues to
+anything that answers, so this does not show Let's Encrypt's own policy or rate limits: the
+README and the site say nothing of this until it has run on a server with a public address.
+
+**Writable folders.** A read-only root leaves an app that keeps a SQLite file or uploads
+beside its code nowhere to write, and nothing at deploy time can see that it will fail. So
+`nextship.json` may list `writable` folders, relative to the app's directory, refused when
+they start with a dot (which covers `..` and `.next`), sit under `node_modules`, repeat, or
+nest. Each is a named volume per app, `nextship-<app>-data-<folder>` with `/` as `__`,
+labelled as the app's so `destroy` removes it, and mounted into every container of the
+app, so what is written there outlives a deployment. Docker creates a volume's directory
+owned by root and fills it from the image only when the image has that folder, so before
+the app starts each volume is handed to the image's `app` user by `chown` in a container of
+the same image, run as root with no network. For a folder the image does not have, Docker
+makes the mount point in the container's own layer when it creates the container, so
+`docker diff` lists that directory and its parent, and nothing else.
 
 **Previews.** `--preview <name>` (`preview.ts`) scopes a command to the app
 `<app>-<name>` on the project's server. Its `app.json` records `previewOf`, the id of the
 app it previews, and `ownedApp` accepts a preview only when that id is the one in
 `nextship.json`, so a preview is found again by a CI run holding only the committed file and
 is never adopted by name alone. `deploy --preview` creates the record and never writes
-`nextship.json`; `destroy --preview` leaves it alone. A preview's Caddy site never claims the
+`nextship.json`; `destroy --preview` leaves it alone. Destroying an app destroys its
+previews first, images included, and the plan names each: with the app's id gone from
+`nextship.json`, nothing could match a preview's `previewOf` again, and it would keep its
+containers, volumes and domains. A preview name too long for the app is refused with the
+length it may be, before the app name check that would have said to rename the app. A preview's Caddy site never claims the
 server's address and sends `X-Robots-Tag: noindex, nofollow` on every name. Its env file
 starts empty.
 
@@ -765,7 +806,9 @@ and the app's address unchanged, sent `X-Robots-Tag` on its domain's site, and w
 leaving the app serving. Every earlier check passed unchanged beside them.
 
 Rollback to the kept deployment is a Caddy switch to its container, which is still running,
-and the deployment being left is kept in its place. The container keeps the env it started
+and the deployment being left is kept in its place. The history and the container's health
+are read only once the app's lock is held: read before it, a deployment that went live in
+between had already stopped that container, and the rollback pointed Caddy at it. The container keeps the env it started
 with. A rollback to anything older runs steps 3 to 6 with that deployment's image, and **it
 uses the current env file**, which differs from App Platform, where a rollback restores the
 old spec. `env push`,
@@ -828,9 +871,13 @@ systemd timer, keeps each app's runtime writes under 10% of the disk Docker stor
 on, and never under 1 GiB. It counts everything in the app's cache volume, and in each build
 volume only the files modified after that volume was created, so a file the build produced is
 never deleted and a page with no revalidate time keeps what it was prerendered into. Over the
-limit, it deletes by last access until 80% of the limit remains, then any directory left
-empty, and logs the count under `nextship-cache-guard`. Access times on ext4's default
-`relatime` are updated at most daily, which is fine-grained enough for a cache.
+limit, it deletes by last use until 80% of the limit remains, then any directory left
+empty, and logs the count under `nextship-cache-guard`. Last use is the later of a file's
+access and write times. Access times alone would not do: ext4's default `relatime` updates
+one at most daily, and under `noatime` never, where every file ties and the busiest would
+go with the idle. With the write time taken too, a volume that keeps no access times is
+evicted oldest written first. The guard reads only the cache and build volumes, by name,
+and never a writable folder's volume.
 
 Verified on a stand-in whose Docker storage was a 12 GB ext4 disk, limit 1199 MiB, with the
 streaming fixture deployed: the files the guard counted were exactly the optimized image and
@@ -1050,7 +1097,8 @@ Not verified yet, and the live checklist in `docs/roadmap.md`:
 | **The owner owns the OS.** | `server add` enables security updates, but kernel reboots, disk and provider incidents are the owner's to watch |
 | **A rollback older than an hour uses the current env file.** | Rolling back code does not roll back a variable changed since. A rollback to the deployment replaced within the hour keeps its own |
 | **The replaced deployment runs for an hour.** | Its container holds memory beside the live one for that hour, within the same memory limit per container. A tab open longer than that loads the new build on its next navigation |
-| **The app's files are read-only.** | An app that writes outside `.next`, such as uploads to a local folder, fails with `EROFS`, and `/tmp` holds 64 MB and cannot run a binary, which breaks packages that unpack an executable there, such as a headless Chromium. Keep uploads in object storage or a database |
+| **The app's files are read-only.** | An app that writes outside `.next` and the folders it lists as `writable` fails with `EROFS` on that write, after deploying and passing its health check; `doctor` warns about source that looks like it does. `/tmp` holds 64 MB and cannot run a binary, which breaks packages that unpack an executable there, such as a headless Chromium |
+| **Writable folders live on one server.** | They are not backed up, `server move` does not copy them, and `destroy` deletes them, each said before it acts. For the hour a replaced deployment is kept, two containers have the same folder mounted |
 
 ## 10. Deploy lifecycle
 

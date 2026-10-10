@@ -32,7 +32,7 @@ import { fingerprint, parseKeyLine, scanHostKey, type HostKey } from './targets/
 import { Ssh, assertHost, assertUser, shellQuote } from './targets/vm/ssh.js'
 import { client } from './owned-app.js'
 import { CONTAINER_PORT } from './image/dockerfile.js'
-import { MOVE_STEPS, rebootProgress, statusWarnings, type VmTarget } from './targets/vm/vm-target.js'
+import { MOVE_STEPS, rebootProgress, statusWarnings, writableVolumes, type VmTarget } from './targets/vm/vm-target.js'
 import { detail, ok, step, warn } from './util/log.js'
 
 /** The user every later command connects as. Created by the `user` step. */
@@ -382,6 +382,13 @@ export async function moveServer(project: ProjectInfo, options: AddServerOptions
   detail(`to         ${options.address}`)
   detail(`copies     ${variables} env variable(s), the Server Actions key, ${exported.record.domains.length} domain(s), and image ${exported.live.imageTag}`)
   detail('not copied deployment history and older images, so rollback starts fresh there; cached pages and optimized images start cold')
+  if (config.writable && config.writable.length > 0) {
+    warn(
+      `What the app wrote in ${config.writable.join(', ')} is not copied. It stays in the volumes ` +
+        `${writableVolumes(config.name, config.writable).map((entry) => entry.volume).join(', ')} on ${config.server.host}, and the app starts with empty folders on the new server. ` +
+        'Copy that data across yourself before sending visitors to the new server.'
+    )
+  }
   for (const [index, entry] of MOVE_STEPS.entries()) detail(`step ${index + 1}     ${entry}`)
   detail('DNS        untouched; the records to change are printed once the app serves on the new server')
 

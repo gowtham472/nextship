@@ -303,3 +303,26 @@ test('doctor prints the translated routes as a next.config snippet, and names wh
     await rm(root, { recursive: true, force: true })
   }
 })
+
+// The defect: an app that writes beside its code deploys, passes its health check
+// on a prerendered page, and fails with EROFS on its first write, with nothing at
+// deploy time to say so.
+test('on a server, source that looks like it writes local files is told about writable folders, unless it declared some', async () => {
+  const files = {
+    'package.json': JSON.stringify({ name: 'demo', dependencies: { next: '16.3.4' } }),
+    'app/api/upload/route.ts': "import { writeFile } from 'node:fs/promises'\nexport async function POST() { await writeFile('uploads/a', 'x') }",
+    'lib/db.ts': "import Database from 'better-sqlite3'\nexport const db = new Database('data/app.db')",
+  }
+  const root = await fixture(files)
+  const declared = await fixture({ ...files, 'nextship.json': JSON.stringify({ version: 2, target: 'vm', name: 'demo', writable: ['data', 'uploads'] }) })
+  try {
+    const finding = titled(await diagnose(projectFor(root), 'vm'), 'may write files')
+    assert.match(finding?.title ?? '', /better-sqlite3, writeFile/)
+    assert.match(finding?.action ?? '', /"writable": \["data"\]/)
+    assert.equal(titled(await diagnose(projectFor(root), 'digitalocean'), 'may write files'), undefined, 'App Platform containers are writable')
+    assert.equal(titled(await diagnose(projectFor(declared), 'vm'), 'may write files'), undefined, 'declared folders answer it')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+    await rm(declared, { recursive: true, force: true })
+  }
+})

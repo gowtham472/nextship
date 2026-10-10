@@ -19,6 +19,7 @@ test('the default app with no domain answers plain HTTP on port 80, streaming un
     renderSite({ ...base, isDefault: true }),
     [
       '# Written by nextship for demo. Regenerated on every deployment; edits are overwritten.',
+      '# live demo-r20260915-100000-abcdef',
       'http://:80 {',
       '  reverse_proxy demo-r20260915-100000-abcdef:3000 {',
       '    flush_interval -1',
@@ -104,7 +105,24 @@ test('a preview tells crawlers not to index it, on every name it answers', () =>
 test('a default app on a public IPv4 address also answers HTTPS on it, with a short-lived certificate', () => {
   const site = renderSite({ ...base, isDefault: true, ipCertificate: '46.101.1.2' })
   assert.match(site, /^http:\/\/:80 \{/m, 'plain HTTP keeps working')
-  assert.match(site, /^https:\/\/46\.101\.1\.2 \{\n  tls \{\n    issuer acme \{\n      profile shortlived\n    \}\n  \}\n  reverse_proxy demo-r20260915-100000-abcdef:3000 \{/m)
+  assert.match(site, /^http:\/\/46\.101\.1\.2, https:\/\/46\.101\.1\.2 \{\n  tls \{\n    issuer acme \{\n      profile shortlived\n    \}\n  \}\n  reverse_proxy demo-r20260915-100000-abcdef:3000 \{/m)
   assert.doesNotMatch(renderSite({ ...base, isDefault: false, ipCertificate: '46.101.1.2' }), /46\.101/, 'only the default app answers on the address')
   assert.throws(() => renderSite({ ...base, isDefault: true, ipCertificate: '46.101.1.2 {' }), /not an IPv4 address/)
+})
+
+// The defect: with only `https://<address>`, Caddy redirected plain HTTP on the
+// address to HTTPS before a certificate existed, so the one address a first
+// deployment printed led to a certificate error for as long as issuance took, or
+// for good where Let's Encrypt could not reach the server.
+test('the address is named for plain HTTP too, so Caddy serves it rather than redirecting to a certificate that may not exist', () => {
+  const site = renderSite({ ...base, isDefault: true, ipCertificate: '46.101.1.2' })
+  assert.doesNotMatch(site, /^https:\/\/46\.101\.1\.2 \{/m)
+  assert.match(site, /^http:\/\/46\.101\.1\.2, https:\/\/46\.101\.1\.2 \{/m)
+})
+
+// retire.sh refuses to stop the container this line names, whatever `previous` says.
+test('every site names its live container on a line of its own, with or without an address', () => {
+  assert.match(renderSite(base), /^# live demo-r20260915-100000-abcdef$/m)
+  const kept = renderSite({ ...base, isDefault: true, previous: { container: 'demo-r20260915-090000-123456', deploymentId: 'dpl-aaa-111' } })
+  assert.deepEqual(kept.match(/^# live .*$/gm), ['# live demo-r20260915-100000-abcdef'], 'only the live one, never the kept one')
 })

@@ -115,8 +115,11 @@ export function recordStarted(
  * both would answer to one deployment id, and routing by it would send every tab,
  * new ones included, to the container being replaced. A deployment already kept
  * stays kept until its time runs out, unless it is the build going live.
+ *
+ * `canKeep` is false on a server with no retire timer, which keeps nothing: a kept
+ * container there would never be stopped.
  */
-export function recordLive(deployments: VmDeployment[], id: string, now: Date): VmDeployment[] {
+export function recordLive(deployments: VmDeployment[], id: string, now: Date, canKeep: boolean): VmDeployment[] {
   const next = deployments.find((entry) => entry.id === id)
   if (!next) {
     throw new NextshipError(`Deployment ${id} is not in the history.`, 'This is a nextship defect. Please report it.')
@@ -124,7 +127,9 @@ export function recordLive(deployments: VmDeployment[], id: string, now: Date): 
   const replaced = deployments.find((entry) => entry.live && entry.id !== id)
   const existing = previousServing(deployments, now)
   let kept: { id: string; until: string } | null = null
-  if (replaced && replaced.imageTag !== next.imageTag) {
+  if (!canKeep) {
+    kept = null
+  } else if (replaced && replaced.imageTag !== next.imageTag) {
     kept = { id: replaced.id, until: new Date(now.getTime() + PREVIOUS_KEPT_MS).toISOString() }
   } else if (existing && existing.id !== id && existing.imageTag !== next.imageTag && existing.keptUntil) {
     kept = { id: existing.id, until: existing.keptUntil }

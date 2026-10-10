@@ -354,7 +354,7 @@ deployed, and a page that did not compile failed once, with no retry.
 | Option | Default | Meaning |
 |---|---|---|
 | `--build <mode>` | `remote` | `remote` builds on the server's own Docker, reached over SSH through a private socket, or a named pipe on Windows, so nothing but the build context leaves your machine, no port is opened, and the image is built natively for the server. `local` builds here for the server's architecture and streams the image with `docker save \| ssh docker load`. Recorded in `nextship.json`. A server under 2 GB of RAM is refused for remote builds |
-| `--memory <size>` | an even share of 80% of RAM across the server's apps | The container's memory limit, such as `512m` |
+| `--memory <size>` | an even share of 80% of RAM across the containers the server's apps can run at once: two per app, the live one and the one kept for an hour after a deployment | The container's memory limit, such as `512m`. One app on a 2 GB server gets 800m by default |
 
 ```
 > Plan
@@ -377,15 +377,6 @@ one serving, and a deployment that succeeds drops no request. Its last log lines
 printed when it fails. The first app deployed on a server answers `http://<server>`;
 later apps answer nothing until `nextship domain add`.
 
-**HTTPS before you have a domain.** When you added the server by a public IPv4 address, the
-first app also answers `https://<address>`, with a certificate Let's Encrypt issues for the
-address itself. Let's Encrypt certifies an address only for about six days at a time, and
-Caddy renews it on its own. `deploy` prints the `https://` address once it really answers
-with a valid certificate, and the `http://` one until then. A server added by hostname, by an
-IPv6 address, or by a private address gets no certificate of its own: attach a domain
-instead. This has been verified end to end against Pebble, Let's Encrypt's own test
-server, and not yet against Let's Encrypt on a real server.
-
 The Server Actions key is kept on the server rather than in `.nextship/secrets.local.json`,
 so every machine that deploys, including CI, builds with the same key. A key already in
 your local file is copied to the server on the first deploy. If the server and your local
@@ -397,13 +388,30 @@ which Next.js does on each client navigation, Server Action and script an open t
 Without this, such a tab asks the new build for files and Server Actions it does not have.
 A page load names no build and gets the new one. After the hour, the old container stops
 and a tab still open from before loads the new build on its next navigation. The cost is a
-second container's memory for that hour. A change that starts the same build again, such
-as `env push`, keeps nothing extra.
+second container's memory for that hour, which the default memory limit already counts. A
+change that starts the same build again, such as `env push`, keeps nothing extra. A server
+set up by nextship 1.1.x has no timer to stop the kept container, so a deployment to one
+keeps nothing and says so: run `nextship server add` again with `--yes` to update it.
 
 `rollback` on a server to the deployment replaced within the last hour is instant: that
 container is still running, so Caddy is pointed back at it and nothing is built or
 started, and it keeps the env it ran with. A rollback further back starts that
 deployment's image again with the current env file, and the plan says which is which.
+
+**Folders your app writes to.** Everything in an app's container is read-only apart from
+`.next` and `/tmp`. An app that keeps a SQLite file or uploads beside its code lists the
+folders in `nextship.json`:
+
+```json
+{ "writable": ["data", "public/uploads"] }
+```
+
+Each is a volume the app can write to, and what it writes there outlives a deployment, which
+it never did inside a container. A folder is relative to the app's directory, and
+`.next`, `node_modules` and anything starting with a dot are refused. `nextship doctor`
+warns when the source looks like it writes files and no folder is declared. `destroy`
+deletes that data with the app, and `server move` does not copy it: both say so before
+they act.
 
 **Previews.** `nextship deploy --preview pr-42` deploys the current source as a second app on
 the same server, `<app>-pr-42`, with its own env file and domains, and never writes
@@ -662,6 +670,10 @@ Removes the app this project created, and nothing else.
 |---|---|---|
 | `--yes` | off | Execute the plan. Without it, `destroy` only prints the plan |
 | `--images` | off | Also remove this project's images, then start garbage collection |
+
+On a server, an app's previews are destroyed with it, images included, and the plan names
+each one. A preview is found through the app it previews, so one left behind could never be
+reached again.
 
 **The app name is required**, and this is the only command that asks for one. Every
 other command acts on whatever directory you are in, which is fine when nothing can be
@@ -1037,10 +1049,16 @@ deploy:
 - **On a server, only the first app deployed answers `http://<server>`.** Every other app
   answers only on the domains attached to it.
 - **On a server, your app cannot write its own files.** The container is read-only apart
-  from `.next` and a 64 MB `/tmp` that cannot run a binary, so an attacker who gets code
-  running through a flaw in your app can neither rewrite it nor leave a program behind. An
-  app that saves uploads to a local folder fails with `EROFS`, and a package that unpacks
-  an executable into `/tmp`, such as a headless Chromium, cannot run it.
+  from `.next`, a 64 MB `/tmp` that cannot run a binary, and the folders you list as
+  `writable` in `nextship.json`, so an attacker who gets code running through a flaw in
+  your app can neither rewrite it nor leave a program behind. An app that saves uploads to
+  a folder it has not listed deploys, passes its health check, and fails with `EROFS` on
+  its first write; `nextship doctor` warns about source that looks like it does. A package
+  that unpacks an executable into `/tmp`, such as a headless Chromium, cannot run it.
+- **On a server, writable folders live on that one server.** They are not backed up, and
+  `server move` does not copy them. For the hour after a deployment the previous
+  deployment's container has the same folders mounted, so a SQLite file there can have
+  two processes writing to it.
 - **A server's env file cannot hold a value with a line break.** Docker reads it one line
   per variable, so `env push` refuses such a value rather than truncating it. Encode it,
   for example as base64.

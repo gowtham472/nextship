@@ -139,11 +139,11 @@ const APP_RECORD = JSON.stringify({ id: 'app-uuid', name: 'acme-web', createdAt:
  */
 function server(
   shell: FakeShell,
-  options: { deployments?: unknown[]; defaultApp?: string } = {}
+  options: { deployments?: unknown[]; defaultApp?: string; setupVersion?: number } = {}
 ): FakeShell {
-  const { deployments = [], defaultApp = '' } = options
+  const { deployments = [], defaultApp = '', setupVersion = 3 } = options
   return shell
-    .answer(/MemTotal/, `4096\n20480\n27.0.0\n${defaultApp}\nno\n`)
+    .answer(/MemTotal/, `4096\n20480\n27.0.0\n${defaultApp}\nno\n${setupVersion}\n`)
     .answer(/cat .*app\.json/, APP_RECORD)
     .answer(/cat .*deployments\.json/, JSON.stringify(deployments))
     .answer(/cat .*\/env/, '')
@@ -437,4 +437,89 @@ test('only a clock reading reaches the remote command', async () => {
   const shell = new FakeShell()
   await assert.rejects(new TestVmTarget(CONFIG, shell).buildSessionLost('1790229580; rm -rf /'), NextshipError)
   assert.equal(shell.commands.length, 0, 'nothing was sent')
+})
+
+// ------------------------------------------------- the kept deployment
+
+const LIVE_OLD = {
+  id: 'r20260101-000000-aaaaaa',
+  imageTag: 'old111',
+  cause: 'deploy',
+  createdAt: '2026-01-01T00:00:00Z',
+  healthPath: '/',
+  served: true,
+  live: true,
+  keptUntil: null,
+}
+const OLD_CONTAINER = `acme-web-${LIVE_OLD.id}`
+
+/** A server serving one deployment of another build, whose container is running. */
+const serving = (options: { setupVersion?: number } = {}): FakeShell =>
+  server(new FakeShell(), { deployments: [LIVE_OLD], ...options })
+    .answer(/State\.Status/, 'running healthy')
+    .answer(/docker ps .*status=running/, `${OLD_CONTAINER}\n`)
+
+// The defect: `previous` still named a container while Caddy was being pointed at
+// it, or was left naming it by a CLI that died before the write after the switch.
+// The retire timer then stopped the live app when the hour ran out, and Docker's
+// restart policy does not bring back a container that was stopped.
+test('the retire timer is given nothing to stop before Caddy is switched, and its container again only after', async () => {
+  const shell = serving()
+  await deploy(shell)
+
+  shell.before(/: > .*\/previous/, /caddy reload/, 'previous must be empty before the switch')
+  const reload = shell.at(/caddy reload/)
+  const written = shell.at(/previous\.next/, reload)
+  assert.notEqual(written, -1, 'previous is written again after the switch')
+  assert.match(shell.commands[written], new RegExp(`'${OLD_CONTAINER} \\d+\\n'`), 'it names the replaced container and when it stops')
+  // One command, so the history and previous cannot be left disagreeing.
+  assert.match(shell.commands[written], /deployments\.json\.next/)
+  assert.ok(!shell.commands.some((command) => new RegExp(`docker stop .*${OLD_CONTAINER}`).test(command)), 'the replaced build keeps running')
+})
+
+// The defect: a server set up by 1.1.x has no retire timer, so the replaced
+// container ran, with its whole memory limit, until the next deployment.
+test('a server set up before the retire timer keeps nothing, stops the replaced container, and says why', async () => {
+  const shell = serving({ setupVersion: 2 })
+  const { target, releaseId } = await start(shell)
+  const phases: string[] = []
+  await target.awaitRelease('app-uuid', releaseId, (phase) => phases.push(phase), true)
+
+  assert.ok(shell.deployments().every((entry) => !(entry as { keptUntil?: string | null }).keptUntil), 'nothing is recorded as kept')
+  assert.ok(shell.commands.some((command) => command.includes('docker stop -t 30') && command.includes(OLD_CONTAINER)), 'the replaced container is stopped')
+  assert.ok(phases.some((phase) => /nextship server add/.test(phase)), `the reason and the remedy are reported: ${phases.join(' | ')}`)
+  const site = shell.stdins[shell.at(/caddy validate/)] ?? ''
+  assert.doesNotMatch(site, /@previous/, 'no route to a container that is about to stop')
+})
+
+const KEPT_OLD = { ...LIVE_OLD, live: false, keptUntil: '2999-01-01T00:00:00.000Z' }
+const LIVE_NEW = { ...LIVE_OLD, id: 'r20260102-000000-bbbbbb', imageTag: 'new222', live: true }
+
+// The defect: the history and the container were read, then the lock taken, and
+// neither read again. A deployment that went live in between had stopped the
+// container, and the rollback pointed Caddy at it.
+test('an instant rollback reads the history and the container only once it holds the lock', async () => {
+  const shell = server(new FakeShell(), { deployments: [LIVE_NEW, KEPT_OLD] }).answer(/State\.Status/, 'running healthy')
+  await new TestVmTarget(CONFIG, shell).rollback('app-uuid', KEPT_OLD.id, () => {})
+
+  // rollback reads the history once to find its target. What decides the switch is
+  // read again once the lock is held.
+  const locked = shell.at(/mkdir .*\/lock/)
+  const reload = shell.at(/caddy reload/)
+  const reread = shell.at(/cat .*deployments\.json/, locked)
+  assert.ok(locked !== -1 && reread > locked && reread < reload, `the history is read again under the lock, before the switch\n${shell.commands.join('\n')}`)
+  shell.before(/mkdir .*\/lock/, /State\.Status/, 'the lock comes before the container is inspected')
+  shell.before(/: > .*\/previous/, /caddy reload/, 'previous is emptied before Caddy points at the kept container')
+  assert.equal(shell.at(/'docker' 'run'/), -1, 'no new container is started')
+  assert.equal(shell.deployments().find((entry) => entry.live)?.id, KEPT_OLD.id)
+})
+
+test('a kept container that is no longer healthy is not switched to: its image is started again instead', async () => {
+  const shell = server(new FakeShell(), { deployments: [LIVE_NEW, KEPT_OLD] })
+    .answer(/State\.Status/, 'running healthy')
+    .answer(new RegExp(`State\\.Status.*${KEPT_OLD.id}`), 'exited ')
+  await new TestVmTarget(CONFIG, shell).rollback('app-uuid', KEPT_OLD.id, () => {})
+
+  assert.notEqual(shell.at(/'docker' 'run'/), -1, `a new container of that image is started\n${shell.commands.join('\n')}`)
+  assert.notEqual(shell.deployments().find((entry) => entry.live)?.id, KEPT_OLD.id, 'the stopped container is not what goes live')
 })

@@ -29,6 +29,7 @@
  * Encrypt issues IP address certificates only with its `shortlived` profile, valid for
  * about six days, which Caddy renews on its own. Caddy answers the ACME challenge before
  * any site route, so the plain HTTP site in front of the app does not intercept it.
+ * Plain HTTP on the address keeps serving the app whether or not a certificate comes.
  * IPv4 only: IPv6 issuance was fixed after the Caddy release setup installs.
  *
  * Author: Ragul D
@@ -95,14 +96,26 @@ function upstreams(options: SiteOptions): string[] {
 
 export function renderSite(options: SiteOptions): string {
   assertAppName(options.name)
-  const lines = [`# Written by nextship for ${options.name}. Regenerated on every deployment; edits are overwritten.`]
+  const lines = [
+    `# Written by nextship for ${options.name}. Regenerated on every deployment; edits are overwritten.`,
+    // Read by retire.sh, which stops nothing this line names: the site file is what
+    // Caddy serves from, so it is the one record of the live container that cannot
+    // disagree with what is serving.
+    `# live ${options.container}`,
+  ]
 
   if (options.isDefault) {
     lines.push('http://:80 {', ...routes(options), '}')
     if (options.ipCertificate !== null) {
       if (!isIPv4(options.ipCertificate)) throw new NextshipError(`"${options.ipCertificate}" is not an IPv4 address.`, 'This is a nextship defect. Please report it.')
       lines.push(
-        `https://${options.ipCertificate} {`,
+        // Both schemes, named. With `https://` alone, Caddy redirects plain HTTP for
+        // this host to HTTPS from the moment it starts, before any certificate
+        // exists and for good if Let's Encrypt never issues one, and that
+        // host-specific redirect wins over the catch-all site above. Measured with a
+        // CA that could not be reached: `http://<address>` answered 308 to an address
+        // with no certificate. Naming the HTTP site makes Caddy serve it instead.
+        `http://${options.ipCertificate}, https://${options.ipCertificate} {`,
         '  tls {',
         '    issuer acme {',
         '      profile shortlived',
