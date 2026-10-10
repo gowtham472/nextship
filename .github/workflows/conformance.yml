@@ -11,6 +11,10 @@
 # the suites it targets in minutes rather than an hour. The summary job scores
 # either.
 #
+# The scheduled run is the whole suite against the newest canary, every night, and its
+# score is published to the `evidence` branch, which the site's evidence page reads. A
+# run started by hand is never published: it may be a subset, or an older ref.
+#
 # Contract: nextjs.org/docs/app/api-reference/adapters/testing-adapters
 # Author: Gowtham
 name: conformance
@@ -27,8 +31,9 @@ on:
         default: ''
         type: string
   schedule:
-    # Weekly, so a Next.js regression is found before a release rather than after.
-    - cron: '0 3 * * 1'
+    # Nightly, so a Next.js change that breaks self-hosting is found and shown the
+    # day it lands on canary, rather than when it reaches a release.
+    - cron: '0 3 * * *'
 
 jobs:
   build:
@@ -37,6 +42,7 @@ jobs:
     timeout-minutes: 45
     outputs:
       nextjs-sha: ${{ steps.ref.outputs.sha }}
+      nextjs-version: ${{ steps.ref.outputs.version }}
       groups: ${{ steps.groups.outputs.list }}
     steps:
       # The test matrix is computed here rather than from the input inside the
@@ -63,7 +69,9 @@ jobs:
           fetch-depth: 25
 
       - id: ref
-        run: echo "sha=$(git -C nextjs rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "sha=$(git -C nextjs rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./nextjs/packages/next/package.json').version")" >> "$GITHUB_OUTPUT"
 
       # Building Next.js from source is most of this job's time, and it depends on
       # nothing but the Next.js commit. Keyed on that commit, every run against the
@@ -217,3 +225,51 @@ jobs:
           name: summary
           path: summary.json
           retention-days: 90
+
+  publish:
+    name: Publish the nightly result
+    needs: [build, summary]
+    if: ${{ github.event_name == 'schedule' && needs.summary.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The one job that writes to the repository, and only to the evidence branch.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: conformance/publish-evidence.mjs
+          sparse-checkout-cone-mode: false
+          path: adapter
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      - uses: actions/download-artifact@v4
+        with: { name: summary }
+
+      # The branch holds nothing but the published files, so it is created empty the
+      # first time rather than branched from main.
+      - name: Check out the evidence branch
+        run: |
+          if git ls-remote --exit-code --heads "https://github.com/${GITHUB_REPOSITORY}.git" evidence > /dev/null; then
+            git clone --depth 1 --branch evidence "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" evidence
+          else
+            git init -q -b evidence evidence
+            git -C evidence remote add origin "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
+
+      - name: Write the result
+        env:
+          NEXTJS_VERSION: ${{ needs.build.outputs.nextjs-version }}
+          NEXTJS_SHA: ${{ needs.build.outputs.nextjs-sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node adapter/conformance/publish-evidence.mjs summary.json evidence
+
+      - name: Push it
+        working-directory: evidence
+        run: |
+          git add latest.json history.json
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -m "Nightly suite on Next.js ${{ needs.build.outputs.nextjs-version }}"
+          git push -q origin evidence

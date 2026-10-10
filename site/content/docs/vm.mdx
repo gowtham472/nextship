@@ -33,8 +33,9 @@ The first command changes nothing. It shows the server's host key fingerprint, w
 compare with the one your provider shows, and every setup step with what it would change.
 The second installs Docker if needed, creates a `nextship` user and proves a login as it,
 runs Caddy on ports 80 and 443, limits the journal, enables security updates and ufw,
-installs a watchdog for containers that stay unhealthy, and turns off SSH password logins
-last. From then on the host key is pinned in `nextship.json` and a server presenting any
+installs a watchdog for containers that stay unhealthy, a cache guard that keeps what each
+app writes at runtime under a limit and a timer that stops a replaced deployment after its
+hour, and turns off SSH password logins last. From then on the host key is pinned in `nextship.json` and a server presenting any
 other key is refused.
 
 `--no-firewall`, `--no-auto-updates`, `--no-swap` and `--no-ssh-hardening` opt out of those
@@ -71,7 +72,8 @@ nextship domain add app.example.com --yes
 | Cache after a restart | Starts cold | Regenerated pages and optimized images kept in volumes |
 | Logs of a replaced deployment | Gone | `nextship logs --deployment <id>` reads the journal |
 | CDN | In front, keeps static pages | None unless you add one |
-| Rollback | Restores the old spec, env included | Starts the old image with the current env file |
+| Rollback | Restores the old spec, env included | Within an hour, switches back to the replaced deployment, still running with its env. Older, starts the old image with the current env file |
+| A tab open across a deployment | Loads the new build on its next navigation | Keeps working for an hour: requests naming its build reach it |
 | Server Actions key | In a local file | On the server, shared by every machine that deploys |
 | Apps | One per App Platform app | Many per server, each with its own domains |
 | Failover | Managed | None: one server |
@@ -91,6 +93,21 @@ once it serves.
 Two things on the server exist nowhere else: `/etc/nextship/apps/<name>/env` and
 `/etc/nextship/apps/<name>/secrets`. Keep a copy of both. The `nextship` user is in the docker
 group, which is root-equivalent, so treat its keys as root's.
+
+A tab opened before a deployment keeps working after it: the deployment a new build replaces
+keeps running for an hour and gets every request that names its build. A rollback within that
+hour switches back to it at once.
+
+`nextship deploy --preview pr-42` deploys a preview: a second app on the same server with its
+own env file and domains, which asks crawlers not to index it. A workflow that deploys one per
+pull request is in the
+[server guide](https://github.com/gowtham472/nextship/blob/main/docs/vm.md#a-preview-per-pull-request).
+
+Each app's container is read-only apart from `.next` and a 64 MB `/tmp` that cannot run a
+binary, with no Linux capabilities and a limit of 512 processes. Code an attacker runs through
+a flaw in your app can neither rewrite it nor leave a program behind. An app that keeps a
+SQLite file or uploads beside its code lists the folders in `nextship.json`, as
+`"writable": ["data"]`: each becomes a volume it can write to, kept across deployments.
 
 The full guide, including GitHub Actions and recovery, is
 [docs/vm.md](https://github.com/gowtham472/nextship/blob/main/docs/vm.md).

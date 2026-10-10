@@ -91,8 +91,8 @@ in `node_modules` that nothing declares: that one fails the build, and is a bloc
 | Checked | Why it matters |
 |---|---|
 | Analytics and similar packages | They stop reporting and nothing errors |
-| Cron jobs in platform config | They will simply never run |
-| Routing rules in platform config | They stop applying |
+| Cron jobs in platform config | They will simply never run. `doctor` prints a crontab line for each that calls its route |
+| Routing rules in platform config | They stop applying. `doctor` prints those that carry over unchanged as a `next.config` snippet, and names the rest |
 | Platform URL and environment variables read in source | They become undefined |
 | Packages in `node_modules` that nothing declares | They exist on your machine and not in the image, so the build fails on an import that resolves locally |
 | A missing lockfile | Installs are no longer reproducible |

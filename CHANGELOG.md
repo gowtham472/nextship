@@ -4,6 +4,98 @@ All notable changes to this repository. Attribution rules: `AGENTS.md` §1.1.
 
 ## [Unreleased]
 
+### Added
+
+- **A server keeps what each app writes at runtime under a limit.** `server add` installs
+  a cache guard, run every ten minutes, that keeps each app's optimized images, fetch
+  cache and runtime-rendered pages under 10% of the disk, never under 1 GiB, deleting
+  the least recently used first, by the later of a file's last access and last write so
+  that a disk keeping no access times is evicted oldest first, and logging it under
+  `nextship-cache-guard`. Only what
+  Next.js wrote at runtime is ever deleted, never a file the build produced. A site
+  that moved off Vercel reported its ISR cache growing about 145 GB a day under
+  crawlers until the disk filled and the site went down; nothing in Next.js bounds it.
+  Setup version 3, so `server status` asks servers set up earlier to run `server add`
+  again. (Ragul D)
+- **A tab opened before a deployment keeps working after it, and a rollback within the
+  hour is instant.** On a server, the deployment a new build replaces keeps running for an
+  hour, and Caddy sends it every request that names its build, as Next.js does on each
+  client navigation, Server Action and script an open tab loads; a page load gets the new
+  build. Without it such a tab asks the new build for files and Server Actions it lacks,
+  the failure Next.js issue #99165 still reports. `rollback` to that deployment switches
+  Caddy back to its running container, 208 ms in the end-to-end test, keeping its own env,
+  and a timer stops the kept container when its hour is over. `env push` and domain changes
+  keep nothing extra. A server set up by 1.1.x has no such timer, so a deployment to one
+  keeps nothing and says to run `server add` again. The timer never stops the container
+  the Caddy site names as live, `previous` is emptied before every switch and written with
+  the history in one command, and an instant rollback reads what it decides on only once
+  it holds the app's lock: three ways the live app could have been stopped or Caddy
+  pointed at a stopped container, found in review before release. (Ragul D)
+- **Folders an app writes to.** `"writable": ["data"]` in `nextship.json` gives an app on a
+  server a volume per folder that it can write to and that outlives a deployment, which is
+  what a SQLite file or uploads beside the code need now that the rest of the container is
+  read-only. `doctor` warns when the source looks like it writes files and none is
+  declared, `destroy` says it deletes that data, and `server move` says it does not copy
+  it. (Ragul D)
+- **`doctor` hands over what `vercel.json` did.** A cron job becomes a crontab line that
+  calls its route with `CRON_SECRET` as a bearer token, as Vercel does. Redirects, rewrites
+  and headers that use only fields `next.config` accepts are printed as a `next.config`
+  snippet; any other, or a redirect that does not say whether it is permanent, is named
+  rather than guessed. The part of a migration that needs Vercel's API, domains and env var
+  names, is not built. (Ragul D)
+- **A certificate for the server's own address, built and not yet claimed.** On a server
+  added by a public IPv4 address, the first app's site also asks Let's Encrypt for its
+  six-day IP address certificate, and `deploy` reports the `https://` address only once it
+  verifies. Plain HTTP on the address keeps serving whether or not a certificate comes:
+  with only `https://` named, Caddy redirected HTTP there before any certificate existed,
+  found in review and measured with a CA that could not be reached. Verified against
+  Pebble, Let's Encrypt's test server, with issuance failing and then succeeding. The
+  README and the site do not describe it until it has run against Let's Encrypt on a real
+  server; `docs/roadmap.md` holds it until then. (Ragul D)
+- **Previews.** `nextship deploy --preview <name>` deploys the current source as a second
+  app on the same server, with its own env file and domains, never taking the server's
+  address and asking crawlers not to index it. The same flag scopes `rollback`, `logs`,
+  `env`, `domain`, `images` and `destroy`. A preview is found again from the app it
+  previews, recorded on the server, so a CI run holding only the committed `nextship.json`
+  can update or remove it; `docs/vm.md` §6 has a workflow for one per pull request, not yet
+  run in GitHub Actions. Destroying an app destroys its previews with it and names each in
+  the plan, since nothing could find them afterwards. (Ragul D)
+- **The compatibility suite runs every night against the newest Next.js canary, and the
+  evidence page shows the result.** The scheduled run publishes its score to the
+  `evidence` branch, and the page reads it when it opens, saying so plainly when there is
+  nothing to read rather than showing a number. A run started by hand is never
+  published. (Ragul D)
+
+### Changed
+
+- **The default memory limit on a server counts two containers per app.** For the hour
+  after a deployment the replaced container runs beside the live one, and each was allowed
+  the app's whole share: 1600m twice for one app on a 2 GB server. The share is now 80% of
+  RAM across two containers per app, 800m in that case. `--memory` still overrides it, and
+  the plan shows the figure. (Ragul D)
+- **A deployment to a server switches about three seconds sooner.** A container that was
+  ready at once waited 4.1 s to be seen as healthy, a quarter of a 16.6 s warm deployment,
+  because Docker's first check and the deploy's polling were both two seconds apart. Both
+  are half a second now; three warm deployments took 13.3 to 15.0 s. (Ragul D)
+- **An app on a server runs in a hardened container.** Its root filesystem is read-only
+  apart from the two `.next` volumes and a 64 MB `/tmp` that is emptied on restart and
+  cannot run a binary; every Linux capability is dropped, privileges cannot be gained,
+  and it is limited to 512 processes. The December 2025 break-ins through CVE-2025-55182
+  on self-hosted Next.js rewrote `next.config.js` and lockfiles and ran miners from
+  `/tmp`; none of that can persist now. Measured with the streaming fixture: streaming,
+  on-demand ISR, the Edge route and image optimization all work, and nothing is written
+  outside the volumes, and `conformance/vm/e2e.sh` checks it on every run. An app that
+  writes files outside `.next` now fails with `EROFS`, which the README and `docs/vm.md`
+  §4 state. (Ragul D)
+
+### Fixed
+
+- **The unit tests pass on macOS.** Five prune tests created their fixtures under the
+  temporary directory as named, which on macOS is a link to `/private/var`, so every path
+  prune resolved looked outside the build root. CI ran only Linux and Windows and never saw
+  it; it runs macOS too now. The image was never affected: prune runs under `/src` there.
+  (Ragul D)
+
 ## [1.1.3] - 2026-10-10
 
 Three fixes to deploying to your own server, all found or proven on a live Droplet. A

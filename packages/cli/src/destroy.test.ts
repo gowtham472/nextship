@@ -10,7 +10,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { nameMatches } from './destroy.js'
+import { nameMatches, previewsOf } from './destroy.js'
 import { NextshipError } from './errors.js'
 
 function rejects(run: () => unknown, fragment: string): void {
@@ -46,4 +46,20 @@ test('the error names the app that would actually be destroyed', () => {
       return true
     }
   )
+})
+
+// The defect: destroying an app left its previews running, and with the app's id
+// gone from nextship.json nothing could ever match them again.
+test('the previews destroyed with an app are exactly the ones that name it', () => {
+  const apps = [
+    { id: 'main', name: 'shop' },
+    { id: 'p1', name: 'shop-pr-1', previewOf: 'main' },
+    { id: 'p2', name: 'shop-pr-2', previewOf: 'main' },
+    { id: 'other', name: 'blog' },
+    { id: 'p3', name: 'blog-pr-1', previewOf: 'other' },
+    // Named like a preview of shop, but not one: never matched by name.
+    { id: 'x', name: 'shop-pr-9' },
+  ]
+  assert.deepEqual(previewsOf(apps, 'main').map((entry) => entry.id), ['p1', 'p2'])
+  assert.deepEqual(previewsOf(apps, 'none'), [])
 })

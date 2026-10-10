@@ -58,6 +58,32 @@ export interface ProjectConfig {
   server?: ServerRecord
   /** VM only. Absent means `remote`. */
   build?: BuildMode
+  /**
+   * VM only. Folders under the app's directory the app may write to, such as `data`
+   * or `uploads`. Everything else in an app's container is read-only, and each folder
+   * here is a volume, so what the app writes there outlives a deployment.
+   */
+  writable?: string[]
+}
+
+/** How many writable folders one app may declare: each is a volume and a mount. */
+const WRITABLE_LIMIT = 8
+
+/**
+ * Why a writable folder is refused, or null when it is acceptable: a relative
+ * path of plain names. A leading dot is refused, which covers `..` and `.next`,
+ * where Next.js's own volumes are mounted; `__` is refused because the volume is
+ * named with it in place of `/`.
+ */
+export function writableProblem(folder: unknown): string | null {
+  if (typeof folder !== 'string') return 'is not a string'
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/.test(folder)) {
+    return 'is not a relative folder of letters, digits, dots, hyphens and underscores, with no leading dot and no trailing slash'
+  }
+  if (folder.includes('__')) return 'contains a double underscore'
+  if (folder.split('/')[0] === 'node_modules') return 'is inside node_modules, which the image owns'
+  if (folder.length > 100) return 'is over 100 characters'
+  return null
 }
 
 export async function readConfig(root: string): Promise<ProjectConfig | null> {
@@ -130,8 +156,8 @@ function validateConfig(config: ProjectConfig): void {
     if (typeof config.registry !== 'string' || config.registry.length === 0) {
       refuse('has no registry for DigitalOcean')
     }
-    if (config.server !== undefined || config.build !== undefined) {
-      refuse('records a server or build mode, which only the vm target uses')
+    if (config.server !== undefined || config.build !== undefined || config.writable !== undefined) {
+      refuse('records a server, build mode or writable folders, which only the vm target uses')
     }
     return
   }
@@ -153,6 +179,20 @@ function validateConfig(config: ProjectConfig): void {
   }
   if (config.region !== undefined || config.registry !== undefined) {
     refuse('records a region or registry, which only the digitalocean target uses')
+  }
+  if (config.writable !== undefined) {
+    if (!Array.isArray(config.writable)) refuse('has a `writable` that is not a list of folders')
+    if (config.writable.length > WRITABLE_LIMIT) refuse(`lists ${config.writable.length} writable folders, more than the ${WRITABLE_LIMIT} an app may have`)
+    for (const folder of config.writable) {
+      const problem = writableProblem(folder)
+      if (problem) refuse(`has a writable folder ${JSON.stringify(folder)} that ${problem}`)
+    }
+    if (new Set(config.writable).size !== config.writable.length) refuse('lists the same writable folder twice')
+    // One volume mounted inside another hides whatever the outer one holds there.
+    for (const folder of config.writable) {
+      const outer = config.writable.find((other) => other !== folder && folder.startsWith(`${other}/`))
+      if (outer) refuse(`lists the writable folder "${folder}" inside another, "${outer}"; list the outer one only`)
+    }
   }
 }
 

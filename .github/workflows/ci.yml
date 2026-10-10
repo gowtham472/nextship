@@ -32,7 +32,9 @@ jobs:
       # One platform failing says nothing about the others, so all of them report.
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # macOS because people deploy from Macs, and because its temporary directory
+        # is reached through a symlink, which once failed five tests nobody else saw.
+        os: [ubuntu-latest, windows-latest, macos-latest]
         # 22 is the engines floor; 24 is the current LTS line.
         node: ['22', '24']
     defaults:

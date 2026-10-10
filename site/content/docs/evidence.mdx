@@ -35,8 +35,12 @@ Vercel, are in the
 
 A full run now takes 319 runner-minutes against 788, in the same 32 groups.
 
-The suite runs from GitHub Actions in this repository, weekly and on demand, so a
-regression shows up without anyone remembering to look.
+The suite runs from GitHub Actions in this repository every night against the newest
+Next.js canary, and on demand, so a change in Next.js that breaks self-hosting shows up the
+day it lands rather than when it reaches a release. The table above is the result recorded
+for a release. The nightly one is below, read from the repository when you open this page:
+
+<NightlyResult />
 
 ## Streaming
 

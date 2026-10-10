@@ -20,7 +20,8 @@ import { buildProject, storedEncryptionKey } from './build.js'
 import { packageImage } from './packaging.js'
 import { readConfig, writeConfig, TARGET_IDS, type BuildMode, type ProjectConfig, type TargetId } from './config.js'
 import { CONTAINER_PORT } from './image/dockerfile.js'
-import { client as apiClient } from './owned-app.js'
+import { client as apiClient, previewConfig } from './owned-app.js'
+import { selectedPreview } from './preview.js'
 import { DEFAULT_REGION } from './targets/digitalocean-target.js'
 import type { EnvRecord, Target } from './targets/target.js'
 import { untilStopped } from './interrupt.js'
@@ -105,15 +106,28 @@ export function settingsFor(
 
 export async function deploy(project: ProjectInfo, options: DeployOptions): Promise<void> {
   const existing = await readConfig(project.root)
-  const settings = settingsFor(project.name, existing, options)
+  const preview = selectedPreview()
+  // A preview is of the deployed app, and is authorised by that app's id.
+  const previewOf = preview === null ? null : existing?.appId
+  if (preview !== null && !previewOf) {
+    throw new NextshipError('A preview is a preview of the deployed app, and this project has none yet.', 'Run `nextship deploy` first.')
+  }
+  const recorded = settingsFor(project.name, existing, options)
+  const settings = preview === null ? recorded : previewConfig(recorded, preview)
   const client = apiClient(settings, existing ? options.target : undefined)
   const name = settings.name
 
   // Read-only reconnaissance first, so the plan describes reality.
   const delivery = await client.planDelivery(name)
   const apps = await client.listApps()
-  const owned = existing?.appId ? apps.find((app) => app.id === existing.appId) : undefined
-  const nameClash = apps.find((app) => app.name === name && app.id !== existing?.appId)
+  const owned = previewOf
+    ? apps.find((app) => app.name === name && app.previewOf === previewOf)
+    : existing?.appId
+      ? apps.find((app) => app.id === existing.appId)
+      : undefined
+  const nameClash = previewOf
+    ? apps.find((app) => app.name === name && app.previewOf !== previewOf)
+    : apps.find((app) => app.name === name && app.id !== existing?.appId)
 
   if (nameClash) {
     throw new NextshipError(
@@ -121,7 +135,7 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
       'nextship will not modify an app it does not own. Rename this project, or set a different name in nextship.json.'
     )
   }
-  if (existing?.appId && !owned) {
+  if (!previewOf && existing?.appId && !owned) {
     throw new NextshipError(
       `nextship.json records app ${existing.appId}, which no longer exists ${client.appScope}.`,
       'Remove the appId from nextship.json to create a new app, after confirming the old one is really gone.'
@@ -144,11 +158,15 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
     delivery,
   })
   for (const line of lines) detail(line)
+  if (preview !== null) {
+    detail(`preview       of "${recorded.name}", with its own env file and domains, and asks crawlers not to index it`)
+    if (!owned) detail(`              answers nothing until \`nextship domain add <host> --preview ${preview}\``)
+  }
   if (preserved.length > 0) detail(`preserved     ${preserved.join(', ')}, kept as they are`)
   detail(`untouched     ${apps.length} existing app(s) ${client.appScope}`)
   detail(client.deployRemoves ?? 'nothing is ever deleted by this command')
 
-  warnAboutMissingRuntimeEnv(project, existingEnv, owned !== undefined)
+  warnAboutMissingRuntimeEnv(project, existingEnv, owned !== undefined, preview)
 
   if (!options.confirmed) {
     ok('This was a plan only. Nothing was created or changed.')
@@ -211,6 +229,7 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
       instanceSize: options.instanceSize ?? null,
       memory: options.memory ?? null,
       healthPath: build.manifest.healthPath,
+      ...(previewOf ? { previewOf } : {}),
     })
 
     // From here to the end of the release, every path out has to reach either
@@ -220,14 +239,19 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
     let handedOff = false
     try {
       // Written before waiting, so a timeout still leaves the app recorded as ours
-      // rather than orphaned and unadoptable on the next run.
-      const config: ProjectConfig = {
-        ...settings,
-        ...(delivered.store ? { registry: delivered.store } : {}),
-        appId: released.appId,
+      // rather than orphaned and unadoptable on the next run. A preview is recorded
+      // on the server instead, where the run that removes it will look.
+      if (previewOf) {
+        detail(`recorded on the server as a preview of "${recorded.name}"`)
+      } else {
+        const config: ProjectConfig = {
+          ...settings,
+          ...(delivered.store ? { registry: delivered.store } : {}),
+          appId: released.appId,
+        }
+        await writeConfig(project.root, config)
+        detail('recorded in nextship.json')
       }
-      await writeConfig(project.root, config)
-      detail('recorded in nextship.json')
 
       if (!released.deploymentId) {
         warn(`${client.displayName} reported no deployment to follow. Check its control panel.`)
@@ -259,14 +283,16 @@ export async function deploy(project: ProjectInfo, options: DeployOptions): Prom
  * It is a warning rather than a prompt because uploading development values is
  * often exactly the wrong thing to do, which is why `env push` is explicit.
  */
-function warnAboutMissingRuntimeEnv(project: ProjectInfo, existing: EnvRecord[], appExists: boolean): void {
+function warnAboutMissingRuntimeEnv(project: ProjectInfo, existing: EnvRecord[], appExists: boolean, preview: string | null): void {
   if (project.envFiles.length === 0) return
   if (appExists && existing.length > 0) return
 
   warn(
-    `This project has ${project.envFiles.join(', ')}, but the app will have no runtime environment. ` +
+    `This project has ${project.envFiles.join(', ')}, but the ${preview === null ? 'app' : 'preview'} will have no runtime environment. ` +
       'Values Next.js inlines at build time still work; anything read at request time will be undefined. ' +
-      'Run `nextship env push` if those values belong in production.'
+      (preview === null
+        ? 'Run `nextship env push` if those values belong in production.'
+        : `Run \`nextship env push --preview ${preview}\` with values meant for a preview, never production's database.`)
   )
 }
 

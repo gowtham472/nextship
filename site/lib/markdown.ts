@@ -1,4 +1,5 @@
 import type { Doc } from './docs'
+import { NIGHTLY_RESULT_URL } from './evidence'
 import { SITE_URL } from './site'
 
 /**
@@ -6,7 +7,8 @@ import { SITE_URL } from './site'
  * than a rendered page.
  *
  * The MDX is already markdown apart from one component, so conversion is small and
- * strict: a callout becomes a blockquote, and links become absolute, pointing a docs
+ * strict: a callout becomes a blockquote, the nightly result becomes the address of its
+ * file, and links become absolute, pointing a docs
  * link at that page's markdown so an agent can keep reading in the same format. Any
  * other component fails the build, because an agent handed raw JSX would read it as
  * content, and a page that quietly lost a component is worse than one that refuses to
@@ -29,6 +31,8 @@ export function toMarkdown(doc: Doc): string {
         .map((line) => (line ? `> ${line}` : '>'))
         .join('\n')
     })
+    // Read in the browser on the page; an agent is pointed at the same file.
+    .replace(/<NightlyResult \/>/g, `Last night's result is published as JSON at ${NIGHTLY_RESULT_URL}.`)
     .replace(/\]\((\/[^)\s]*)\)/g, (_, target: string) => `](${absolute(target)})`)
 
   const leftover = /<[A-Z][A-Za-z]*/.exec(body.replace(/```[\s\S]*?```/g, ''))

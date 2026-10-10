@@ -14,12 +14,32 @@
  * refuses it, which covers the instant between Caddy moving to a new container
  * and that container accepting a connection it has not seen before.
  *
+ * For an hour after a deployment the previous one keeps running, and a request
+ * that names its build goes to it. Next.js names the build on every request an open
+ * tab makes: `x-deployment-id` on client navigations and Server Actions, and
+ * `?dpl=` on every JavaScript and CSS file. Without this, a tab opened before the
+ * deployment asks the new container for files and Server Actions that exist only
+ * in the build it loaded, and fails. A page load names no build, so it gets the
+ * new one. Once the previous container has stopped, its route fails over to the
+ * live container, which is what every request got before this existed.
+ *
+ * The server's default app also answers `https://<address>` when the server was added
+ * by a public IPv4 address, with a certificate Let's Encrypt issues for the address
+ * itself, so a first deployment is reachable over HTTPS before any domain exists. Let's
+ * Encrypt issues IP address certificates only with its `shortlived` profile, valid for
+ * about six days, which Caddy renews on its own. Caddy answers the ACME challenge before
+ * any site route, so the plain HTTP site in front of the app does not intercept it.
+ * Plain HTTP on the address keeps serving the app whether or not a certificate comes.
+ * IPv4 only: IPv6 issuance was fixed after the Caddy release setup installs.
+ *
  * Author: Ragul D
  * Design: ../../../../../docs/design.md §9.3
  */
 
+import { isIPv4 } from 'node:net'
+import { NextshipError } from '../../errors.js'
 import { CONTAINER_PORT } from '../../image/dockerfile.js'
-import { assertAppName, assertDomain } from './ssh.js'
+import { assertAppName, assertDeploymentId, assertDomain } from './ssh.js'
 
 export interface SiteDomain {
   domain: string
@@ -34,21 +54,77 @@ interface SiteOptions {
   domains: SiteDomain[]
   /** The first app deployed on a server answers plain HTTP on its address. */
   isDefault: boolean
+  /** The deployment before the live one, while it still runs for the tabs that loaded it. */
+  previous: { container: string; deploymentId: string } | null
+  /** A preview asks crawlers not to index it: it is a copy of the site under another name. */
+  preview: boolean
+  /** The public IPv4 address the default app also answers over HTTPS, or null. */
+  ipCertificate: string | null
 }
 
-const proxy = (container: string): string[] => [
-  `  reverse_proxy ${container}:${CONTAINER_PORT} {`,
+const proxy = (upstreams: string[], extra: string[] = []): string[] => [
+  `  reverse_proxy ${upstreams.map((container) => `${container}:${CONTAINER_PORT}`).join(' ')} {`,
+  ...extra,
   '    flush_interval -1',
   '    lb_try_duration 5s',
   '  }',
 ]
 
+const indent = (lines: string[]): string[] => lines.map((line) => `  ${line}`)
+
+function routes(options: SiteOptions): string[] {
+  const noindex = options.preview ? ['  header X-Robots-Tag "noindex, nofollow"'] : []
+  return [...noindex, ...upstreams(options)]
+}
+
+function upstreams(options: SiteOptions): string[] {
+  if (options.previous === null) return proxy([options.container])
+  const id = assertDeploymentId(options.previous.deploymentId)
+  return [
+    `  @previous expression \`{header.X-Deployment-Id} == "${id}" || {query.dpl} == "${id}"\``,
+    '  handle @previous {',
+    // `first` sends to the previous container while it answers. A failed dial marks
+    // it down for 30 s and the retry goes to the live one, so a request that names a
+    // build no longer running is served as it would be with no route at all.
+    ...indent(proxy([options.previous.container, options.container], ['    lb_policy first', '    fail_duration 30s'])),
+    '  }',
+    '  handle {',
+    ...indent(proxy([options.container])),
+    '  }',
+  ]
+}
+
 export function renderSite(options: SiteOptions): string {
   assertAppName(options.name)
-  const lines = [`# Written by nextship for ${options.name}. Regenerated on every deployment; edits are overwritten.`]
+  const lines = [
+    `# Written by nextship for ${options.name}. Regenerated on every deployment; edits are overwritten.`,
+    // Read by retire.sh, which stops nothing this line names: the site file is what
+    // Caddy serves from, so it is the one record of the live container that cannot
+    // disagree with what is serving.
+    `# live ${options.container}`,
+  ]
 
   if (options.isDefault) {
-    lines.push('http://:80 {', ...proxy(options.container), '}')
+    lines.push('http://:80 {', ...routes(options), '}')
+    if (options.ipCertificate !== null) {
+      if (!isIPv4(options.ipCertificate)) throw new NextshipError(`"${options.ipCertificate}" is not an IPv4 address.`, 'This is a nextship defect. Please report it.')
+      lines.push(
+        // Both schemes, named. With `https://` alone, Caddy redirects plain HTTP for
+        // this host to HTTPS from the moment it starts, before any certificate
+        // exists and for good if Let's Encrypt never issues one, and that
+        // host-specific redirect wins over the catch-all site above. Measured with a
+        // CA that could not be reached: `http://<address>` answered 308 to an address
+        // with no certificate. Naming the HTTP site makes Caddy serve it instead.
+        `http://${options.ipCertificate}, https://${options.ipCertificate} {`,
+        '  tls {',
+        '    issuer acme {',
+        '      profile shortlived',
+        '    }',
+        '  }',
+        ...routes(options),
+        '}'
+      )
+    }
   }
 
   // Caddy applies a block's tls settings to every name in it, so domains are
@@ -59,7 +135,7 @@ export function renderSite(options: SiteOptions): string {
       .sort((a, b) => Number(b.primary) - Number(a.primary))
       .map((entry) => assertDomain(entry.domain))
     if (names.length === 0) continue
-    lines.push(`${names.join(', ')} {`, '  tls {', `    protocols tls${minimum}`, '  }', ...proxy(options.container), '}')
+    lines.push(`${names.join(', ')} {`, '  tls {', `    protocols tls${minimum}`, '  }', ...routes(options), '}')
   }
 
   return `${lines.join('\n')}\n`

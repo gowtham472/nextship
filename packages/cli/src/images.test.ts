@@ -33,7 +33,7 @@ const registry = (...tags: Array<[string, number]>): ImageRecord[] =>
 
 test('the image a live tag points to is never removed, though the API reports it untagged', () => {
   const manifests = registry(['new', 9], ['old', 8])
-  const plan = planPrune(manifests, 'new', 1)
+  const plan = planPrune(manifests, ['new'], 1)
 
   const removed = new Set(plan.remove.map((m) => m.id))
   assert.ok(!removed.has('sha256:image-new'), 'this is the image the app is running')
@@ -42,7 +42,7 @@ test('the image a live tag points to is never removed, though the API reports it
 })
 
 test('an image no retained tag can reach is removed, along with its index', () => {
-  const plan = planPrune(registry(['new', 9], ['old', 8]), 'new', 1)
+  const plan = planPrune(registry(['new', 9], ['old', 8]), ['new'], 1)
 
   assert.deepEqual(
     plan.remove.map((m) => m.id).sort(),
@@ -54,7 +54,7 @@ test('an image no retained tag can reach is removed, along with its index', () =
 
 test('the deployed image is kept even when it falls outside the limit', () => {
   // 'old' is the oldest and would be dropped on age alone, but it is running.
-  const plan = planPrune(registry(['new', 9], ['mid', 8], ['old', 7]), 'old', 1)
+  const plan = planPrune(registry(['new', 9], ['mid', 8], ['old', 7]), ['old'], 1)
 
   const removed = new Set(plan.remove.map((m) => m.id))
   assert.ok(!removed.has('sha256:image-old'), 'pruning the running image breaks the next restart')
@@ -62,14 +62,14 @@ test('the deployed image is kept even when it falls outside the limit', () => {
 })
 
 test('reclaimable size counts the images removed, not the tiny index alone', () => {
-  const plan = planPrune(registry(['new', 9], ['old', 8]), 'new', 1)
+  const plan = planPrune(registry(['new', 9], ['old', 8]), ['new'], 1)
 
   assert.ok(plan.reclaimableBytes > 181 * MIB, 'a figure near zero would be the index only')
   assert.ok(plan.reclaimableBytes < 183 * MIB)
 })
 
 test('nothing is removed when everything is still reachable', () => {
-  const plan = planPrune(registry(['new', 9], ['old', 8]), 'new', 5)
+  const plan = planPrune(registry(['new', 9], ['old', 8]), ['new'], 5)
 
   assert.deepEqual(plan.remove, [])
   assert.equal(plan.reclaimableBytes, 0)
@@ -82,7 +82,7 @@ test('a manifest shared by two retained indexes survives', () => {
     { id: 'sha256:shared', tags: [], children: [], sizeBytes: 182 * MIB, updatedAt: '2026-09-08T00:00:00Z' },
   ]
 
-  const plan = planPrune(shared, 'a', 1)
+  const plan = planPrune(shared, ['a'], 1)
   const removed = new Set(plan.remove.map((m) => m.id))
 
   assert.ok(removed.has('sha256:index-b'), 'the unreachable index goes')
@@ -97,7 +97,7 @@ test('an orphan left by an earlier tag-only deletion is collected', () => {
     { id: 'sha256:image-orphan', tags: [], children: [], sizeBytes: 182 * MIB, updatedAt: '2026-09-07T00:00:00Z' },
   ]
 
-  const plan = planPrune(manifests, 'live', 5)
+  const plan = planPrune(manifests, ['live'], 5)
 
   assert.deepEqual(
     plan.remove.map((m) => m.id).sort(),
@@ -107,20 +107,20 @@ test('an orphan left by an earlier tag-only deletion is collected', () => {
 })
 
 test('an unknown deployed tag still prunes by age rather than refusing', () => {
-  const plan = planPrune(registry(['c', 9], ['b', 8], ['a', 7]), null, 1)
+  const plan = planPrune(registry(['c', 9], ['b', 8], ['a', 7]), [], 1)
 
   assert.deepEqual(plan.keepTags, ['c'])
   assert.deepEqual(plan.removeTags.sort(), ['a', 'b'])
 })
 
 test('an empty repository plans nothing', () => {
-  assert.deepEqual(planPrune([], null, 5), { keepTags: [], removeTags: [], remove: [], reclaimableBytes: 0 })
+  assert.deepEqual(planPrune([], [], 5), { keepTags: [], removeTags: [], remove: [], reclaimableBytes: 0 })
 })
 
 test('keeping zero images is refused, because rollback would have no target', () => {
   for (const bad of [0, -1, 1.5, Number.NaN]) {
     assert.throws(
-      () => planPrune(registry(['a', 9]), 'a', bad),
+      () => planPrune(registry(['a', 9]), ['a'], bad),
       (error: unknown) => {
         assert.ok(error instanceof NextshipError)
         assert.match(error.message, /at least 1/)
@@ -171,4 +171,13 @@ test('ordering emits everything even for a malformed graph', () => {
   ]
 
   assert.equal(orderForDeletion(cyclic).length, 2, 'a bad graph must not hang the command')
+})
+
+// On a server the deployment a newer one replaced keeps running for an hour, and
+// Docker refuses to remove an image a running container uses, so a prune that
+// planned to would fail half way.
+test('every tag in use is kept, the live one and the one still running for older tabs', () => {
+  const plan = planPrune(registry(['c', 9], ['b', 8], ['a', 7]), ['c', 'a'], 1)
+  assert.deepEqual(plan.keepTags.sort(), ['a', 'c'])
+  assert.deepEqual(plan.removeTags, ['b'])
 })

@@ -36,7 +36,20 @@ export function newReleaseId(now: Date): string {
  */
 export interface VmDeployment extends DeploymentRecord {
   healthPath: string | null
+  /**
+   * Set on the deployment a new one replaced: its container keeps running until
+   * then, for the tabs that loaded it (`caddy.ts`). At most one entry has it.
+   */
+  keptUntil: string | null
 }
+
+/**
+ * How long the deployment before the live one keeps running. An hour covers a tab
+ * left open through a deployment for the length of an ordinary working session, at
+ * the cost of a second container's memory for that hour. A tab older than that
+ * reloads the page on its next navigation, as it would with nothing kept.
+ */
+export const PREVIOUS_KEPT_MS = 60 * 60 * 1000
 
 /** Reads the file, refusing one that is not a history rather than starting a new one over it. */
 export function parseDeployments(contents: string): VmDeployment[] {
@@ -57,7 +70,8 @@ export function parseDeployments(contents: string): VmDeployment[] {
       typeof record.cause !== 'string' ||
       typeof record.createdAt !== 'string' ||
       !(typeof record.imageTag === 'string' || record.imageTag === null) ||
-      !(record.healthPath === undefined || record.healthPath === null || typeof record.healthPath === 'string')
+      !(record.healthPath === undefined || record.healthPath === null || typeof record.healthPath === 'string') ||
+      !(record.keptUntil === undefined || record.keptUntil === null || typeof record.keptUntil === 'string')
     ) {
       throw corrupt(`has an unreadable entry at position ${index + 1}`)
     }
@@ -69,6 +83,7 @@ export function parseDeployments(contents: string): VmDeployment[] {
       createdAt: record.createdAt,
       imageTag: record.imageTag,
       healthPath: record.healthPath ?? null,
+      keptUntil: record.keptUntil ?? null,
     }
   })
 }
@@ -88,19 +103,49 @@ export function recordStarted(
   deployments: VmDeployment[],
   entry: { id: string; imageTag: string; cause: string; createdAt: string; healthPath: string | null }
 ): VmDeployment[] {
-  return [{ ...entry, served: false, live: false }, ...deployments]
+  return [{ ...entry, served: false, live: false, keptUntil: null }, ...deployments]
 }
 
 /**
  * The deployment took traffic. It becomes the only live one, and stays a valid
  * rollback target from now on.
+ *
+ * The deployment it replaced is kept for PREVIOUS_KEPT_MS when it is a different
+ * build. The same build started again, by `env push` or a domain change, is not:
+ * both would answer to one deployment id, and routing by it would send every tab,
+ * new ones included, to the container being replaced. A deployment already kept
+ * stays kept until its time runs out, unless it is the build going live.
+ *
+ * `canKeep` is false on a server with no retire timer, which keeps nothing: a kept
+ * container there would never be stopped.
  */
-export function recordLive(deployments: VmDeployment[], id: string): VmDeployment[] {
-  if (!deployments.some((entry) => entry.id === id)) {
+export function recordLive(deployments: VmDeployment[], id: string, now: Date, canKeep: boolean): VmDeployment[] {
+  const next = deployments.find((entry) => entry.id === id)
+  if (!next) {
     throw new NextshipError(`Deployment ${id} is not in the history.`, 'This is a nextship defect. Please report it.')
   }
-  return deployments.map((entry) =>
-    entry.id === id ? { ...entry, served: true, live: true } : { ...entry, live: false }
+  const replaced = deployments.find((entry) => entry.live && entry.id !== id)
+  const existing = previousServing(deployments, now)
+  let kept: { id: string; until: string } | null = null
+  if (!canKeep) {
+    kept = null
+  } else if (replaced && replaced.imageTag !== next.imageTag) {
+    kept = { id: replaced.id, until: new Date(now.getTime() + PREVIOUS_KEPT_MS).toISOString() }
+  } else if (existing && existing.id !== id && existing.imageTag !== next.imageTag && existing.keptUntil) {
+    kept = { id: existing.id, until: existing.keptUntil }
+  }
+  return deployments.map((entry) => {
+    if (entry.id === id) return { ...entry, served: true, live: true, keptUntil: null }
+    return { ...entry, live: false, keptUntil: entry.id === kept?.id ? kept.until : null }
+  })
+}
+
+/** The deployment kept running for the tabs that loaded it, if its time has not run out. */
+export function previousServing(deployments: VmDeployment[], now: Date): VmDeployment | null {
+  return (
+    deployments.find(
+      (entry) => !entry.live && entry.served && entry.keptUntil !== null && Date.parse(entry.keptUntil) > now.getTime()
+    ) ?? null
   )
 }
 
@@ -121,6 +166,8 @@ export function imagesToKeep(deployments: DeploymentRecord[], keep: number): Set
   const kept = new Set<string>()
   const live = deployments.find((entry) => entry.live)?.imageTag
   if (live) kept.add(live)
+  // Its container still runs, and Docker will not remove an image a container uses.
+  for (const entry of deployments) if (entry.keptUntil && entry.imageTag) kept.add(entry.imageTag)
   for (const entry of deployments) {
     if (kept.size >= keep) break
     if (entry.served && entry.imageTag) kept.add(entry.imageTag)

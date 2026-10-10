@@ -36,6 +36,7 @@ import { hostname } from 'node:os'
 import path from 'node:path'
 import { connect as tlsConnect } from 'node:tls'
 import { lookup, resolve4 } from 'node:dns/promises'
+import { isIP, isIPv4 } from 'node:net'
 import { NextshipError } from '../../errors.js'
 import { docsUrl } from '../../links.js'
 import type { ProjectConfig, ServerRecord } from '../../config.js'
@@ -66,6 +67,7 @@ import {
   imagesToKeep,
   newReleaseId,
   parseDeployments,
+  previousServing,
   recordFailed,
   recordLive,
   recordStarted,
@@ -82,7 +84,8 @@ const DEFAULT_APP_FILE = `${ETC}/default-app`
 
 /** How long a new container has to report healthy before the deployment fails. */
 const HEALTH_TIMEOUT_MS = 5 * 60 * 1000
-const HEALTH_POLL_MS = 2000
+/** Matches the start interval in `runArguments`, so the switch follows the first passing check. */
+const HEALTH_POLL_MS = 500
 
 /** Remote builds need room for the Next.js compiler beside what the server already runs. */
 const REMOTE_BUILD_MIN_MIB = 1800
@@ -99,6 +102,8 @@ interface AppRecord {
   name: string
   createdAt: string
   domains: SiteDomain[]
+  /** Set on a preview: the id of the app it previews (`preview.ts`). */
+  previewOf?: string
 }
 
 /** What a server reports in one round trip, for plans and guards. */
@@ -108,13 +113,21 @@ interface ServerFacts {
   dockerVersion: string
   defaultApp: string | null
   ipv6: boolean
+  /** The setup version `server add` last recorded, or null on a server that has none. */
+  setupVersion: number | null
 }
+
+/**
+ * The setup version that installs the retire timer. A server set up before it has
+ * nothing to stop a kept container, so a deployment to one keeps none.
+ */
+const RETIRE_SETUP_VERSION = 3
 
 // ------------------------------------------------------------------- pure
 
 /** Reads the one-shot facts script's output. */
 export function parseFacts(output: string): ServerFacts {
-  const [mem, disk, docker, defaultApp, ipv6] = output.split('\n')
+  const [mem, disk, docker, defaultApp, ipv6, setup] = output.split('\n')
   const memMib = Number.parseInt(mem, 10)
   const diskFreeMib = Number.parseInt(disk, 10)
   if (!Number.isFinite(memMib) || !Number.isFinite(diskFreeMib) || !docker) {
@@ -123,7 +136,15 @@ export function parseFacts(output: string): ServerFacts {
       'Run `nextship server add` again to check the server is set up.'
     )
   }
-  return { memMib, diskFreeMib, dockerVersion: docker.trim(), defaultApp: defaultApp?.trim() || null, ipv6: ipv6?.trim() === 'yes' }
+  const setupVersion = Number.parseInt(setup ?? '', 10)
+  return {
+    memMib,
+    diskFreeMib,
+    dockerVersion: docker.trim(),
+    defaultApp: defaultApp?.trim() || null,
+    ipv6: ipv6?.trim() === 'yes',
+    setupVersion: Number.isFinite(setupVersion) ? setupVersion : null,
+  }
 }
 
 /** Refuses a deployment the server has no room for, before anything is built. */
@@ -144,16 +165,23 @@ export function assertRoom(facts: ServerFacts, build: 'remote' | 'local'): void 
 
 /**
  * The memory limit for a container: an even share of most of the server's RAM
- * across its apps, so one app cannot starve the others or the server itself.
+ * across the containers its apps can run at once, so one app cannot starve the
+ * others or the server itself. A preview is an app and is counted as one.
+ *
+ * Where the server keeps a replaced deployment running, each app has two containers
+ * for the hour after a deployment, the live one and the kept one, so each app counts
+ * twice. Counted once, one app on a 2 GB server was allowed 1600m in each of two
+ * containers, twice what the server was meant to give away.
  */
-export function memoryLimit(memMib: number, appCount: number, requested: string | null): string {
+export function memoryLimit(memMib: number, appCount: number, requested: string | null, keepsPrevious: boolean): string {
   if (requested !== null) {
     if (!/^\d+[mg]$/i.test(requested)) {
       throw new NextshipError(`--memory "${requested}" is not a size.`, 'Use megabytes or gigabytes, for example 512m or 2g.')
     }
     return requested.toLowerCase()
   }
-  return `${Math.max(256, Math.floor((memMib * APP_MEMORY_SHARE) / Math.max(appCount, 1)))}m`
+  const containers = Math.max(appCount, 1) * (keepsPrevious ? 2 : 1)
+  return `${Math.max(256, Math.floor((memMib * APP_MEMORY_SHARE) / containers))}m`
 }
 
 /** The health check a container runs: the adapter's cheap path, polled the way the image's own check polls `/`. */
@@ -174,9 +202,24 @@ export function healthCommand(healthPath: string | null): string {
  * `docker run` for one deployment. No port is published: Caddy reaches the
  * container on the nextship network, so nothing on the server's public address
  * bypasses the proxy. The interval, timeout and retries match the image's own
- * HEALTHCHECK; the start interval makes Docker check every two seconds while the
+ * HEALTHCHECK; the start interval makes Docker check every half second while the
  * container starts, where Docker supports it, so a healthy deployment switches in
- * seconds rather than after the first 30 second interval.
+ * about a second rather than after the first 30 second interval. Measured on a warm
+ * deployment: at two seconds, with the deploy polling every two seconds too, a
+ * container that was ready at once was seen as healthy four seconds after it started,
+ * a quarter of the whole deployment.
+ *
+ * The container is hardened so that code an attacker runs inside it cannot stay.
+ * The self-hosted break-ins through CVE-2025-55182 in December 2025 edited
+ * `next.config.js` and lockfiles and ran miners dropped in `/tmp`. Here the root
+ * filesystem is read-only, so the only writable places are the two volumes
+ * Next.js writes to and a `/tmp` that is emptied on restart and cannot hold an
+ * executable. No capability is kept, because the image runs as its `app` user on
+ * a port above 1024 and needs none, and nothing can gain privileges through a
+ * setuid binary. Measured in a nextship image: under concurrent streaming and
+ * image optimization the app ran 12 processes and threads, so the process limit
+ * stops a fork bomb without coming near a real app, and `docker diff` showed no
+ * write outside the volumes.
  */
 export function runArguments(options: {
   name: string
@@ -187,6 +230,8 @@ export function runArguments(options: {
   dockerMajor: number
   /** The image's working directory, where its `.next` is. */
   workdir: string
+  /** The app's declared writable folders, each with the volume that holds it. */
+  writable: WritableVolume[]
 }): string[] {
   const { name, releaseId, imageTag } = options
   const volumes = cacheVolumes(name, imageTag)
@@ -197,10 +242,16 @@ export function runArguments(options: {
     '--restart', 'unless-stopped',
     '--env-file', `${ETC}/apps/${name}/env`,
     '--memory', options.memory,
+    '--read-only',
+    '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m',
+    '--cap-drop', 'ALL',
+    '--security-opt', 'no-new-privileges',
+    '--pids-limit', '512',
     '--log-driver', 'journald',
     '--log-opt', `tag=${name}`,
     '--volume', `${volumes.build}:${options.workdir}/.next`,
     '--volume', `${volumes.cache}:${options.workdir}/.next/cache`,
+    ...options.writable.flatMap((entry) => ['--volume', `${entry.volume}:${options.workdir}/${entry.folder}`]),
     '--label', 'sh.nextship.managed=true',
     '--label', `sh.nextship.app=${name}`,
     '--label', `sh.nextship.deployment=${releaseId}`,
@@ -211,7 +262,7 @@ export function runArguments(options: {
     '--health-start-period', '10s',
     '--health-retries', '3',
     // API 1.44, Docker 25. Setup accepts Docker 23, which would refuse the flag.
-    ...(options.dockerMajor >= 25 ? ['--health-start-interval', '2s'] : []),
+    ...(options.dockerMajor >= 25 ? ['--health-start-interval', '500ms'] : []),
     `${name}:${imageTag}`,
   ]
 }
@@ -236,6 +287,25 @@ export function runArguments(options: {
  * `.next/cache/images` is not mounted directly: it does not exist in the image, so
  * its volume would be created owned by root and the app could not write to it.
  */
+export interface WritableVolume {
+  folder: string
+  volume: string
+}
+
+/**
+ * The volume behind each folder an app declares writable in `nextship.json`.
+ *
+ * The container's root is read-only, so an app that keeps a SQLite file or uploads
+ * beside its code has nowhere to write unless it says where. Each folder is a
+ * named volume per app, not per image, so what is written there outlives a
+ * deployment, which it never did when it sat in a container's own layer. `/` in a
+ * folder becomes `__` in the name, which Docker allows and the config refuses in a
+ * folder, so two folders cannot share a volume.
+ */
+export function writableVolumes(name: string, folders: string[]): WritableVolume[] {
+  return folders.map((folder) => ({ folder, volume: `nextship-${name}-data-${folder.replace(/\//g, '__')}` }))
+}
+
 function cacheVolumes(name: string, imageTag: string): { build: string; cache: string } {
   return { build: `nextship-${name}-build-${imageTag}`, cache: `nextship-${name}-cache` }
 }
@@ -406,6 +476,7 @@ export class VmTarget implements Target {
   private readonly server: ServerRecord
   private readonly name: string
   private readonly build: 'remote' | 'local'
+  private readonly writable: WritableVolume[]
   private connection: Promise<Ssh> | null = null
 
   constructor(config: ProjectConfig) {
@@ -415,6 +486,7 @@ export class VmTarget implements Target {
     this.server = config.server
     this.name = assertAppName(config.name)
     this.build = config.build ?? 'remote'
+    this.writable = writableVolumes(this.name, config.writable ?? [])
     this.displayName = `your server ${config.server.host}`
   }
 
@@ -447,7 +519,8 @@ export class VmTarget implements Target {
   ]
 
   readonly rollbackNotes = [
-    'the current env file is used, not the one that deployment ran with: variables changed since then keep their new values',
+    'the deployment replaced within the last hour is still running: going back to it is one Caddy switch, and it keeps the env it ran with',
+    'an older deployment is started again with the current env file, not the one it ran with: variables changed since then keep their new values',
   ]
 
   // ------------------------------------------------------------ connection
@@ -492,6 +565,7 @@ export class VmTarget implements Target {
       "docker version --format '{{.Server.Version}}'",
       `cat ${DEFAULT_APP_FILE} 2> /dev/null || echo`,
       "if ip -6 addr show scope global 2> /dev/null | grep -q inet6; then echo yes; else echo no; fi",
+      `sed -n 's/.*"setupVersion":\\([0-9]*\\).*/\\1/p' ${ETC}/server.json 2> /dev/null || true`,
     ].join('; ')
     return parseFacts(await this.run(script, 'read the server\'s memory and disk'))
   }
@@ -508,7 +582,7 @@ export class VmTarget implements Target {
       .filter((line) => line.trim() !== '')
       .map((line) => {
         const record = JSON.parse(line) as AppRecord
-        return { id: record.id, name: record.name }
+        return { id: record.id, name: record.name, ...(record.previewOf ? { previewOf: record.previewOf } : {}) }
       })
   }
 
@@ -551,8 +625,10 @@ export class VmTarget implements Target {
     const isDefault = facts.defaultApp === this.name || (facts.defaultApp === null && others.length === 0)
     const domains = context.appId ? (await this.appRecord(context.appId)).domains : []
 
+    const keepsPrevious = (facts.setupVersion ?? 0) >= RETIRE_SETUP_VERSION
+    const ip = publicIpv4(this.server.host)
     const address = isDefault
-      ? `address       http://${this.server.host}${domains.length > 0 ? `, and ${domains.map((entry) => entry.domain).join(', ')}` : ''}`
+      ? `address       http://${this.server.host}${ip ? `, and https://${ip} once Let's Encrypt issues its six-day certificate for the address` : ''}${domains.length > 0 ? `, and ${domains.map((entry) => entry.domain).join(', ')}` : ''}`
       : domains.length > 0
         ? `address       ${domains.map((entry) => entry.domain).join(', ')}`
         : `address       none until \`nextship domain add\`: ${facts.defaultApp ?? 'another app'} answers http://${this.server.host}`
@@ -563,8 +639,11 @@ export class VmTarget implements Target {
       context.appId
         ? `app           UPDATE "${context.name}" (${context.appId}), which nextship created`
         : `app           CREATE "${context.name}" in ${ETC}/apps/${context.name}`,
-      `memory        up to ${memoryLimit(facts.memMib, appCount, context.memory)} of ${facts.memMib} MiB`,
+      `memory        up to ${memoryLimit(facts.memMib, appCount, context.memory, keepsPrevious)} of ${facts.memMib} MiB${keepsPrevious ? ', for each of the live container and the one kept for an hour after a deployment' : ''}`,
       address,
+      ...(this.writable.length > 0
+        ? [`writable      ${this.writable.map((entry) => entry.folder).join(', ')}: kept in a volume each, across deployments; everything else in the container is read-only`]
+        : []),
       'switch        Caddy moves traffic only once the new container is healthy; until then the current one serves',
       'caddy         the site is regenerated from the domains recorded for this app',
     ]
@@ -766,6 +845,7 @@ export class VmTarget implements Target {
       cause: 'deploy',
       memory: request.memory,
       healthPath: request.healthPath ?? null,
+      previewOf: request.previewOf,
     })
     return { appId: started.appId, deploymentId: started.releaseId }
   }
@@ -835,12 +915,48 @@ export class VmTarget implements Target {
     return result.code === 0 ? parseDeployments(result.stdout) : []
   }
 
+  /**
+   * Writes the history, and beside it `previous`: the kept container and when it
+   * stops, as `<container> <epoch seconds>`, empty when none is kept. The retire
+   * timer on the server reads that line, since the server has no JSON parser.
+   *
+   * One remote command writes both, each to a temporary file moved into place, so a
+   * connection lost part way leaves the pair as it was rather than a history that
+   * says one thing and a `previous` that says another. `previous` moves first: if
+   * only it lands, the timer knows of a container the history does not, which costs
+   * nothing, where the reverse would leave a kept container nothing ever stops.
+   */
   private async writeDeployments(deployments: VmDeployment[]): Promise<void> {
-    await this.run(
-      `install -m 600 /dev/stdin ${q(`${this.appDir()}/deployments.json`)}`,
-      'write the deployment history',
-      serializeDeployments(deployments)
-    )
+    const kept = previousServing(deployments, new Date())
+    // Safe to place in the command: an app name and a release id are both validated,
+    // and the rest is digits.
+    const previous = kept?.keptUntil ? `${this.name}-${kept.id} ${Math.floor(Date.parse(kept.keptUntil) / 1000)}\n` : ''
+    const script = [
+      'set -eu',
+      `d=${q(this.appDir())}`,
+      'install -m 600 /dev/stdin "$d/deployments.json.next"',
+      `printf '%s' ${q(previous)} > "$d/previous.next" && chmod 600 "$d/previous.next"`,
+      'mv "$d/previous.next" "$d/previous"',
+      'mv "$d/deployments.json.next" "$d/deployments.json"',
+    ].join('\n')
+    await this.run(script, 'write the deployment history', serializeDeployments(deployments))
+  }
+
+  /**
+   * Empties `previous`, so the retire timer stops nothing, before Caddy is pointed
+   * anywhere new. Without this, a rollback to the kept container, or a CLI that died
+   * between the switch and the write that follows it, left `previous` naming the
+   * container Caddy now serves, and the timer stopped the live app when its hour
+   * ran out. Docker's restart policy does not bring back a container that was stopped.
+   */
+  private async clearPrevious(): Promise<void> {
+    await this.run(`: > ${q(`${this.appDir()}/previous`)}`, 'stop the retire timer acting during the switch')
+  }
+
+  /** The Caddy route for the kept deployment, from a history. */
+  private previousRoute(deployments: VmDeployment[], now: Date): { container: string; deploymentId: string } | null {
+    const kept = previousServing(deployments, now)
+    return kept?.imageTag ? { container: `${this.name}-${kept.id}`, deploymentId: kept.imageTag } : null
   }
 
   /**
@@ -850,7 +966,14 @@ export class VmTarget implements Target {
    */
   private async startRelease(
     appId: string | null,
-    options: { imageTag: string; cause: string; memory: string | null; healthPath: string | null; before?: () => Promise<void> }
+    options: {
+      imageTag: string
+      cause: string
+      memory: string | null
+      healthPath: string | null
+      before?: () => Promise<void>
+      previewOf?: string
+    }
   ): Promise<{ appId: string; releaseId: string }> {
     await this.lock()
     try {
@@ -865,7 +988,13 @@ export class VmTarget implements Target {
             'nextship will not modify an app it does not own. Rename this project, or set a different name in nextship.json.'
           )
         }
-        record = { id: randomUUID(), name: this.name, createdAt: new Date().toISOString(), domains: [] }
+        record = {
+          id: randomUUID(),
+          name: this.name,
+          createdAt: new Date().toISOString(),
+          domains: [],
+          ...(options.previewOf ? { previewOf: options.previewOf } : {}),
+        }
         await this.writeAppRecord(record)
       }
       await this.run(`touch ${q(`${this.appDir()}/env`)} && chmod 600 ${q(`${this.appDir()}/env`)}`, 'prepare the env file')
@@ -885,14 +1014,32 @@ export class VmTarget implements Target {
         ].join(' > /dev/null && ') + ' > /dev/null',
         'create the cache volumes'
       )
+      if (this.writable.length > 0) {
+        // Docker creates a volume's directory owned by root, and fills it from the
+        // image, with the image's ownership, only when the image has that folder.
+        // A folder the build did not produce would be one the app's own user cannot
+        // write to, so each is handed to the image's `app` user before the app
+        // starts. Run as root in a container of the same image, which is where the
+        // name `app` means the right uid.
+        const mounts = this.writable.flatMap((entry, index) => ['--volume', `${entry.volume}:/nextship-writable/${index}`])
+        const targets = this.writable.map((_entry, index) => `/nextship-writable/${index}`)
+        await this.run(
+          [
+            ...this.writable.map((entry) => ['docker', 'volume', 'create', ...labels, entry.volume].map(q).join(' ') + ' > /dev/null'),
+            ['docker', 'run', '--rm', '--user', '0:0', '--network', 'none', '--entrypoint', 'chown', ...mounts, reference, 'app:app', ...targets].map(q).join(' '),
+          ].join(' && '),
+          'prepare the writable folders'
+        )
+      }
       const args = runArguments({
         workdir,
         name: this.name,
         releaseId,
         imageTag: assertDeploymentId(options.imageTag),
-        memory: memoryLimit(facts.memMib, apps.length, options.memory),
+        memory: memoryLimit(facts.memMib, apps.length, options.memory, (facts.setupVersion ?? 0) >= RETIRE_SETUP_VERSION),
         healthPath: options.healthPath,
         dockerMajor: Number.parseInt(facts.dockerVersion, 10),
+        writable: this.writable,
       })
 
       const history = recordStarted(await this.readDeployments(), {
@@ -937,8 +1084,14 @@ export class VmTarget implements Target {
     }
 
     const record = await this.appRecord(appId)
+    const now = new Date()
+    // A server set up before the retire timer existed has nothing to stop a kept
+    // container, which would then run, with its memory, until the next deployment.
+    const canKeep = ((await this.facts()).setupVersion ?? 0) >= RETIRE_SETUP_VERSION
+    const history = recordLive(await this.readDeployments(), releaseId, now, canKeep)
+    await this.clearPrevious()
     try {
-      await this.switchSite(record, container)
+      await this.switchSite(record, container, this.previousRoute(history, now))
     } catch (error) {
       await this.discard(container, releaseId, 'was refused by Caddy', onPhase)
       throw new NextshipError(
@@ -953,7 +1106,6 @@ export class VmTarget implements Target {
     // time: a CLI that dies in between would otherwise leave deployments.json
     // naming a stopped container as live, which `domain add` would then rebuild
     // the site from and point the proxy back at something that is not running.
-    const history = recordLive(await this.readDeployments(), releaseId)
     await this.writeDeployments(history)
 
     // A previous container that is restarting or paused is not serving, but it
@@ -963,7 +1115,15 @@ export class VmTarget implements Target {
       `docker ps --filter label=sh.nextship.managed=true --filter ${q(`label=sh.nextship.app=${this.name}`)} --filter status=running --filter status=restarting --filter status=paused --format '{{.Names}}'`,
       'list the running containers'
     )
-    const previous = previousContainers(running, this.name, container)
+    // The deployment this one replaced keeps running for the tabs that loaded it, if
+    // it is a different build; `retire.sh` stops it when its time runs out.
+    const kept = previousServing(history, now)
+    const previous = previousContainers(running, this.name, container).filter((name) => name !== `${this.name}-${kept?.id}`)
+    if (kept) onPhase(`kept ${this.name}-${kept.id} running until ${kept.keptUntil} for tabs that loaded it`)
+    if (!canKeep && replacing) {
+      onPhase('the previous deployment was not kept running for open tabs: this server was set up by an older nextship, which has no timer to stop it')
+      onPhase('Run `nextship server add` with --yes to update the server. Until then a tab opened before a deployment reloads on its next navigation.')
+    }
     if (previous.length > 0) {
       // 30 s matches the time a request is allowed to finish: Next.js exits on
       // SIGTERM once in-flight responses and after() callbacks complete.
@@ -1041,12 +1201,21 @@ export class VmTarget implements Target {
    * the previous file is put back and Caddy reloaded again, so a bad site never
    * takes the proxy down for every app on the server.
    */
-  private async switchSite(record: AppRecord, container: string): Promise<void> {
+  private async switchSite(
+    record: AppRecord,
+    container: string,
+    previous: { container: string; deploymentId: string } | null
+  ): Promise<void> {
+    // A preview never takes the server's own address, which belongs to a real app.
+    const isDefault = record.previewOf === undefined && (await this.claimDefaultApp()) === this.name
     const site = renderSite({
       name: this.name,
       container,
       domains: record.domains,
-      isDefault: (await this.claimDefaultApp()) === this.name,
+      isDefault,
+      previous,
+      preview: record.previewOf !== undefined,
+      ipCertificate: isDefault ? publicIpv4(this.server.host) : null,
     })
     await this.applySite(site)
   }
@@ -1163,9 +1332,13 @@ export class VmTarget implements Target {
         }
       })
     )
+    // HTTPS only once it really answers with a valid certificate, which can take a
+    // minute after the first deployment, or never on a server Let's Encrypt cannot reach.
+    const ip = isDefault ? publicIpv4(this.server.host) : null
+    const secure = ip !== null && (await certificateState(ip, ip)).live
     return {
       platformHost: isDefault ? this.server.host : null,
-      platformUrl: isDefault ? `http://${this.server.host}` : null,
+      platformUrl: isDefault ? `${secure ? 'https' : 'http'}://${this.server.host}` : null,
       domains,
     }
   }
@@ -1192,6 +1365,7 @@ export class VmTarget implements Target {
         'It was pruned. Check out that commit and run `nextship deploy` to build it again. Nothing was changed.'
       )
     }
+    if (await this.rollbackInstantly(appId, target, onPhase)) return
     const live = (await this.readDeployments()).some((entry) => entry.live)
     const started = await this.startRelease(appId, {
       imageTag: target.imageTag,
@@ -1201,6 +1375,44 @@ export class VmTarget implements Target {
     })
     try {
       await this.finishRelease(appId, started.releaseId, onPhase, live, signal)
+    } finally {
+      await this.unlock()
+    }
+  }
+
+  /**
+   * Returns to the kept deployment by pointing Caddy back at its container, which
+   * never stopped, so nothing is built or started and the switch is one reload.
+   * The deployment being left is kept in its place, so a mistaken rollback can be
+   * undone the same way. Returns false, changing nothing, when the target is not
+   * the kept deployment or its container is not running and healthy; the caller
+   * then starts the target's image again as it always did.
+   *
+   * The container runs with the env it started with, which is the env of that
+   * deployment, where a rollback that starts a new container reads the current one.
+   */
+  private async rollbackInstantly(appId: string, target: VmDeployment, onPhase: PhaseReporter): Promise<boolean> {
+    const began = Date.now()
+    const container = `${this.name}-${target.id}`
+
+    // Everything is read under the lock. Read before it, a deployment that went live
+    // in between had already stopped this container, as no longer the kept one, and
+    // the rollback then pointed Caddy at a container that was not running.
+    await this.lock()
+    try {
+      const now = new Date()
+      const before = await this.readDeployments()
+      if (previousServing(before, now)?.id !== target.id) return false
+      const state = await this.exec(`docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' ${q(container)}`)
+      if (state.code !== 0 || state.stdout.trim() !== 'running healthy') return false
+
+      const history = recordLive(before, target.id, now, true)
+      await this.clearPrevious()
+      await this.switchSite(await this.appRecord(appId), container, this.previousRoute(history, now))
+      await this.writeDeployments(history)
+      onPhase(`Caddy now sends traffic to ${container}, which was still running, in ${Date.now() - began} ms`)
+      onPhase('it runs with the env it was deployed with, not the current env file')
+      return true
     } finally {
       await this.unlock()
     }
@@ -1317,7 +1529,8 @@ export class VmTarget implements Target {
     try {
       const record = await this.appRecord(appId)
       const updated = { ...record, domains: change(record.domains) }
-      const live = (await this.readDeployments()).find((entry) => entry.live)
+      const history = await this.readDeployments()
+      const live = history.find((entry) => entry.live)
       if (live) {
         const facts = await this.facts()
         const site = renderSite({
@@ -1325,6 +1538,9 @@ export class VmTarget implements Target {
           container: `${this.name}-${live.id}`,
           domains: updated.domains,
           isDefault: facts.defaultApp === this.name,
+          previous: this.previousRoute(history, new Date()),
+          preview: record.previewOf !== undefined,
+          ipCertificate: facts.defaultApp === this.name ? publicIpv4(this.server.host) : null,
         })
         // The site is validated and live before the record says so, so a domain
         // Caddy refused is never recorded as attached.
@@ -1663,6 +1879,9 @@ export class VmTarget implements Target {
           : 'address    none, this app answers only on its domains',
         ...domains.map((domain) => `domain     ${domain.domain} stops serving this app`),
         `containers remove every container of this app, its cache volumes and ${this.appDir()}`,
+        ...(this.writable.length > 0
+          ? [`data       remove what the app wrote in ${this.writable.map((entry) => entry.folder).join(', ')}: volumes ${this.writable.map((entry) => entry.volume).join(', ')}`]
+          : []),
         options.images && options.imageCount > 0
           ? `images     remove all ${options.imageCount} image(s) of this app from the server`
           : options.images
@@ -1671,13 +1890,17 @@ export class VmTarget implements Target {
         `server     kept, with Caddy and every other app on ${this.server.host}`,
         'DNS        untouched, nextship did not create your records',
       ],
-      warnings:
-        domains.length > 0
+      warnings: [
+        ...(this.writable.length > 0
+          ? [`Everything the app wrote in ${this.writable.map((entry) => entry.folder).join(', ')} is deleted with it. Copy it off the server first if you need it.`]
+          : []),
+        ...(domains.length > 0
           ? [
               `The DNS records for ${domains.map((domain) => domain.domain).join(', ')} keep pointing at ${this.server.host}, ` +
                 "which stops serving this app on them: the server's default app, if any, answers them over plain HTTP. Remove or repoint them.",
             ]
-          : [],
+          : []),
+      ],
     }
   }
 
@@ -1748,7 +1971,9 @@ async function serverAddress(host: string): Promise<string> {
  */
 async function certificateState(host: string, domain: string): Promise<{ live: boolean; detail: string }> {
   return new Promise((resolve) => {
-    const socket = tlsConnect({ host, port: 443, servername: domain, rejectUnauthorized: true, timeout: 5000 })
+    // No server name for an address: TLS forbids one, and Node then checks the
+    // certificate against the address itself.
+    const socket = tlsConnect({ host, port: 443, ...(isIP(domain) ? {} : { servername: domain }), rejectUnauthorized: true, timeout: 5000 })
     socket.once('secureConnect', () => {
       socket.destroy()
       resolve({ live: true, detail: 'certificate issued' })
@@ -1761,4 +1986,26 @@ async function certificateState(host: string, domain: string): Promise<{ live: b
       resolve({ live: false, detail: error.code === 'ECONNREFUSED' ? 'port 443 refused the connection' : 'no valid certificate yet, which Caddy requests once DNS points here' })
     })
   })
+}
+
+/**
+ * The server's address when Let's Encrypt can issue a certificate for it: a literal
+ * IPv4 address outside the private, shared, loopback, link-local, documentation and
+ * multicast ranges, which no public CA may certify. A server added by hostname has a
+ * name to get a certificate for already, through `domain add`.
+ */
+export function publicIpv4(host: string): string | null {
+  if (!isIPv4(host)) return null
+  const [a, b, c] = host.split('.').map(Number)
+  const reserved =
+    a === 0 || a === 10 || a === 127 || a >= 224 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 192 && b === 0 && (c === 0 || c === 2)) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    (a === 198 && b === 51 && c === 100) ||
+    (a === 203 && b === 0 && c === 113)
+  return reserved ? null : host
 }

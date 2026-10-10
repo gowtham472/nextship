@@ -12,7 +12,7 @@ import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { diagnose, type Finding } from './doctor.js'
+import { cronLines, diagnose, translateRoutes, type Finding } from './doctor.js'
 import type { ProjectInfo } from './detect.js'
 
 const projectFor = (root: string, overrides: Partial<ProjectInfo> = {}): ProjectInfo => ({
@@ -236,7 +236,7 @@ test('on a vm target, revalidation is not warned about and cron advice names the
   try {
     const findings = await diagnose(projectFor(root), 'vm')
     assert.equal(titled(findings, 'On-demand revalidation'), undefined)
-    assert.match(titled(findings, 'cron job')?.action ?? '', /systemd timer/)
+    assert.match(titled(findings, 'cron job')?.action ?? '', /on your server, for example with these crontab lines/)
     assert.doesNotMatch(titled(findings, 'cron job')?.action ?? '', /DigitalOcean/)
     assert.equal(titled(findings, 'does not survive a restart'), undefined)
     assert.ok(titled(findings, 'survive a restart'))
@@ -261,5 +261,68 @@ test('a vm project is warned that it runs on one server, and about request.url w
     assert.equal(titled(digitalocean, 'request.url'), undefined)
   } finally {
     await rm(root, { recursive: true, force: true })
+  }
+})
+
+// A cron job left behind on Vercel never runs and nothing reports it, so doctor
+// hands over the line that runs it, calling the route the way Vercel does.
+test('each Vercel cron job becomes a crontab line that calls its route with the secret Vercel sends', () => {
+  assert.deepEqual(cronLines([{ path: '/api/digest', schedule: '0 5 * * *' }]), [
+    '0 5 * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/digest"',
+  ])
+  assert.match(cronLines([{ path: 'api/x', schedule: '* * * * *' }])[0], /^# not translated/)
+  assert.match(cronLines([{ path: '/api/x' }])[0], /^# not translated/)
+})
+
+// next.config takes the same shape as vercel.json for these, so an entry that uses
+// nothing else is handed over as it is; anything else is named, never guessed.
+test('routes carry over into next.config only when nothing about them has to be guessed', () => {
+  const redirects = translateRoutes('redirects', [
+    { source: '/old', destination: '/new', permanent: true },
+    { source: '/moved', destination: '/there' },
+    { source: '/legacy', destination: '/x', permanent: false, regex: true },
+  ])
+  assert.deepEqual(redirects.translated, [{ source: '/old', destination: '/new', permanent: true }])
+  assert.deepEqual(redirects.left, ['/moved does not say whether it is permanent', '/legacy uses regex'])
+
+  const headers = translateRoutes('headers', [{ source: '/(.*)', headers: [{ key: 'X-Frame-Options', value: 'DENY' }] }])
+  assert.equal(headers.translated.length, 1)
+  assert.deepEqual(translateRoutes('rewrites', [{ destination: '/x' }]).left, ['{"destination":"/x"} has no source'])
+})
+
+test('doctor prints the translated routes as a next.config snippet, and names what it left', async () => {
+  const root = await fixture({
+    'package.json': JSON.stringify({ name: 'demo', dependencies: { next: '16.3.4' } }),
+    'vercel.json': JSON.stringify({ redirects: [{ source: '/a', destination: '/b', permanent: true }, { source: '/c', destination: '/d' }] }),
+  })
+  try {
+    const finding = titled(await diagnose(projectFor(root), 'vm'), 'defines redirects')
+    assert.deepEqual(finding?.lines, ['async redirects() {', '  return [{"source":"/a","destination":"/b","permanent":true}]', '},'])
+    assert.match(finding?.action ?? '', /1 of 2 carries over as it is.*\/c does not say whether it is permanent/)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+// The defect: an app that writes beside its code deploys, passes its health check
+// on a prerendered page, and fails with EROFS on its first write, with nothing at
+// deploy time to say so.
+test('on a server, source that looks like it writes local files is told about writable folders, unless it declared some', async () => {
+  const files = {
+    'package.json': JSON.stringify({ name: 'demo', dependencies: { next: '16.3.4' } }),
+    'app/api/upload/route.ts': "import { writeFile } from 'node:fs/promises'\nexport async function POST() { await writeFile('uploads/a', 'x') }",
+    'lib/db.ts': "import Database from 'better-sqlite3'\nexport const db = new Database('data/app.db')",
+  }
+  const root = await fixture(files)
+  const declared = await fixture({ ...files, 'nextship.json': JSON.stringify({ version: 2, target: 'vm', name: 'demo', writable: ['data', 'uploads'] }) })
+  try {
+    const finding = titled(await diagnose(projectFor(root), 'vm'), 'may write files')
+    assert.match(finding?.title ?? '', /better-sqlite3, writeFile/)
+    assert.match(finding?.action ?? '', /"writable": \["data"\]/)
+    assert.equal(titled(await diagnose(projectFor(root), 'digitalocean'), 'may write files'), undefined, 'App Platform containers are writable')
+    assert.equal(titled(await diagnose(projectFor(declared), 'vm'), 'may write files'), undefined, 'declared folders answer it')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+    await rm(declared, { recursive: true, force: true })
   }
 })

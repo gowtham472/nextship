@@ -26,6 +26,9 @@
 #   NEXTSHIP_SSH_PORT     the port that connection used, which the firewall keeps open
 #   NEXTSHIP_MIN_DOCKER   the oldest Docker major nextship builds with (docker.ts)
 #   NEXTSHIP_WATCHDOG_B64 the watchdog script, base64, installed by the watchdog step
+#   NEXTSHIP_CACHE_GUARD_B64 the cache guard script, base64, installed by the
+#                         cache-guard step
+#   NEXTSHIP_RETIRE_B64   the retire script, base64, installed by the retire step
 #   NEXTSHIP_OS_RELEASE   tests only: an os-release file to read instead of
 #                         /etc/os-release, so the OS check runs against fixtures
 #
@@ -36,12 +39,12 @@ set -euo pipefail
 
 # Raised whenever a step changes, so `server status` can tell a server set up by an
 # older nextship to run `server add --yes` again.
-SETUP_VERSION=2
+SETUP_VERSION=3
 
 # Pinned to a minor so a server gets the same Caddy until nextship moves it on purpose.
 CADDY_IMAGE="caddy:2.10"
 
-STEPS="os arch resources ports docker user dirs network caddy journald swap updates firewall watchdog ssh-hardening"
+STEPS="os arch resources ports docker user dirs network caddy journald swap updates firewall watchdog cache-guard retire ssh-hardening"
 
 OS_RELEASE="${NEXTSHIP_OS_RELEASE:-/etc/os-release}"
 MIN_DOCKER="${NEXTSHIP_MIN_DOCKER:-23}"
@@ -380,6 +383,98 @@ apply_watchdog() {
   systemctl daemon-reload
   systemctl enable nextship-watchdog.timer > /dev/null 2>&1
   systemctl restart nextship-watchdog.timer
+}
+
+# ---------------------------------------------------------------- cache-guard
+
+CACHE_GUARD=/usr/local/lib/nextship/cache-guard.sh
+CACHE_GUARD_SERVICE="[Unit]
+Description=Keep what nextship apps write at runtime under their disk limit
+
+[Service]
+Type=oneshot
+ExecStart=$CACHE_GUARD
+"
+# Ten minutes because each run walks every file an app has cached, which is too much
+# work for every minute, and a disk does not fill in ten minutes at the rates seen.
+CACHE_GUARD_TIMER="[Unit]
+Description=Run the nextship cache guard every ten minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
+"
+
+check_cache_guard() {
+  local expected=""
+  [ -n "${NEXTSHIP_CACHE_GUARD_B64:-}" ] && expected="$(printf '%s' "$NEXTSHIP_CACHE_GUARD_B64" | base64 -d)"
+  if [ ! -f "$CACHE_GUARD" ] || [ "$(cat "$CACHE_GUARD")" != "$expected" ] ||
+    [ "$(cat /etc/systemd/system/nextship-cache-guard.timer 2> /dev/null)" != "$(printf '%s' "$CACHE_GUARD_TIMER")" ] ||
+    [ "$(cat /etc/systemd/system/nextship-cache-guard.service 2> /dev/null)" != "$(printf '%s' "$CACHE_GUARD_SERVICE")" ]; then
+    result change "install a cache guard that keeps each app's runtime cache under 10% of the disk"
+    return
+  fi
+  if ! systemctl is-active --quiet nextship-cache-guard.timer; then result change "start the cache guard timer"; return; fi
+  result ok "cache guard runs every ten minutes"
+}
+apply_cache_guard() {
+  install -d -m 0755 /usr/local/lib/nextship
+  printf '%s' "$NEXTSHIP_CACHE_GUARD_B64" | base64 -d > "$CACHE_GUARD"
+  chmod 0755 "$CACHE_GUARD"
+  printf '%s' "$CACHE_GUARD_SERVICE" > /etc/systemd/system/nextship-cache-guard.service
+  printf '%s' "$CACHE_GUARD_TIMER" > /etc/systemd/system/nextship-cache-guard.timer
+  systemctl daemon-reload
+  systemctl enable nextship-cache-guard.timer > /dev/null 2>&1
+  systemctl restart nextship-cache-guard.timer
+}
+
+# --------------------------------------------------------------------- retire
+
+RETIRE=/usr/local/lib/nextship/retire.sh
+RETIRE_SERVICE="[Unit]
+Description=Stop the previous nextship deployment once its tabs have had their hour
+
+[Service]
+Type=oneshot
+ExecStart=$RETIRE
+"
+RETIRE_TIMER="[Unit]
+Description=Run the nextship retire check every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
+"
+
+check_retire() {
+  local expected=""
+  [ -n "${NEXTSHIP_RETIRE_B64:-}" ] && expected="$(printf '%s' "$NEXTSHIP_RETIRE_B64" | base64 -d)"
+  if [ ! -f "$RETIRE" ] || [ "$(cat "$RETIRE")" != "$expected" ] ||
+    [ "$(cat /etc/systemd/system/nextship-retire.timer 2> /dev/null)" != "$(printf '%s' "$RETIRE_TIMER")" ] ||
+    [ "$(cat /etc/systemd/system/nextship-retire.service 2> /dev/null)" != "$(printf '%s' "$RETIRE_SERVICE")" ]; then
+    result change "install a timer that stops the previous deployment an hour after it was replaced"
+    return
+  fi
+  if ! systemctl is-active --quiet nextship-retire.timer; then result change "start the retire timer"; return; fi
+  result ok "previous deployments stop an hour after they are replaced"
+}
+apply_retire() {
+  install -d -m 0755 /usr/local/lib/nextship
+  printf '%s' "$NEXTSHIP_RETIRE_B64" | base64 -d > "$RETIRE"
+  chmod 0755 "$RETIRE"
+  printf '%s' "$RETIRE_SERVICE" > /etc/systemd/system/nextship-retire.service
+  printf '%s' "$RETIRE_TIMER" > /etc/systemd/system/nextship-retire.timer
+  systemctl daemon-reload
+  systemctl enable nextship-retire.timer > /dev/null 2>&1
+  systemctl restart nextship-retire.timer
 }
 
 # -------------------------------------------------------------- ssh-hardening

@@ -29,6 +29,8 @@ export interface Finding {
   consequence: string
   /** What to do about it. */
   action: string
+  /** Text to use as it stands, such as crontab lines or a next.config snippet, when the action needs it. */
+  lines?: string[]
 }
 
 /** Vercel packages that degrade silently rather than failing when they are off Vercel. */
@@ -158,24 +160,74 @@ async function vercelConfigFindings(root: string, target: TargetId): Promise<Fin
       title: `vercel.json defines ${config.crons.length} cron job(s)`,
       consequence: 'They will never run. Nothing schedules them off Vercel, and nothing reports that.',
       action:
-        target === 'vm'
-          ? 'Schedule them on your server, for example a systemd timer or a crontab entry that calls the route.'
-          : 'Schedule them with your platform, for example a DigitalOcean scheduled job that calls the route.',
+        (target === 'vm'
+          ? 'Schedule them on your server, for example with these crontab lines, which call each route as Vercel does.'
+          : 'Schedule them with your platform, for example a DigitalOcean scheduled job, or these crontab lines on any machine, which call each route as Vercel does.') +
+        ' Set APP_URL, and CRON_SECRET if your routes check it, at the top of the crontab: Vercel sends CRON_SECRET as a bearer token. Vercel runs schedules in UTC; cron uses the machine\'s time zone.',
+      lines: cronLines(config.crons),
     })
   }
 
   for (const key of ['rewrites', 'redirects', 'headers'] as const) {
     if (Array.isArray(config[key]) && config[key].length > 0) {
+      const { translated, left } = translateRoutes(key, config[key])
       findings.push({
         level: 'warning',
         title: `vercel.json defines ${key}`,
         consequence: `These ${key} stop applying. Only the equivalents in next.config are used.`,
-        action: `Move them into next.config, which works on any host.`,
+        action:
+          translated.length > 0
+            ? `Move them into next.config, which works on any host. ${translated.length} of ${config[key].length} ${translated.length === 1 ? 'carries' : 'carry'} over as ${translated.length === 1 ? 'it is' : 'they are'}, in the lines below.` +
+              (left.length > 0 ? ` Translate the other ${left.length} by hand: ${left.join('; ')}.` : '')
+            : `Move them into next.config, which works on any host. None carries over as it is: ${left.join('; ')}.`,
+        ...(translated.length > 0 ? { lines: [`async ${key}() {`, `  return ${JSON.stringify(translated)}`, '},'] } : {}),
       })
     }
   }
 
   return findings
+}
+
+/** A crontab line per Vercel cron job, calling its route the way Vercel does. */
+export function cronLines(crons: unknown[]): string[] {
+  return crons.map((cron) => {
+    const { path: route, schedule } = (cron ?? {}) as { path?: unknown; schedule?: unknown }
+    if (typeof route !== 'string' || !route.startsWith('/') || typeof schedule !== 'string') {
+      return `# not translated, it has no path starting with / or no schedule: ${JSON.stringify(cron)}`
+    }
+    return `${schedule} curl -fsS -H "Authorization: Bearer $CRON_SECRET" "$APP_URL${route}"`
+  })
+}
+
+/**
+ * The fields next.config accepts for each kind of route. vercel.json uses the same
+ * shape for these, so an entry that uses nothing else carries over unchanged. An
+ * entry with any other field, or a redirect that does not say whether it is
+ * permanent, which next.config requires, is left for a person to decide.
+ */
+const NEXT_ROUTE_FIELDS = {
+  redirects: ['source', 'destination', 'permanent', 'statusCode', 'basePath', 'locale', 'has', 'missing'],
+  rewrites: ['source', 'destination', 'basePath', 'locale', 'has', 'missing'],
+  headers: ['source', 'headers', 'basePath', 'locale', 'has', 'missing'],
+} as const
+
+export function translateRoutes(
+  key: keyof typeof NEXT_ROUTE_FIELDS,
+  entries: unknown[]
+): { translated: Record<string, unknown>[]; left: string[] } {
+  const translated: Record<string, unknown>[] = []
+  const left: string[] = []
+  for (const entry of entries) {
+    const route = (entry ?? {}) as Record<string, unknown>
+    const source = typeof route.source === 'string' ? route.source : JSON.stringify(entry)
+    const unknown = Object.keys(route).filter((field) => !(NEXT_ROUTE_FIELDS[key] as readonly string[]).includes(field))
+    if (typeof route.source !== 'string') left.push(`${source} has no source`)
+    else if (unknown.length > 0) left.push(`${source} uses ${unknown.join(', ')}`)
+    else if (key === 'redirects' && route.permanent === undefined && route.statusCode === undefined) {
+      left.push(`${source} does not say whether it is permanent`)
+    } else translated.push(route)
+  }
+  return { translated, left }
 }
 
 /**
@@ -271,6 +323,23 @@ function runtimeFindings(project: ProjectInfo, target: TargetId): Finding[] {
  * What changes when the app runs on one server instead of a platform. Warned on
  * every vm project, because nothing in the source can show these are handled.
  */
+/**
+ * What in a source file suggests the app writes to its own disk: the file system
+ * calls that create or change a file, and the SQLite drivers, which keep their
+ * database in one. A sign, not proof: the path may be /tmp, which is writable.
+ */
+const LOCAL_WRITE_SIGNS = [
+  'writeFile(',
+  'writeFileSync(',
+  'appendFile(',
+  'appendFileSync(',
+  'createWriteStream(',
+  "'better-sqlite3'",
+  '"better-sqlite3"',
+  "'node:sqlite'",
+  '"node:sqlite"',
+]
+
 async function serverFindings(root: string): Promise<Finding[]> {
   const findings: Finding[] = [
     {
@@ -281,6 +350,27 @@ async function serverFindings(root: string): Promise<Finding[]> {
       action: `See ${docsUrl('vm.md', '7-backups-and-recovery')} for what to back up and how to recover on a new server.`,
     },
   ]
+
+  // Read as plain JSON, not through readConfig: doctor still reports what it can
+  // when nextship.json is damaged, and says so separately.
+  const declared = (await readJson(path.join(root, 'nextship.json')))?.writable
+  const writes = new Set<string>()
+  if (!Array.isArray(declared) || declared.length === 0) {
+    for await (const file of sourceFiles(root)) {
+      const contents = await readFile(file, 'utf8').catch(() => '')
+      for (const sign of LOCAL_WRITE_SIGNS) if (contents.includes(sign)) writes.add(sign.replace(/[('"]/g, ''))
+    }
+  }
+  if (writes.size > 0) {
+    findings.push({
+      level: 'warning',
+      title: `The source may write files beside the app: ${[...writes].sort().join(', ')}`,
+      consequence:
+        "On a server the app's container is read-only apart from .next and /tmp. A write anywhere else fails with EROFS at the moment it happens, not at deploy: the app deploys and passes its health check first.",
+      action:
+        'If the app writes under its own directory, list the folders in nextship.json, for example "writable": ["data"]. Each becomes a volume the app can write to, kept across deployments. Writes to /tmp, object storage or a database need nothing.',
+    })
+  }
 
   for await (const file of sourceFiles(root)) {
     const contents = await readFile(file, 'utf8').catch(() => '')

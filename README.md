@@ -287,8 +287,8 @@ is reported as a blocker.
 | Checked | Why it matters |
 |---|---|
 | `@vercel/analytics` and similar packages | They stop reporting and nothing errors |
-| Cron jobs in `vercel.json` | They will simply never run |
-| Routing rules in `vercel.json` | They stop applying |
+| Cron jobs in `vercel.json` | They will simply never run. `doctor` prints a crontab line for each that calls its route as Vercel does, with `CRON_SECRET` as a bearer token |
+| Routing rules in `vercel.json` | They stop applying. `doctor` prints the redirects, rewrites and headers that carry over unchanged as a `next.config` snippet, and names each one that needs a decision, such as a redirect that does not say whether it is permanent |
 | `VERCEL_URL` and `VERCEL_ENV` read in source | They become undefined |
 | Packages in `node_modules` that nothing declares | They exist on your machine and not in the image, so the build fails on an import that resolves locally |
 | A missing lockfile | Installs are no longer reproducible |
@@ -354,7 +354,7 @@ deployed, and a page that did not compile failed once, with no retry.
 | Option | Default | Meaning |
 |---|---|---|
 | `--build <mode>` | `remote` | `remote` builds on the server's own Docker, reached over SSH through a private socket, or a named pipe on Windows, so nothing but the build context leaves your machine, no port is opened, and the image is built natively for the server. `local` builds here for the server's architecture and streams the image with `docker save \| ssh docker load`. Recorded in `nextship.json`. A server under 2 GB of RAM is refused for remote builds |
-| `--memory <size>` | an even share of 80% of RAM across the server's apps | The container's memory limit, such as `512m` |
+| `--memory <size>` | an even share of 80% of RAM across the containers the server's apps can run at once: two per app, the live one and the one kept for an hour after a deployment | The container's memory limit, such as `512m`. One app on a 2 GB server gets 800m by default |
 
 ```
 > Plan
@@ -371,7 +371,7 @@ deployed, and a page that did not compile failed once, with no retry.
 ```
 
 A deployment starts a new container with no published port, waits for Docker to report it
-healthy, then points Caddy at it and stops the previous one. Nothing a visitor sees
+healthy, then points Caddy at it. Nothing a visitor sees
 changes until the new container is healthy, so a deployment that fails leaves the previous
 one serving, and a deployment that succeeds drops no request. Its last log lines are
 printed when it fails. The first app deployed on a server answers `http://<server>`;
@@ -382,8 +382,44 @@ so every machine that deploys, including CI, builds with the same key. A key alr
 your local file is copied to the server on the first deploy. If the server and your local
 file hold different keys, `deploy` refuses rather than choosing one.
 
-`rollback` on a server starts the earlier deployment's image again the same way. It uses
-the current env file, not the one that deployment first ran with, and the plan says so.
+**A tab opened before a deployment keeps working after it.** The deployment a new build
+replaces keeps running for an hour, and Caddy sends it every request that names its build,
+which Next.js does on each client navigation, Server Action and script an open tab loads.
+Without this, such a tab asks the new build for files and Server Actions it does not have.
+A page load names no build and gets the new one. After the hour, the old container stops
+and a tab still open from before loads the new build on its next navigation. The cost is a
+second container's memory for that hour, which the default memory limit already counts. A
+change that starts the same build again, such as `env push`, keeps nothing extra. A server
+set up by nextship 1.1.x has no timer to stop the kept container, so a deployment to one
+keeps nothing and says so: run `nextship server add` again with `--yes` to update it.
+
+`rollback` on a server to the deployment replaced within the last hour is instant: that
+container is still running, so Caddy is pointed back at it and nothing is built or
+started, and it keeps the env it ran with. A rollback further back starts that
+deployment's image again with the current env file, and the plan says which is which.
+
+**Folders your app writes to.** Everything in an app's container is read-only apart from
+`.next` and `/tmp`. An app that keeps a SQLite file or uploads beside its code lists the
+folders in `nextship.json`:
+
+```json
+{ "writable": ["data", "public/uploads"] }
+```
+
+Each is a volume the app can write to, and what it writes there outlives a deployment, which
+it never did inside a container. A folder is relative to the app's directory, and
+`.next`, `node_modules` and anything starting with a dot are refused. `nextship doctor`
+warns when the source looks like it writes files and no folder is declared. `destroy`
+deletes that data with the app, and `server move` does not copy it: both say so before
+they act.
+
+**Previews.** `nextship deploy --preview pr-42` deploys the current source as a second app on
+the same server, `<app>-pr-42`, with its own env file and domains, and never writes
+`nextship.json`. The same flag scopes `rollback`, `logs`, `env`, `domain`, `images` and
+`destroy` to it, and the preview is found again from the app it previews, so a CI run with
+only the committed `nextship.json` can update or remove it. A preview answers only on the
+domains attached to it and asks crawlers not to index it. A workflow that deploys one per
+pull request is in [`docs/vm.md`](./docs/vm.md) §6.
 
 ### `nextship rollback`
 
@@ -635,6 +671,10 @@ Removes the app this project created, and nothing else.
 | `--yes` | off | Execute the plan. Without it, `destroy` only prints the plan |
 | `--images` | off | Also remove this project's images, then start garbage collection |
 
+On a server, an app's previews are destroyed with it, images included, and the plan names
+each one. A preview is found through the app it previews, so one left behind could never be
+reached again.
+
 **The app name is required**, and this is the only command that asks for one. Every
 other command acts on whatever directory you are in, which is fine when nothing can be
 destroyed. Here it is not: `--yes` typed in the wrong project would remove the wrong
@@ -698,7 +738,9 @@ server presenting any other key is refused.
 With `--yes` it installs Docker CE if the server has none, creates a `nextship` user and
 proves a login as that user from your machine, runs Caddy on ports 80 and 443, limits the
 journal, enables security updates and ufw, installs a watchdog for containers that stay
-unhealthy, and turns off SSH password logins last. Every later command connects as
+unhealthy, a cache guard that keeps what each app writes at runtime under a limit and a
+timer that stops a replaced deployment after its hour, and turns off SSH password logins
+last. Every later command connects as
 `nextship`. Running it again against a server that is set up changes nothing; running it
 from a second project records the same server for that project. Each step is described in
 [`docs/vm.md`](./docs/vm.md).
@@ -908,6 +950,10 @@ On a server, `server add` creates:
   caddy/sites/                          one Caddy site per app
 /usr/local/lib/nextship/watchdog.sh     restarts containers unhealthy for 3 checks in a row
 /etc/systemd/system/nextship-watchdog.* the timer that runs it every minute
+/usr/local/lib/nextship/cache-guard.sh  keeps each app's runtime cache under 10% of the disk
+/etc/systemd/system/nextship-cache-guard.* the timer that runs it every ten minutes
+/usr/local/lib/nextship/retire.sh       stops a replaced deployment once its hour for open tabs is over
+/etc/systemd/system/nextship-retire.*   the timer that runs it every minute
 /etc/systemd/journald.conf.d/nextship.conf   SystemMaxUse=500M, only if no limit was set
 /etc/ssh/sshd_config.d/10-nextship.conf      unless --no-ssh-hardening
 /etc/apt/apt.conf.d/20auto-upgrades          unless --no-auto-updates
@@ -997,10 +1043,22 @@ deploy:
   is no CDN in front unless you add one, the operating system is yours to keep patched
   and rebooted, and backups are yours. The `nextship` user is root-equivalent. See
   [`docs/vm.md`](./docs/vm.md).
-- **On a server, rollback uses the current env file.** Rolling back code does not roll
-  back a variable changed since, which App Platform does.
+- **On a server, a rollback further back than the last hour uses the current env file.**
+  Rolling back code does not roll back a variable changed since, which App Platform does.
+  A rollback to the deployment replaced within the hour keeps its own env.
 - **On a server, only the first app deployed answers `http://<server>`.** Every other app
   answers only on the domains attached to it.
+- **On a server, your app cannot write its own files.** The container is read-only apart
+  from `.next`, a 64 MB `/tmp` that cannot run a binary, and the folders you list as
+  `writable` in `nextship.json`, so an attacker who gets code running through a flaw in
+  your app can neither rewrite it nor leave a program behind. An app that saves uploads to
+  a folder it has not listed deploys, passes its health check, and fails with `EROFS` on
+  its first write; `nextship doctor` warns about source that looks like it does. A package
+  that unpacks an executable into `/tmp`, such as a headless Chromium, cannot run it.
+- **On a server, writable folders live on that one server.** They are not backed up, and
+  `server move` does not copy them. For the hour after a deployment the previous
+  deployment's container has the same folders mounted, so a SQLite file there can have
+  two processes writing to it.
 - **A server's env file cannot hold a value with a line break.** Docker reads it one line
   per variable, so `env push` refuses such a value rather than truncating it. Encode it,
   for example as base64.
@@ -1083,7 +1141,7 @@ conformance/           scripts for the official Next.js adapter compatibility su
 packages/
   adapter/             Next.js Adapter API implementation, injected via NEXT_ADAPTER_PATH
   cli/                 every command; runtime/ holds the files copied into a build,
-                       and runtime/vm/ the setup and watchdog scripts sent to a server
+                       and runtime/vm/ the setup and timer scripts sent to a server
 site/                  the marketing site and documentation, exported as static files
 ```
 

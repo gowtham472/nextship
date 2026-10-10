@@ -31,6 +31,7 @@ import { DEFAULT_REGION } from './targets/digitalocean-target.js'
 import { NextshipError } from './errors.js'
 import { DEFAULT_PLATFORM } from './image/dockerfile.js'
 import type { BuildPlacement } from './docker.js'
+import { takePreview } from './preview.js'
 import { VERSION } from './version.js'
 import { detail, fail, ok, step, warn } from './util/log.js'
 
@@ -88,7 +89,8 @@ Deploy options, vm target
   --build <mode>      remote builds on the server (default), local builds here and
                       streams the image over SSH. Recorded in nextship.json
   --memory <size>     Container memory limit, such as 512m (default: an even share
-                      of 80% of the server's RAM across its apps)
+                      of 80% of the server's RAM across two containers per app,
+                      the live one and the one kept an hour after a deployment)
 
 Rollback options
   --yes               Execute the plan. Without it, rollback only prints the plan
@@ -118,6 +120,13 @@ Server add and server move options
   --no-auto-updates   Do not enable unattended security updates
   --no-swap           Do not add a swap file on a server under 4 GB of RAM
   --no-ssh-hardening  Leave password logins and root login as they are
+
+Preview options, vm target
+  --preview <name>    Act on the preview <name> instead of the app: a separate app on
+                      the same server named <app>-<name>, with its own env and domains.
+                      Taken by deploy, rollback, logs, env, domain, images and destroy.
+                      \`deploy --preview <name>\` creates it; \`destroy <app>-<name>
+                      --preview <name>\` removes it
 
 Domain options
   --yes               Execute the plan. Without it, domain only prints the plan
@@ -161,6 +170,7 @@ async function main(argv: string[]): Promise<void> {
     return
   }
 
+  const rest = takePreview(command, argv.slice(1))
   switch (command) {
     case 'detect':
       return runDetect()
@@ -173,21 +183,21 @@ async function main(argv: string[]): Promise<void> {
     case 'doctor':
       return runDoctor()
     case 'deploy':
-      return runDeploy(argv.slice(1))
+      return runDeploy(rest)
     case 'rollback':
-      return runRollback(argv.slice(1))
+      return runRollback(rest)
     case 'logs':
-      return runLogs(argv.slice(1))
+      return runLogs(rest)
     case 'env':
-      return runEnv(argv.slice(1))
+      return runEnv(rest)
     case 'domain':
-      return runDomain(argv.slice(1))
+      return runDomain(rest)
     case 'images':
-      return runImages(argv.slice(1))
+      return runImages(rest)
     case 'destroy':
-      return runDestroy(argv.slice(1))
+      return runDestroy(rest)
     case 'server':
-      return runServer(argv.slice(1))
+      return runServer(rest)
     default:
       throw new NextshipError(`Unknown command \`${command}\`.`, 'Run `nextship --help` to see the available commands.')
   }
@@ -292,6 +302,7 @@ function report(finding: Finding): void {
   if (finding.level === 'note') detail(line)
   else warn(line)
   detail(`  ${finding.action}`)
+  for (const line of finding.lines ?? []) detail(`    ${line}`)
 }
 
 /** Reads `--flag value` pairs, so an unknown flag is an error rather than silently ignored. */
