@@ -83,3 +83,28 @@ test('an app\'s limit covers its cache and build volumes together', linuxOnly, (
   rmSync(cache, { recursive: true })
   rmSync(build, { recursive: true })
 })
+
+// The defect: sorted by access time alone, a volume mounted `noatime` never updates
+// one, so every file tied at its creation and the guard evicted in no order at
+// all, the busiest entries included.
+test('where access times are not kept, the oldest written goes first', linuxOnly, () => {
+  const cache = volume()
+  // Every access time is the same, as it is when the kernel never updates them.
+  entry(path.join(cache, 'images/old/img.webp'), 100, 5000)
+  entry(path.join(cache, 'images/mid/img.webp'), 100, 7000)
+  entry(path.join(cache, 'images/new/img.webp'), 100, 9000)
+  assert.equal(evict(128, cache).split(' ')[0], '2')
+  assert.ok(existsSync(path.join(cache, 'images/new/img.webp')), 'the newest written is kept')
+  assert.ok(!existsSync(path.join(cache, 'images/old')) && !existsSync(path.join(cache, 'images/mid')))
+  rmSync(cache, { recursive: true })
+})
+
+test('a file read recently is kept over one written more recently but not read since', linuxOnly, () => {
+  const cache = volume()
+  entry(path.join(cache, 'images/read/img.webp'), 9000, 1000)
+  entry(path.join(cache, 'images/written/img.webp'), 100, 5000)
+  entry(path.join(cache, 'images/idle/img.webp'), 100, 2000)
+  assert.equal(evict(128, cache).split(' ')[0], '2')
+  assert.ok(existsSync(path.join(cache, 'images/read/img.webp')))
+  rmSync(cache, { recursive: true })
+})

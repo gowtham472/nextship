@@ -18,6 +18,13 @@
 # Next.js reads a missing file as a cache miss and renders the page or encodes the
 # image again. Every eviction is logged to the journal under nextship-cache-guard.
 #
+# "Used" is the later of a file's last access and its last write. Access times alone
+# are not enough: under `relatime`, the default, the kernel updates one at most once
+# a day, and under `noatime` never, where sorting by access would order files by
+# nothing and evict the busiest with the idle. With the write time taken too, a
+# volume that keeps no access times is evicted oldest written first, and one that
+# does is evicted least recently used first, to the day.
+#
 # Author: Ragul D
 # Design: ../../../../docs/design.md §9.3
 
@@ -38,21 +45,22 @@ limit_kib() {
   echo "$share"
 }
 
-# Prints "<access time> <KiB> <path>" for each file Next.js wrote at runtime under
-# the given volume directories. A build volume is given as "<dir>@<epoch>": only its
-# files modified after that moment count.
+# Prints "<last used> <KiB> <path>" for each file Next.js wrote at runtime under the
+# given volume directories, where last used is the later of its access and write
+# times. A build volume is given as "<dir>@<epoch>": only its files modified after
+# that moment count.
 runtime_files() {
   local entry dir since
   for entry in "$@"; do
     dir="${entry%@*}"
     [ -d "$dir" ] || continue
     if [ "$entry" = "$dir" ]; then
-      find "$dir" -type f -printf '%A@ %k %p\n'
+      find "$dir" -type f -printf '%A@ %T@ %k %p\n'
     else
       since="${entry##*@}"
-      find "$dir" -type f -newermt "@$since" -printf '%A@ %k %p\n'
+      find "$dir" -type f -newermt "@$since" -printf '%A@ %T@ %k %p\n'
     fi
-  done
+  done | awk '{ used = ($1 > $2) ? $1 : $2; sub(/^[^ ]+ [^ ]+ /, ""); print used, $0 }'
 }
 
 # Deletes the least recently used runtime files of one app until what remains is at
