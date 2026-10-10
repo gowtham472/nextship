@@ -47,8 +47,8 @@ steps. Running `server add` again changes nothing.
 nextship deploy --yes
 ```
 
-The image is built on the server's own Docker by default, through an SSH forward that keeps
-the pinned host key. `--build local` builds on your machine instead and streams the image
+The image is built on the server's own Docker by default, reached over SSH with the pinned
+host key, through a private socket or, on Windows, a named pipe. No port is opened. `--build local` builds on your machine instead and streams the image
 over SSH, which suits a server with little memory. If the build's connection to the
 server's Docker drops mid-build, which has happened right after `server add` on a fresh
 server, `deploy` says so and builds once more; any other build failure is reported at once.

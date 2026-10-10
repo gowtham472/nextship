@@ -65,7 +65,7 @@ destroyed afterwards, so its URL no longer serves.
 
 ## Status
 
-**Version 1.1.2, for Next.js on DigitalOcean App Platform or on any Linux server over SSH.** App Platform is verified against live deployments, including streaming through App Platform itself, re-checked against a live app for 1.1.0, and deployed from both Windows and an Apple Silicon Mac. The server target is new in 1.1.0 and verified on a local test server, a Proxmox VM and DigitalOcean Droplets. Hetzner, arm64, Debian 12 and a certificate for a real domain have not run yet, and are on the server target's live checklist.
+**Version 1.1.3, for Next.js on DigitalOcean App Platform or on any Linux server over SSH.** App Platform is verified against live deployments, including streaming through App Platform itself, re-checked against a live app for 1.1.0, and deployed from both Windows and an Apple Silicon Mac. The server target is new in 1.1.0 and verified on a local test server, a Proxmox VM and DigitalOcean Droplets, and since 1.1.3 from Windows 11 with its own OpenSSH. Hetzner, arm64, Debian 12 and a certificate for a real domain have not run yet, and are on the server target's live checklist.
 
 | Area | State |
 |---|---|
@@ -353,7 +353,7 @@ deployed, and a page that did not compile failed once, with no retry.
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--build <mode>` | `remote` | `remote` builds on the server's own Docker, reached through an SSH forward of its socket, so nothing but the build context leaves your machine and the image is built natively for the server. `local` builds here for the server's architecture and streams the image with `docker save \| ssh docker load`. Recorded in `nextship.json`. A server under 2 GB of RAM is refused for remote builds |
+| `--build <mode>` | `remote` | `remote` builds on the server's own Docker, reached over SSH through a private socket, or a named pipe on Windows, so nothing but the build context leaves your machine, no port is opened, and the image is built natively for the server. `local` builds here for the server's architecture and streams the image with `docker save \| ssh docker load`. Recorded in `nextship.json`. A server under 2 GB of RAM is refused for remote builds |
 | `--memory <size>` | an even share of 80% of RAM across the server's apps | The container's memory limit, such as `512m` |
 
 ```
@@ -1245,7 +1245,9 @@ Bun's adapter keeps a list of its own the same way.
 | **v1.1** | Any Linux server over SSH | Released in 1.1.0. Verified end to end on a local test server, a Proxmox VM and DigitalOcean Droplets |
 | **Next** | The rest of the server target's live checklist | Planned, not tied to a version: a Hetzner VM, an arm64 machine, Debian 12, a certificate for a real domain, and the GitHub Actions workflow |
 
-Beyond v1.0, each with the trigger that would justify it: correctness at scale (a
+Planned for the CLI, none of it built: two defects to fix, machine-readable output, and
+more than one instance of an app, which is the largest piece of work ahead. Beyond v1.0,
+each with the trigger that would justify it: correctness at scale (a
 shared cache and distributed tags, needed once there is more than one instance),
 git-driven previews, a hosted control plane, edge performance (which is where serving
 static assets from a CDN now lives), and other frameworks. The roadmap also records

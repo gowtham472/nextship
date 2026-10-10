@@ -19,8 +19,12 @@
  */
 
 import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { NextshipError } from '../../errors.js'
-import { captureStrict } from '../../util/exec.js'
+import { capture, captureStrict } from '../../util/exec.js'
 
 /** Key types in order of preference. ed25519 first: smallest, fastest, no parameter choices to get wrong. */
 const PREFERRED_TYPES = ['ssh-ed25519', 'ecdsa-sha2-nistp256', 'ecdsa-sha2-nistp384', 'ecdsa-sha2-nistp521', 'ssh-rsa']
@@ -88,22 +92,35 @@ export function knownHostsLine(alias: string, key: HostKey): string {
   return `${alias} ${key.type} ${key.key}\n`
 }
 
-/** Reads the server's host key over the network, for trust on first use. */
+/**
+ * Reads the server's host key over the network, for trust on first use.
+ *
+ * `ssh-keyscan` first. The one Windows ships (OpenSSH for Windows 9.5) cannot scan
+ * a current server at all: it offers a key exchange it was not built with, and
+ * ends with `choose_kex: unsupported KEX method sntrup761x25519-sha512@openssh.com`
+ * against the OpenSSH 9.6 of Ubuntu 24.04. Found by running `server add` from
+ * Windows against a Droplet. `ssh` on the same machine negotiates correctly, so
+ * when the scan fails the key is read by letting `ssh` record it instead.
+ */
 export async function scanHostKey(host: string, port: number): Promise<HostKey> {
-  let output: string
+  let keys: HostKey[]
   try {
-    output = await captureStrict('ssh-keyscan', ['-T', '15', '-t', 'ed25519,ecdsa,rsa', '-p', String(port), host], {
+    const output = await captureStrict('ssh-keyscan', ['-T', '15', '-t', 'ed25519,ecdsa,rsa', '-p', String(port), host], {
       cwd: process.cwd(),
       env: process.env,
     })
+    keys = parseKeyscan(output)
   } catch (error) {
-    throw new NextshipError(
-      `Could not read the host key of ${host}:${port}.`,
-      `Check that the server is up and that SSH listens on port ${port}. ${error instanceof Error ? error.message : ''}`.trim()
-    )
+    keys = await recordedHostKeys(host, port)
+    if (keys.length === 0) {
+      throw new NextshipError(
+        `Could not read the host key of ${host}:${port}.`,
+        `Check that the server is up and that SSH listens on port ${port}. ${error instanceof Error ? error.message : ''}`.trim()
+      )
+    }
   }
 
-  const key = preferredKey(parseKeyscan(output))
+  const key = preferredKey(keys)
   if (!key) {
     throw new NextshipError(
       `${host}:${port} offered no host key nextship recognises.`,
@@ -111,4 +128,45 @@ export async function scanHostKey(host: string, port: number): Promise<HostKey> 
     )
   }
   return key
+}
+
+/**
+ * The arguments that make `ssh` write a server's host key of one type into
+ * `knownHosts` and stop. It offers no way to authenticate, so it sends no key and
+ * no password and ends at "permission denied", after the key exchange has
+ * recorded what the server presented. Nothing is trusted by this: the file is
+ * thrown away, and the key goes through the same printed fingerprint and `--yes`
+ * as a scanned one.
+ */
+export function recordArguments(host: string, port: number, knownHosts: string, type: string): string[] {
+  return [
+    '-o', 'BatchMode=yes',
+    '-o', 'PreferredAuthentications=none',
+    '-o', 'StrictHostKeyChecking=no',
+    '-o', `UserKnownHostsFile=${knownHosts}`,
+    '-o', 'GlobalKnownHostsFile=none',
+    '-o', `HostKeyAlgorithms=${hostKeyAlgorithms({ type, key: '' })}`,
+    '-o', 'CheckHostIP=no',
+    '-o', 'ConnectTimeout=15',
+    '-o', 'LogLevel=ERROR',
+    '-p', String(port),
+    '--', `nextship-host-key@${host}`,
+  ]
+}
+
+/** The server's host keys as `ssh` records them, the first type it presents in order of preference. */
+async function recordedHostKeys(host: string, port: number): Promise<HostKey[]> {
+  const directory = await mkdtemp(path.join(tmpdir(), 'nextship-host-key-'))
+  try {
+    const knownHosts = path.join(directory, 'known_hosts')
+    for (const type of PREFERRED_TYPES) {
+      // Expected to fail: the connection is refused once the key has been recorded.
+      await capture('ssh', recordArguments(host, port, knownHosts, type), { cwd: process.cwd() })
+      const recorded = existsSync(knownHosts) ? parseKeyscan(await readFile(knownHosts, 'utf8')) : []
+      if (recorded.length > 0) return recorded
+    }
+    return []
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 }

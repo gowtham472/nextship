@@ -36,12 +36,13 @@ import { hostname } from 'node:os'
 import path from 'node:path'
 import { connect as tlsConnect } from 'node:tls'
 import { lookup, resolve4 } from 'node:dns/promises'
-import { connect as netConnect, createServer, isIP, isIPv4 } from 'node:net'
+import { isIP, isIPv4 } from 'node:net'
 import { NextshipError } from '../../errors.js'
 import { docsUrl } from '../../links.js'
 import type { ProjectConfig, ServerRecord } from '../../config.js'
 import { DEFAULT_KEEP } from '../../images.js'
 import { pipeline } from '../../util/exec.js'
+import { openDockerBridge, windowsPipe } from './docker-bridge.js'
 import type {
   AppAddress,
   AppRef,
@@ -648,25 +649,24 @@ export class VmTarget implements Target {
    * A remote build reaches the server's Docker daemon through an SSH forward of
    * its socket, with the same pinned host key as every other connection.
    * `DOCKER_HOST=ssh://` would be simpler and would bypass that pinning, because
-   * Docker starts its own ssh with the user's ordinary host key checking.
+   * Docker starts its own ssh with the user's ordinary host key checking. The
+   * forward lands on a Unix socket in a directory only this user can enter.
    */
   async builder(): Promise<ImageBuilder> {
     const cacheScope = `${this.name}@${this.server.host}:${this.server.port}`
-    if (this.build === 'local') return { dockerHost: null, cacheScope: null, warning: null, close: async () => {} }
+    if (this.build === 'local') return { dockerHost: null, cacheScope: null, close: async () => {} }
 
     const ssh = await this.ssh()
     // The server's clock, not this machine's, so a later look at its journal starts
     // where this build did however far apart the two clocks are.
     const since = (await ssh.run('date +%s', 'read the server clock')).trim()
-    // Windows' OpenSSH cannot forward to a local Unix socket, so it forwards a
-    // loopback port, which any local process could use while the build runs.
-    const windows = process.platform === 'win32'
-    const port = windows ? await freePort() : 0
-    const local = windows ? `127.0.0.1:${port}` : path.join(ssh.privateDir(), 'docker.sock')
+    if (process.platform === 'win32') return this.bridgedBuilder(cacheScope, since)
+
+    const local = path.join(ssh.privateDir(), 'docker.sock')
     // A forward that was killed leaves its socket file behind, and readiness below is the
     // file existing, so a second forward on the same path looked ready before it had bound
     // and the build met a dead socket. Found by cutting a forward mid-build on a Droplet.
-    if (!windows) rmSync(local, { force: true })
+    rmSync(local, { force: true })
     const args = [
       '-nNT',
       ...ssh.options({ multiplex: false }),
@@ -680,26 +680,19 @@ export class VmTarget implements Target {
     child.stderr?.on('data', (chunk: Buffer) => (stderr += chunk.toString()))
     const exited = new Promise<number>((resolve) => child.on('close', (code) => resolve(code ?? 255)))
 
-    const ready = async (): Promise<boolean> => (windows ? canConnect(port) : existsSync(local))
     const deadline = Date.now() + 20_000
     for (;;) {
-      if (await ready()) break
+      if (existsSync(local)) break
       const done = await Promise.race([exited, sleep(250).then(() => null)])
       if (done !== null || Date.now() > deadline) {
         child.kill()
-        throw new NextshipError(
-          `Could not reach Docker on ${this.server.host} through SSH: ${stderr.trim() || 'the forward did not open'}`,
-          'Check `nextship server add` reports the server as set up, or build here with `--build local`.'
-        )
+        throw this.dockerUnreachable(stderr.trim() || 'the forward did not open')
       }
     }
 
     return {
-      dockerHost: windows ? `tcp://127.0.0.1:${port}` : `unix://${local}`,
+      dockerHost: `unix://${local}`,
       cacheScope,
-      warning: windows
-        ? `The server's Docker is reachable on 127.0.0.1:${port} by any process on this machine until the build finishes.`
-        : null,
       // Two kinds of evidence, either enough. The forward ending on its own comes first:
       // a build fails the moment its forward dies, before the daemon at the far end has
       // logged anything. When the forward is still up, the daemon's journal says whether
@@ -711,6 +704,39 @@ export class VmTarget implements Target {
         await exited
       },
     }
+  }
+
+  /**
+   * The builder on Windows, whose OpenSSH cannot forward to a Unix socket. Each
+   * connection the Docker client opens is carried by its own ssh running
+   * `docker system dial-stdio` on the server, behind a named pipe (`docker-bridge.ts`).
+   * Docker is asked for its version first, so a server it cannot be reached on fails
+   * here with the reason rather than inside the build as a broken pipe.
+   */
+  private async bridgedBuilder(cacheScope: string, since: string): Promise<ImageBuilder> {
+    const ssh = await this.ssh()
+    const reachable = await ssh.exec("docker version --format '{{.Server.Version}}'")
+    if (reachable.code !== 0) throw this.dockerUnreachable(reachable.stderr.trim() || `exit code ${reachable.code}`)
+
+    const pipe = windowsPipe()
+    const bridge = await openDockerBridge(pipe.path, () =>
+      spawn('ssh', ['-T', ...ssh.options({ multiplex: false }), ...ssh.destination(), 'docker system dial-stdio'], {
+        stdio: ['pipe', 'pipe', 'ignore'],
+      })
+    )
+    return {
+      dockerHost: pipe.dockerHost,
+      cacheScope,
+      lostConnection: async () => bridge.lost() || (await this.buildSessionLost(since)),
+      close: () => bridge.close(),
+    }
+  }
+
+  private dockerUnreachable(reason: string): NextshipError {
+    return new NextshipError(
+      `Could not reach Docker on ${this.server.host} through SSH: ${reason}`,
+      'Check `nextship server add` reports the server as set up, or build here with `--build local`.'
+    )
   }
 
   /**
@@ -1797,28 +1823,6 @@ export class VmTarget implements Target {
 // ---------------------------------------------------------------- helpers
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
-
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer()
-    server.on('error', reject)
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address()
-      server.close(() => resolve(typeof address === 'object' && address ? address.port : 0))
-    })
-  })
-}
-
-async function canConnect(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = netConnect(port, '127.0.0.1')
-    socket.once('connect', () => {
-      socket.destroy()
-      resolve(true)
-    })
-    socket.once('error', () => resolve(false))
-  })
-}
 
 /**
  * What a `domain add` plan should warn about DNS. Only a warning: the record is

@@ -261,7 +261,7 @@ tried yet:
 | `server add` on Debian 12 (item 2) | Debian 12 is a supported distribution that has only run on the stand-in |
 | `domain add` with a real domain: the certificate is issued, and streaming works over HTTPS (item 4) | No server used so far had a domain pointed at it |
 | A deployment from the GitHub Actions workflow in `vm.md` with `--build local` (item 11) | The documented CI path has never run |
-| `--build remote` from Windows over the loopback forward | No Windows machine has built on a server |
+| Closing a console window on Windows part way through a deployment | A closed terminal on Linux gives the lock back, on a real server. Windows ends the process a few seconds after the window closes, and that has not been run |
 
 Known from the Droplet runs, to fix or document here: `conformance/vm/e2e.sh` needs a server
 with no other app on it, and after adding swap `server add` prints `done   swap already on`,
@@ -443,6 +443,17 @@ driver.
 
 ---
 
+## Where the CLI goes next (Planned, not tied to a version)
+
+The CLI's job is deploying Next.js to infrastructure you own, and what is planned is
+doing that job more completely. None of this exists yet. Each row is built, verified on a
+real server and documented on its own, and none has a date.
+
+| Order | Item | State and what decides it |
+|---|---|---|
+| 1 | **Machine-readable output.** `--json` on the commands that report state or act, so CI and scripts read a result rather than scrape text | Planned |
+| 2 | **More than one instance of an app.** A shared cache, tag invalidation that reaches every instance, and deployments that roll across them with no failed request | Planned, and the largest piece of work ahead. Its design is "v2: correctness at scale" below |
+
 ## Beyond v1.0
 
 Not scheduled. Recorded so that the decision to skip them stays deliberate. Each
@@ -553,5 +564,6 @@ Recorded so the decision stays visible rather than looking like an oversight.
 3. **Seams, not stubs.** Where a later version will swap an implementation, the
    interface appears in the change that first consumes it, never before
    ([`../AGENTS.md`](../AGENTS.md) §3.1).
-4. **Build for the current user.** Right now that user is one person with one app.
-   Features justified only by imagined future users wait until those users exist.
+4. **Build for the current user.** Through 1.0 that user was one person with one app.
+   Since the server target it is anyone deploying Next.js to a server they own. Features
+   justified only by imagined future users still wait until those users exist.
