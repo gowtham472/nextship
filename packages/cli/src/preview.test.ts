@@ -53,3 +53,15 @@ test('a preview is refused on App Platform, which has no second app on the same 
   const config: ProjectConfig = { version: 2, target: 'digitalocean', name: 'acme-web', appId: 'main-id', region: 'blr', registry: 'r' }
   assert.throws(() => previewConfig(config, 'pr-42'), /Previews run on a server/)
 })
+
+// The defect: the name went on to the app name check, whose refusal says to
+// rename the app, which is not what the user typed or can change here.
+test('a preview name too long for the app says how long it may be, not to rename the app', () => {
+  const app = 'a'.repeat(55)
+  assert.equal(previewAppName(app, 'pr-1234').length, 63)
+  assert.throws(
+    () => previewAppName(app, 'pr-12345'),
+    (error: unknown) => error instanceof NextshipError && /64 characters, over the 63/.test(error.message) && /at most 7 characters/.test(error.action)
+  )
+  assert.throws(() => previewAppName('a'.repeat(63), 'x'), (error: unknown) => error instanceof NextshipError && /leaves no room/.test(error.action))
+})

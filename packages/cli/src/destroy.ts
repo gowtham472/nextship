@@ -23,7 +23,8 @@
 import { NextshipError } from './errors.js'
 import type { ProjectInfo } from './detect.js'
 import { readConfig, writeConfig } from './config.js'
-import { ownedApp } from './owned-app.js'
+import { client, ownedApp, previewConfig } from './owned-app.js'
+import type { AppRef } from './targets/target.js'
 import { selectedPreview } from './preview.js'
 import { orderForDeletion } from './images.js'
 import { detail, ok, step, warn } from './util/log.js'
@@ -52,6 +53,16 @@ export function nameMatches(given: string, recorded: string): void {
   )
 }
 
+/**
+ * The previews of an app, which go when it goes. A preview is found by the id of
+ * the app it previews, and destroying that app removes the id from `nextship.json`,
+ * so a preview left behind could never be reached by any command again while its
+ * containers, volumes and domains stayed on the server.
+ */
+export function previewsOf(apps: AppRef[], appId: string): AppRef[] {
+  return apps.filter((entry) => entry.previewOf === appId)
+}
+
 export async function destroy(project: ProjectInfo, options: DestroyOptions): Promise<void> {
   const app = await ownedApp(project)
   const config = await readConfig(project.root)
@@ -72,7 +83,13 @@ export async function destroy(project: ProjectInfo, options: DestroyOptions): Pr
   detail(`app        DESTROY "${app.name}" (${app.appId})`)
   for (const line of plan.lines) detail(line)
 
-  const others = (await app.target.listApps()).filter((entry) => entry.id !== app.appId)
+  const apps = await app.target.listApps()
+  // A preview being destroyed has none of its own.
+  const previews = selectedPreview() === null ? previewsOf(apps, app.appId) : []
+  for (const preview of previews) {
+    detail(`preview    DESTROY "${preview.name}" with it, images included: a preview cannot be reached once the app it previews is gone`)
+  }
+  const others = apps.filter((entry) => entry.id !== app.appId && !previews.includes(entry))
   detail(`untouched  ${others.length} other app(s) ${app.target.appScope}`)
 
   warn('This cannot be undone. The app, its deployments and its history are removed.')
@@ -86,6 +103,15 @@ export async function destroy(project: ProjectInfo, options: DestroyOptions): Pr
   }
 
   step('Destroying')
+  // Previews first: if one cannot be removed, the app and its id are still there,
+  // and the same command can be run again.
+  for (const preview of previews) {
+    const scoped = client(previewConfig(app.config, preview.name.slice(app.name.length + 1)))
+    const images = await scoped.images(preview.name)
+    await scoped.destroyApp(preview.id)
+    await scoped.removeImages(preview.name, orderForDeletion(images).map((manifest) => manifest.id))
+    detail(`preview "${preview.name}" destroyed`)
+  }
   await app.target.destroyApp(app.appId)
   ok(`App "${app.name}" destroyed.`)
 

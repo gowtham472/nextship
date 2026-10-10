@@ -60,6 +60,24 @@ export function assertPreviewName(name: string): string {
   return name
 }
 
+/** The longest app name a server accepts (`assertAppName`), which a preview's name has to fit in too. */
+const APP_NAME_LIMIT = 63
+
+/**
+ * The preview's app name. Its length is checked here, because the refusal an app
+ * name over the limit gets on its own tells the user to rename the app, when what
+ * they can shorten is the preview name they just typed.
+ */
 export function previewAppName(appName: string, preview: string): string {
-  return `${appName}-${assertPreviewName(preview)}`
+  const name = `${appName}-${assertPreviewName(preview)}`
+  if (name.length > APP_NAME_LIMIT) {
+    const room = APP_NAME_LIMIT - appName.length - 1
+    throw new NextshipError(
+      `The preview "${preview}" would be the app "${name}", ${name.length} characters, over the ${APP_NAME_LIMIT} an app name may have.`,
+      room >= 1
+        ? `Use a preview name of at most ${room} character${room === 1 ? '' : 's'} for this app.`
+        : `The app name "${appName}" leaves no room for a preview name. Previews need an app name under ${APP_NAME_LIMIT - 1} characters.`
+    )
+  }
+  return name
 }
